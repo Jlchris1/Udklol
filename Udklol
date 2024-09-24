@@ -93,7 +93,7 @@ end
 }) Tab:AddButton({
     Name = "hamer arena",
     Callback = function()
-              loadstring(game:HttpGet("https://pastefy.app/BPi9GVd4/raw"))()
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Hammer arena"))()
       end    
 }) local Tab = Window:MakeTab({
     Name = "script sources",
