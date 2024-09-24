@@ -1,0 +1,216 @@
+local syn = getgenv().syn
+getgenv().syn = false
+
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()local Window = OrionLib:MakeWindow({Name = "JLhub", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})local Tab = Window:MakeTab({
+	Name = "portal hammer",
+	Icon = "rbxassetid://4483345998",
+	PremiumOnly = false
+}) Tab:AddButton({
+	Name = "this gui is in early version will get more features soon",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "tp to safe place",
+	Callback = function()
+      		local teleport_table = {
+    location1 = Vector3.new(32.04212188720703, 8.755139350891113, -1030.9737548828125), -- your desired position
+    location2 = Vector3.new()  -- your desired position
+}
+
+local tween_s = game:GetService('TweenService')
+local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+
+local lp = game.Players.LocalPlayer
+
+function bypass_teleport(v)
+    if lp.Character and 
+    lp.Character:FindFirstChild('HumanoidRootPart') then
+        local cf = CFrame.new(v)
+        local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+        a:Play()
+        -- a.Completed:Wait()
+        -- print('Teleporting Done!')
+    end
+end
+
+bypass_teleport(teleport_table.location1)
+  	end    
+}) Tab:AddButton({
+	Name = "heal portal",
+	Callback = function()
+      		_G.tweening = true
+_G.StartCombatAction = true
+
+spawn(function( )
+while _G.StartCombatAction == true do
+local args = {
+    [1] = {
+        ["StarterName"] = "Dash"
+    }
+}
+
+game:GetService("ReplicatedStorage").Remotes.Combat.StartCombatAction:FireServer(unpack(args))
+wait( )
+end
+end)
+
+spawn(function( )
+while _G.tweening == true do
+local teleport_table = {
+    location1 = Vector3.new(32.502105712890625, 9.851652145385742, -1098.055908203125), -- your desired position
+    location2 = Vector3.new()  -- your desired position
+}
+
+local tween_s = game:GetService('TweenService')
+local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+
+local lp = game.Players.LocalPlayer
+
+function bypass_teleport(v)
+    if lp.Character and 
+    lp.Character:FindFirstChild('HumanoidRootPart') then
+        local cf = CFrame.new(v)
+        local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+        a:Play()
+        -- a.Completed:Wait()
+        -- print('Teleporting Done!')
+    end
+end
+
+bypass_teleport(teleport_table.location1)
+wait( )
+end
+end)
+
+spawn(function( )
+while _G.tweening == true do
+local teleport_table = {
+    location1 = Vector3.new(31.800962448120117, 8.604464530944824, -1097.074951171875), -- your desired position
+    location2 = Vector3.new()  -- your desired position
+}
+
+local tween_s = game:GetService('TweenService')
+local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+
+local lp = game.Players.LocalPlayer
+
+function bypass_teleport(v)
+    if lp.Character and 
+    lp.Character:FindFirstChild('HumanoidRootPart') then
+        local cf = CFrame.new(v)
+        local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+        a:Play()
+        -- a.Completed:Wait()
+        -- print('Teleporting Done!')
+    end
+end
+
+bypass_teleport(teleport_table.location1)
+wait( )
+end
+end)
+  	end    
+}) Tab:AddButton({
+	Name = "stop heal portal",
+	Callback = function()
+      		_G.tweening = false
+_G.StartCombatAction = false
+  	end    
+}) local Tab = Window:MakeTab({
+	Name = "anti void",
+	Icon = "rbxassetid://4483345998",
+	PremiumOnly = false
+}) Tab:AddButton({
+	Name = "USE SPAWN LOCATIONS TO TP BACK",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "remove death barrier and void",
+	Callback = function()
+      		game.workspace.Arena.Important.HigherVoid:destroy()
+
+workspace.FallenPartsDestroyHeight=0/0
+  	end    
+}) Tab:AddButton({
+	Name = "spawn location 1",
+	Callback = function()
+      		local teleport_table = {
+    location1 = Vector3.new(-46.39689254760742, 83.1336898803711, -117.06929779052734), -- your desired position
+    location2 = Vector3.new()  -- your desired position
+}
+
+local tween_s = game:GetService('TweenService')
+local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+
+local lp = game.Players.LocalPlayer
+
+function bypass_teleport(v)
+    if lp.Character and 
+    lp.Character:FindFirstChild('HumanoidRootPart') then
+        local cf = CFrame.new(v)
+        local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+        a:Play()
+        -- a.Completed:Wait()
+        -- print('Teleporting Done!')
+    end
+end
+
+bypass_teleport(teleport_table.location1)
+  	end    
+}) Tab:AddButton({
+	Name = "spawn location 2",
+	Callback = function()
+      		local teleport_table = {
+    location1 = Vector3.new(-54.47547912597656, 90.82562255859375, 92.87574005126953), -- your desired position
+    location2 = Vector3.new()  -- your desired position
+}
+
+local tween_s = game:GetService('TweenService')
+local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+
+local lp = game.Players.LocalPlayer
+
+function bypass_teleport(v)
+    if lp.Character and 
+    lp.Character:FindFirstChild('HumanoidRootPart') then
+        local cf = CFrame.new(v)
+        local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+        a:Play()
+        -- a.Completed:Wait()
+        -- print('Teleporting Done!')
+    end
+end
+
+bypass_teleport(teleport_table.location1)
+  	end    
+}) Tab:AddButton({
+	Name = "spawn location 3",
+	Callback = function()
+      		local teleport_table = {
+    location1 = Vector3.new(-68.7802505493164, 62.664520263671875, -41.331668853759766), -- your desired position
+    location2 = Vector3.new()  -- your desired position
+}
+
+local tween_s = game:GetService('TweenService')
+local tweeninfo = TweenInfo.new(1,Enum.EasingStyle.Linear)
+
+local lp = game.Players.LocalPlayer
+
+function bypass_teleport(v)
+    if lp.Character and 
+    lp.Character:FindFirstChild('HumanoidRootPart') then
+        local cf = CFrame.new(v)
+        local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+        a:Play()
+        -- a.Completed:Wait()
+        -- print('Teleporting Done!')
+    end
+end
+
+bypass_teleport(teleport_table.location1)
+  	end    
+})
+
+getgenv().syn = syn
