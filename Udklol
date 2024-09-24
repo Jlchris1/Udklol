@@ -1,0 +1,235 @@
+local syn = getgenv().syn
+getgenv().syn = false
+
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))() local Window = OrionLib:MakeWindow({Name = "JLhub gui launcher", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"}) local Tab = Window:MakeTab({
+    Name = "guis",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "keyboard",
+    Callback = function()
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/advxzivhsjjdhxhsidifvsh/mobkeyboard/main/main.txt", true))()
+      end    
+})  Tab:AddButton({
+    Name = "admin simulator",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/kMM8F2uN/raw"))()
+end
+}) Tab:AddButton({
+    Name = "bully people simulator",
+    Callback = function()
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Jfiejdjjeked/main/Ok"))();
+      end    
+}) Tab:AddButton({
+    Name = "loomian legacy",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/ma2C7iYe/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "muscle legends",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/btlX37Qh/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "event rng",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/u3K2ESsO/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "spirit bomb simulator",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/M3qTkMYC/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "scp-173 horror  elevator",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/DOidAqRj/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "tornado sim (script in beta some features are missing)",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/onTCUbyv/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "twisted",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/MZbNgRQB/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "admin rng script",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastebin.com/raw/SnSge1PD"))()
+      end    
+})Tab:AddButton({
+    Name = "tornado alley ultimate",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/oRLE9uCU/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "monkey arena",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/8juf9CoD/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "kamehameha simulator",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/z3CmQebu/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "survive e e ei in area 51",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/QuWl4xkw/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "giant survival",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/9GNmIHfR/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "free admin script",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/6MRe76Q7/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "hamer arena",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/BPi9GVd4/raw"))()
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "script sources",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "remote spy",
+    Callback = function()
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/RS/main/SimpleSpyMobile"))()
+      end    
+}) Tab:AddButton({
+    Name = "position finder (for tweening)",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/fE00IA44/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "darkdex",
+    Callback = function()
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/Babyhamsta/RBLX_Scripts/main/Universal/BypassedDarkDexV3.lua", true))()
+--BYPASSED DARK DEX V3
+--CollectGarbage Bypass
+--GCInfo Bypass (Realistic)
+--Memory Spoofer (Realistic)
+--DecendantAdded Bypass
+--LogService Bypass
+--ContentProvider Bypass
+--GetFocusedTextBox Bypass (Lego Hacker)
+--NewProxy Bypass (Lego Hacker))
+      end    
+}) Tab:AddButton({
+    Name = "dex mob (has a key but it has copy for mob)",
+    Callback = function()
+              local __function = loadstring(game:HttpGet("https://github.com/Hosvile/DEX-Explorer/releases/latest/download/main.lua", true))
+
+__function(__function)
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "admins and fun",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "inf yield",
+    Callback = function()
+              loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
+      end    
+}) Tab:AddButton({
+    Name = "ghost hub",
+    Callback = function()
+              loadstring(game:HttpGet('https://raw.githubusercontent.com/GhostPlayer352/Test4/main/GhostHub'))()
+
+      end    
+}) Tab:AddButton({
+    Name = "nameless admin",
+    Callback = function()
+              --[[
+    WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+]]
+loadstring(game:HttpGet('https://raw.githubusercontent.com/FilteringEnabled/NamelessAdmin/main/Source'))()
+      end    
+}) Tab:AddButton({
+    Name = "admin panel",
+    Callback = function()
+              --[[
+    WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+]]
+loadstring(game:HttpGet(('https://pastefy.app/Oic24KzG/raw'),true))()
+      end    
+}) Tab:AddButton({
+    Name = "admin panel v2",
+    Callback = function()
+              if "Rochips Loader" then     local Rochips_panel,v,u,i=loadstring,"/snippets","gwwv","/raw/main.lua" ;     Rochips_panel(game:HttpGet("https://glot.io"..v.."/" ..u.."877ga3"..i))();     return "it will load in around 3 - 131 seconds" end
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "flings",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "click fling",
+    Callback = function()
+              --[[
+    WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+]]
+loadstring(game:HttpGet(('https://pastefy.app/'..'aV9OfBP4'..'/raw'),true))()
+      end    
+})Tab:AddButton({
+    Name = "fe yeet gui v4",
+    Callback = function()
+              getgenv().ToggleGUI = true -- true/false loadstring(game:HttpGet("https://raw.githubusercontent.com/Vcsk/RobloxScripts/main/FEYeetGuiV4.lua"))()
+      end    
+}) Tab:AddButton({
+    Name = "touch fling",
+    Callback = function()
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/0Ben1/fe./main/Fling%20GUI"))()
+      end    
+}) Tab:AddButton({
+    Name = "anti fling",
+    Callback = function()
+              loadstring(game:HttpGet("https://pastefy.app/YTyuthOI/raw"))()
+      end    
+}) Tab:AddButton({
+    Name = "rejoin incase smth went wrong",
+    Callback = function()
+              local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local Rejoin = coroutine.create(function()
+    local Success, ErrorMessage = pcall(function()
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end)
+
+    if ErrorMessage and not Success then
+        warn(ErrorMessage)
+    end
+end)
+
+coroutine.resume(Rejoin)
+      end    
+})  local Tab = Window:MakeTab({
+    Name = "keyboard",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "keyboard",
+    Callback = function()
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/advxzivhsjjdhxhsidifvsh/mobkeyboard/main/main.txt", true))()
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "shaders",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "Pshade shaders gui",
+    Callback = function()
+              loadstring(game:HttpGet(('https://pastefy.app/xXkUxA0P/raw'),true))()
+      end    
+})
+
+getgenv().syn = syn
