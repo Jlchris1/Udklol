@@ -1,0 +1,219 @@
+local syn = getgenv().syn
+getgenv().syn = false
+
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()local Window = OrionLib:MakeWindow({Name = "JLhub", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})local Tab = Window:MakeTab({
+	Name = "epic stuff",
+	Icon = "rbxassetid://4483345998",
+	PremiumOnly = false
+}) Tab:AddButton({
+	Name = "respawn",
+	Callback = function()
+      		game:GetService("ReplicatedStorage").Player.RespawnPlayer:FireServer()
+
+  	end    
+}) Tab:AddButton({
+	Name = "stop auto equips",
+	Callback = function()
+      		_G.EquipPet = false
+  	end    
+}) Tab:AddButton({
+	Name = "free rebirths",
+	Callback = function()
+      		_G.PlayerBananaMultiplier = true
+
+spawn(function( )
+while _G.PlayerBananaMultiplier == true do
+local args = {
+    [1] = game:GetService("Players").LocalPlayer
+}
+
+game:GetService("ReplicatedStorage").PlayerEvents.Multiplier.PlayerBananaMultiplier:FireServer(unpack(args))
+wait( )
+end
+end)
+  	end    
+})  Tab:AddButton({
+	Name = "make lava pet army",
+	Callback = function()
+      		_G.EquipPet = true
+
+spawn(function( )
+while _G.PetEquip == true do
+local args = {
+    [1] = "LavaLord"
+}
+
+game:GetService("ReplicatedStorage").Pets.EquipPet:FireServer(unpack(args))
+wait( )
+end
+end)
+  	end    
+}) Tab:AddButton({
+	Name = "turn off auto rebirth",
+	Callback = function()
+      		_G.PlayerBananaMultiplier = false
+  	end    
+})  Tab:AddButton({
+	Name = "get electro thingy",
+	Callback = function()
+      		local args = {
+    [1] = "Electrode"
+}
+
+game:GetService("ReplicatedStorage").Pets.WinPet:FireServer(unpack(args))
+
+  	end    
+}) Tab:AddButton({
+	Name = "get blue aids pet",
+	Callback = function()
+      		local args = {
+    [1] = "BacterialVirus"
+}
+
+game:GetService("ReplicatedStorage").Pets.WinPet:FireServer(unpack(args))
+
+  	end    
+}) Tab:AddButton({
+	Name = "get down sydrome kraken",
+	Callback = function()
+      		local args = {
+    [1] = "ForgottonKraken"
+}
+
+game:GetService("ReplicatedStorage").Pets.WinPet:FireServer(unpack(args))
+
+  	end    
+}) Tab:AddButton({
+	Name = "get dylano's pet (even he ran from him)",
+	Callback = function()
+      		local args = {
+    [1] = "LavaLord"
+}
+
+game:GetService("ReplicatedStorage").Pets.WinPet:FireServer(unpack(args))
+
+  	end    
+}) Tab:AddButton({
+	Name = "create dylano pet army",
+	Callback = function()
+      		_G.EquipPet = true
+
+spawn(function( )
+while _G.EquipPet == true do
+local args = {
+    [1] = "LavaLord"
+}
+
+game:GetService("ReplicatedStorage").Pets.EquipPet:FireServer(unpack(args))
+wait(0.3)
+end
+end)
+
+  	end    
+}) Tab:AddButton({
+	Name = "create blue aids army",
+	Callback = function()
+      		_G.EquipPet = true
+
+spawn(function( )
+while _G.EquipPet == true do
+local args = {
+    [1] = "BacterialVirus"
+}
+
+game:GetService("ReplicatedStorage").Pets.EquipPet:FireServer(unpack(args))
+wait(0.3)
+end
+end)
+
+  	end    
+}) Tab:AddButton({
+	Name = "create octopus with down sydrome army",
+	Callback = function()
+      		_G.EquipPet = true
+
+spawn(function( )
+while _G.EquipPet == true do
+local args = {
+    [1] = "ForgottonKraken"
+}
+
+game:GetService("ReplicatedStorage").Pets.EquipPet:FireServer(unpack(args))
+wait(0.3)
+end
+end)
+
+  	end    
+}) Tab:AddButton({
+	Name = "make electro thingy army",
+	Callback = function()
+      		_G.EquipPet = true
+
+spawn(function( )
+while _G.EquipPet == true do
+local args = {
+    [1] = "Electrode"
+}
+
+game:GetService("ReplicatedStorage").Pets.EquipPet:FireServer(unpack(args))
+wait(0.3)
+end
+end)
+
+  	end    
+}) local Tab = Window:MakeTab({
+	Name = "lag server",
+	Icon = "rbxassetid://4483345998",
+	PremiumOnly = false
+}) Tab:AddButton({
+	Name = "shut down server",
+	Callback = function()
+      		loadstring(game:HttpGet("https://pastebin.com/raw/zdRs7xwT"))()
+  	end    
+}) local Tab = Window:MakeTab({
+	Name = "spawn stuff",
+	Icon = "rbxassetid://4483345998",
+	PremiumOnly = false
+}) Tab:AddButton({
+	Name = "spawn lavalord",
+	Callback = function()
+      		local args = {
+    [1] = "LavaLord"
+}
+
+game:GetService("ReplicatedStorage").Pets.EquipPet:FireServer(unpack(args))
+
+  	end    
+}) Tab:AddButton({
+	Name = "spawn blue aids",
+	Callback = function()
+      		local args = {
+    [1] = "BacterialVirus"
+}
+
+game:GetService("ReplicatedStorage").Pets.EquipPet:FireServer(unpack(args))
+
+  	end    
+}) Tab:AddButton({
+	Name = "spawn down sydrome octopus",
+	Callback = function()
+      		local args = {
+    [1] = "ForgottonKraken"
+}
+
+game:GetService("ReplicatedStorage").Pets.EquipPet:FireServer(unpack(args))
+
+  	end    
+}) Tab:AddButton({
+	Name = "spawn electro gay nigga",
+	Callback = function()
+      		local args = {
+    [1] = "Electrode"
+}
+
+game:GetService("ReplicatedStorage").Pets.EquipPet:FireServer(unpack(args))
+
+  	end    
+})
+
+getgenv().syn = syn
