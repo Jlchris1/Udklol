@@ -3,18 +3,20 @@
 
 -- Instances:
 
-local ScreenGui = Instance.new("ScreenGui")
+local guilauncher = Instance.new("ScreenGui")
 local Frame = Instance.new("Frame")
 local bps = Instance.new("TextButton")
 local sdn = Instance.new("TextButton")
 local sas = Instance.new("TextButton")
+local destroyui = Instance.new("TextButton")
 
 --Properties:
 
-ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+guilauncher.Name = "guilauncher"
+guilauncher.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+guilauncher.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-Frame.Parent = ScreenGui
+Frame.Parent = guilauncher
 Frame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 Frame.BorderColor3 = Color3.fromRGB(0, 0, 0)
 Frame.BorderSizePixel = 0
@@ -56,9 +58,21 @@ sas.Text = "scp 173 and scp 096 rp"
 sas.TextColor3 = Color3.fromRGB(255, 0, 0)
 sas.TextSize = 16.000
 
+destroyui.Name = "destroy ui"
+destroyui.Parent = Frame
+destroyui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+destroyui.BorderColor3 = Color3.fromRGB(0, 0, 0)
+destroyui.BorderSizePixel = 0
+destroyui.Position = UDim2.new(0.266821355, 0, 0.781659365, 0)
+destroyui.Size = UDim2.new(0, 200, 0, 50)
+destroyui.Font = Enum.Font.SourceSansBold
+destroyui.Text = "destroy gui"
+destroyui.TextColor3 = Color3.fromRGB(255, 0, 0)
+destroyui.TextSize = 27.000
+
 -- Scripts:
 
-local function YEVNIV_fake_script() -- bps.Script 
+local function VSGJ_fake_script() -- bps.Script 
 	local script = Instance.new('Script', bps)
 
 	function Click(mouse)
@@ -70,8 +84,8 @@ local function YEVNIV_fake_script() -- bps.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YEVNIV_fake_script)()
-local function ULWL_fake_script() -- sdn.Script 
+coroutine.wrap(VSGJ_fake_script)()
+local function DXCDHQX_fake_script() -- sdn.Script 
 	local script = Instance.new('Script', sdn)
 
 	function Click(mouse)
@@ -83,8 +97,8 @@ local function ULWL_fake_script() -- sdn.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(ULWL_fake_script)()
-local function KWIBL_fake_script() -- sas.Script 
+coroutine.wrap(DXCDHQX_fake_script)()
+local function ZEOTFW_fake_script() -- sas.Script 
 	local script = Instance.new('Script', sas)
 
 	function Click(mouse)
@@ -174,4 +188,17 @@ local function KWIBL_fake_script() -- sas.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(KWIBL_fake_script)()
+coroutine.wrap(ZEOTFW_fake_script)()
+local function MUQKBQ_fake_script() -- destroyui.Script 
+	local script = Instance.new('Script', destroyui)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.PlayerGui.guilauncher:Destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(MUQKBQ_fake_script)()
