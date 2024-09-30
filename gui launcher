@@ -1,0 +1,177 @@
+-- Gui to Lua
+-- Version: 3.2
+
+-- Instances:
+
+local ScreenGui = Instance.new("ScreenGui")
+local Frame = Instance.new("Frame")
+local bps = Instance.new("TextButton")
+local sdn = Instance.new("TextButton")
+local sas = Instance.new("TextButton")
+
+--Properties:
+
+ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+Frame.Parent = ScreenGui
+Frame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+Frame.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Frame.BorderSizePixel = 0
+Frame.Position = UDim2.new(0.357816726, 0, 0.19718793, 0)
+Frame.Size = UDim2.new(0, 431, 0, 229)
+
+bps.Name = "bps"
+bps.Parent = Frame
+bps.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+bps.BorderColor3 = Color3.fromRGB(0, 0, 0)
+bps.BorderSizePixel = 0
+bps.Size = UDim2.new(0, 138, 0, 50)
+bps.Font = Enum.Font.SourceSansBold
+bps.Text = "bully people simulator"
+bps.TextColor3 = Color3.fromRGB(255, 0, 0)
+bps.TextSize = 15.000
+
+sdn.Name = "sdn"
+sdn.Parent = Frame
+sdn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+sdn.BorderColor3 = Color3.fromRGB(0, 0, 0)
+sdn.BorderSizePixel = 0
+sdn.Position = UDim2.new(0.339182973, 0, 0, 0)
+sdn.Size = UDim2.new(0, 138, 0, 50)
+sdn.Font = Enum.Font.SourceSansBold
+sdn.Text = "survival disaster natural"
+sdn.TextColor3 = Color3.fromRGB(255, 0, 0)
+sdn.TextSize = 15.000
+
+sas.Name = "sas"
+sas.Parent = Frame
+sas.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+sas.BorderColor3 = Color3.fromRGB(0, 0, 0)
+sas.BorderSizePixel = 0
+sas.Position = UDim2.new(0.678688288, 0, 0, 0)
+sas.Size = UDim2.new(0, 138, 0, 50)
+sas.Font = Enum.Font.SourceSansBold
+sas.Text = "scp 173 and scp 096 rp"
+sas.TextColor3 = Color3.fromRGB(255, 0, 0)
+sas.TextSize = 16.000
+
+-- Scripts:
+
+local function YEVNIV_fake_script() -- bps.Script 
+	local script = Instance.new('Script', bps)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/maingui"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(YEVNIV_fake_script)()
+local function ULWL_fake_script() -- sdn.Script 
+	local script = Instance.new('Script', sdn)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/sdn"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ULWL_fake_script)()
+local function KWIBL_fake_script() -- sas.Script 
+	local script = Instance.new('Script', sas)
+
+	function Click(mouse)
+	
+		local syn = getgenv().syn
+		getgenv().syn = false
+	
+		local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()local Window = OrionLib:MakeWindow({Name = "JLhub", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})local Tab = Window:MakeTab({
+			Name = "regens etc",
+			Icon = "rbxassetid://4483345998",
+			PremiumOnly = false
+		}) Tab:AddButton({
+			Name = "regen energy core",
+			Callback = function()
+				fireclickdetector(workspace.EnergyCore.Regen.ClickDetector)
+			end    
+		}) Tab:AddButton({
+			Name = "start energy core explosion",
+			Callback = function()
+				fireclickdetector(workspace.EnergyCore.Begin.ClickDetector)
+			end    
+		}) Tab:AddButton({
+			Name = "fill energy core",
+			Callback = function()
+				fireclickdetector(workspace.EnergyCore.Fill.ClickDetector)
+			end    
+		}) Tab:AddButton({
+			Name = "Regen whole map",
+			Callback = function()
+				fireclickdetector(workspace.city.Regen.ClickDetector)
+			end    
+		}) Tab:AddButton({
+			Name = "stop auto regen map",
+			Callback = function()
+				_G.toggle = false
+			end    
+		}) local Tab = Window:MakeTab({
+			Name = "dupe",
+			Icon = "rbxassetid://4483345998",
+			PremiumOnly = false
+		}) Tab:AddButton({
+			Name = "dupe pump shotgun",
+			Callback = function()
+				-- clone tool script
+				local copy = game:GetService("Players").LocalPlayer.Backpack["Pump Shotgun"]:Clone()
+	
+				copy.Parent = game.Players.LocalPlayer.Backpack
+			end    
+		}) Tab:AddButton({
+			Name = "dupe M4A1",
+			Callback = function()
+				-- clone tool script
+				local copy = game:GetService("Players").LocalPlayer.Backpack.M4A1:Clone()
+	
+				copy.Parent = game.Players.LocalPlayer.Backpack
+			end    
+		}) local Tab = Window:MakeTab({
+			Name = "alarms",
+			Icon = "rbxassetid://4483345998",
+			PremiumOnly = false
+		}) Tab:AddButton({
+			Name = "alarm 1",
+			Callback = function()
+				fireclickdetector(workspace.city["SCP Alarm controll"]:GetChildren()[3].Buttons.play.ClickDetector)
+			end    
+		}) Tab:AddButton({
+			Name = "alarm 2",
+			Callback = function()
+				fireclickdetector(workspace.city["SCP Alarm controll"]:GetChildren()[7].Buttons.play.ClickDetector)
+			end    
+		}) Tab:AddButton({
+			Name = "alarm 3",
+			Callback = function()
+				fireclickdetector(workspace.city["SCP Alarm controll"]["Containment Breach alarm"].Buttons.play.ClickDetector)
+			end    
+		}) Tab:AddButton({
+			Name = "alarm 4",
+			Callback = function()
+				fireclickdetector(workspace.city["SCP Ray To Shoot SCP-106 [GATE-A] Alarm"].siren.play.ClickDetector)
+			end    
+		})
+	
+		getgenv().syn = syn
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(KWIBL_fake_script)()
