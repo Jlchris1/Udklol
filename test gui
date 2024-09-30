@@ -6,6 +6,7 @@
 local jlmain = Instance.new("ScreenGui")
 local toggle = Instance.new("TextButton")
 local deco = Instance.new("TextLabel")
+local TextLabel = Instance.new("TextLabel")
 local scroll = Instance.new("ScrollingFrame")
 local flygui = Instance.new("TextButton")
 local speed2 = Instance.new("TextButton")
@@ -88,13 +89,23 @@ deco.Text = "jl cmbdar"
 deco.TextColor3 = Color3.fromRGB(255, 0, 0)
 deco.TextSize = 63.000
 
+TextLabel.Parent = jlmain
+TextLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TextLabel.BorderColor3 = Color3.fromRGB(0, 0, 0)
+TextLabel.BorderSizePixel = 0
+TextLabel.Position = UDim2.new(0.344339609, 0, 0.234910831, 0)
+TextLabel.Size = UDim2.new(0, 304, 0, 62)
+TextLabel.Font = Enum.Font.SourceSans
+TextLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+TextLabel.TextSize = 14.000
+
 scroll.Name = "scroll"
-scroll.Parent = deco
+scroll.Parent = TextLabel
 scroll.Active = true
 scroll.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 scroll.BorderColor3 = Color3.fromRGB(0, 0, 0)
 scroll.BorderSizePixel = 0
-scroll.Position = UDim2.new(-9.8703722e-06, 0, 0.990434289, 0)
+scroll.Position = UDim2.new(-0.000420653436, 0, 0.837462902, 0)
 scroll.Size = UDim2.new(0, 305, 0, 310)
 scroll.CanvasPosition = Vector2.new(0, 3170)
 scroll.CanvasSize = UDim2.new(0, 0, 160, 0)
@@ -689,7 +700,7 @@ adonisbypass.TextSize = 16.000
 
 -- Scripts:
 
-local function EZMPCKR_fake_script() -- toggle.LocalScript 
+local function CVSBPT_fake_script() -- toggle.LocalScript 
 	local script = Instance.new('LocalScript', toggle)
 
 	local back = script.Parent.Parent.deco
@@ -718,8 +729,8 @@ local function EZMPCKR_fake_script() -- toggle.LocalScript
 	
 	end)
 end
-coroutine.wrap(EZMPCKR_fake_script)()
-local function XVRL_fake_script() -- toggle.dra 
+coroutine.wrap(CVSBPT_fake_script)()
+local function YLWB_fake_script() -- toggle.dra 
 	local script = Instance.new('LocalScript', toggle)
 
 	local dragger = {}; 
@@ -766,738 +777,8 @@ local function XVRL_fake_script() -- toggle.dra
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(XVRL_fake_script)()
-local function WMIQAKL_fake_script() -- flygui.Script 
-	local script = Instance.new('Script', flygui)
-
-	function Click(mouse)
-	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-	
-	
-end
-coroutine.wrap(WMIQAKL_fake_script)()
-local function PXDJ_fake_script() -- speed2.Script 
-	local script = Instance.new('Script', speed2)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 35
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(PXDJ_fake_script)()
-local function WZTHSCA_fake_script() -- speed5.Script 
-	local script = Instance.new('Script', speed5)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 45
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(WZTHSCA_fake_script)()
-local function CPAUEHE_fake_script() -- speed7.Script 
-	local script = Instance.new('Script', speed7)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 70
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(CPAUEHE_fake_script)()
-local function BPMAS_fake_script() -- loopspeed5.Script 
-	local script = Instance.new('Script', loopspeed5)
-
-	function Click(mouse)
-	_G.toggle = true
-	
-	while _G.toggle do
-	wait(0.3)
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 100
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(BPMAS_fake_script)()
-local function FOSV_fake_script() -- speed4.Script 
-	local script = Instance.new('Script', speed4)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 150
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(FOSV_fake_script)()
-local function NGVLPRV_fake_script() -- speed6.Script 
-	local script = Instance.new('Script', speed6)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 250
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(NGVLPRV_fake_script)()
-local function XZNNVB_fake_script() -- loopspeed2.Script 
-	local script = Instance.new('Script', loopspeed2)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 350
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(XZNNVB_fake_script)()
-local function ZAGU_fake_script() -- speed3.Script 
-	local script = Instance.new('Script', speed3)
-
-	function Click(mouse)
-	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-	
-	
-end
-coroutine.wrap(ZAGU_fake_script)()
-local function MDOZ_fake_script() -- loopspeed6.Script 
-	local script = Instance.new('Script', loopspeed6)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 150
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(MDOZ_fake_script)()
-local function IQTHSQD_fake_script() -- speed5_2.Script 
-	local script = Instance.new('Script', speed5_2)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 45
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(IQTHSQD_fake_script)()
-local function DIIP_fake_script() -- loopspeed7.Script 
-	local script = Instance.new('Script', loopspeed7)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 250
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(DIIP_fake_script)()
-local function MFUK_fake_script() -- loopspeed4.Script 
-	local script = Instance.new('Script', loopspeed4)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 70
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(MFUK_fake_script)()
-local function JKOUDP_fake_script() -- speed1.Script 
-	local script = Instance.new('Script', speed1)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 100
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(JKOUDP_fake_script)()
-local function JAKTYB_fake_script() -- loopspeed.Script 
-	local script = Instance.new('Script', loopspeed)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 25
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(JAKTYB_fake_script)()
-local function XHIU_fake_script() -- ws25.Script 
-	local script = Instance.new('Script', ws25)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 25
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(XHIU_fake_script)()
-local function MELQ_fake_script() -- loopspeed3.Script 
-	local script = Instance.new('Script', loopspeed3)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-			game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 50
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-	
-end
-coroutine.wrap(MELQ_fake_script)()
-local function DMLUESY_fake_script() -- speed.Script 
-	local script = Instance.new('Script', speed)
-
-	function Click(mouse)
-		
-			game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 50
-		
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-	
-end
-coroutine.wrap(DMLUESY_fake_script)()
-local function BDXJ_fake_script() -- stoploops.Script 
-	local script = Instance.new('Script', stoploops)
-
-	function Click(mouse)
-	
-		_G.toggle = false
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(BDXJ_fake_script)()
-local function LWZWZ_fake_script() -- antigameplaypaused.Script 
-	local script = Instance.new('Script', antigameplaypaused)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.GameplayPaused = false
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(LWZWZ_fake_script)()
-local function KWAY_fake_script() -- maxzoom100kmax.Script 
-	local script = Instance.new('Script', maxzoom100kmax)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.CameraMaxZoomDistance = 1000000000
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(KWAY_fake_script)()
-local function HYDZSQ_fake_script() -- antifirstperson.Script 
-	local script = Instance.new('Script', antifirstperson)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.CameraMinZoomDistance = 0.5
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(HYDZSQ_fake_script)()
-local function YSQWDG_fake_script() -- loopmaxzoom100kmax.Script 
-	local script = Instance.new('Script', loopmaxzoom100kmax)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait(0.3)
-		game.Players.LocalPlayer.CameraMaxZoomDistance = 1000000000
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(YSQWDG_fake_script)()
-local function LAWK_fake_script() -- loopantigameplaypaused.Script 
-	local script = Instance.new('Script', loopantigameplaypaused)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait(0.3)
-		game.Players.LocalPlayer.GameplayPaused = false
-		end
-		
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(LAWK_fake_script)()
-local function BZGWOK_fake_script() -- loopantifp.Script 
-	local script = Instance.new('Script', loopantifp)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait(0.3)
-		game.Players.LocalPlayer.CameraMinZoomDistance = 0.5
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(BZGWOK_fake_script)()
-local function NSJGTI_fake_script() -- antivoid.Script 
-	local script = Instance.new('Script', antivoid)
-
-	function Click(mouse)
-		
-		workspace.FallenPartsDestroyHeight=0/0
-		
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(NSJGTI_fake_script)()
-local function CYDSC_fake_script() -- infjump.Script 
-	local script = Instance.new('Script', infjump)
-
-	function Click(mouse)
-	
-		
-	
-		local InfiniteJumpEnabled = true
-		game:GetService("UserInputService").JumpRequest:connect(function()
-			if InfiniteJumpEnabled then
-				game:GetService"Players".LocalPlayer.Character:FindFirstChildOfClass'Humanoid':ChangeState("Jumping")
-			end
-		end)
-	
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(CYDSC_fake_script)()
-local function TYAGR_fake_script() -- loopantivoid.Script 
-	local script = Instance.new('Script', loopantivoid)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-		workspace.FallenPartsDestroyHeight=0/0
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(TYAGR_fake_script)()
-local function MGKGEVO_fake_script() -- loopinfjump.Script 
-	local script = Instance.new('Script', loopinfjump)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait(0.3)
-		
-	
-		local InfiniteJumpEnabled = true
-		game:GetService("UserInputService").JumpRequest:connect(function()
-			if InfiniteJumpEnabled then
-				game:GetService"Players".LocalPlayer.Character:FindFirstChildOfClass'Humanoid':ChangeState("Jumping")
-			end
-		end)
-	end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(MGKGEVO_fake_script)()
-local function CYPLRMU_fake_script() -- explorer.Script 
-	local script = Instance.new('Script', explorer)
-
-	function Click(mouse)
-	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/DEX-Explorer/main/Mobile.lua"))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(CYPLRMU_fake_script)()
-local function QLJFDP_fake_script() -- remotespy.Script 
-	local script = Instance.new('Script', remotespy)
-
-	function Click(mouse)
-	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/RS/main/SimpleSpyMobile"))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(QLJFDP_fake_script)()
-local function VVWB_fake_script() -- positionfinder.Script 
-	local script = Instance.new('Script', positionfinder)
-
-	function Click(mouse)
-	
-		loadstring(game:HttpGet("https://pastefy.app/fE00IA44/raw"))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(VVWB_fake_script)()
-local function SUZBL_fake_script() -- speed175.Script 
-	local script = Instance.new('Script', speed175)
-
-	function Click(mouse)
-		
-			game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 25
-		
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(SUZBL_fake_script)()
-local function CJSJA_fake_script() -- loopspeed175.Script 
-	local script = Instance.new('Script', loopspeed175)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-			game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 25
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(CJSJA_fake_script)()
-local function ZNILMQ_fake_script() -- jp150.Script 
-	local script = Instance.new('Script', jp150)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 50
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(ZNILMQ_fake_script)()
-local function HVYTUZT_fake_script() -- jp275.Script 
-	local script = Instance.new('Script', jp275)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 75
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(HVYTUZT_fake_script)()
-local function ITQKMCB_fake_script() -- jp3100.Script 
-	local script = Instance.new('Script', jp3100)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 100
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(ITQKMCB_fake_script)()
-local function PTKTMQ_fake_script() -- jp4150.Script 
-	local script = Instance.new('Script', jp4150)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 150
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(PTKTMQ_fake_script)()
-local function YEFJNUD_fake_script() -- jp5250.Script 
-	local script = Instance.new('Script', jp5250)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 250
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(YEFJNUD_fake_script)()
-local function LGTL_fake_script() -- jp6500.Script 
-	local script = Instance.new('Script', jp6500)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 500
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(LGTL_fake_script)()
-local function PJYLL_fake_script() -- jp7750.Script 
-	local script = Instance.new('Script', jp7750)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 750
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(PJYLL_fake_script)()
-local function ELHFR_fake_script() -- lpjp500.Script 
-	local script = Instance.new('Script', lpjp500)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 500
-		end
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(ELHFR_fake_script)()
-local function VXSZUB_fake_script() -- lpjp750.Script 
-	local script = Instance.new('Script', lpjp750)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 750
-		end
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(VXSZUB_fake_script)()
-local function KRMYM_fake_script() -- lpjp50.Script 
-	local script = Instance.new('Script', lpjp50)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 50
-		end
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(KRMYM_fake_script)()
-local function DNLSZ_fake_script() -- lpjpv75.Script 
-	local script = Instance.new('Script', lpjpv75)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 75
-		end
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(DNLSZ_fake_script)()
-local function KNHQ_fake_script() -- lpjp100.Script 
-	local script = Instance.new('Script', lpjp100)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 100
-		end
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(KNHQ_fake_script)()
-local function EPAW_fake_script() -- lpjp150.Script 
-	local script = Instance.new('Script', lpjp150)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 150
-		end
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(EPAW_fake_script)()
-local function OIJJ_fake_script() -- lpjp250.Script 
-	local script = Instance.new('Script', lpjp250)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 250
-		end
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(OIJJ_fake_script)()
-local function UGZFTYO_fake_script() -- adonisbypass.Script 
-	local script = Instance.new('Script', adonisbypass)
-
-	function Click(mouse)
-	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua",true))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(UGZFTYO_fake_script)()
-local function RXHUBTB_fake_script() -- deco.LocalScript 
+coroutine.wrap(YLWB_fake_script)()
+local function VMBSBA_fake_script() -- deco.LocalScript 
 	local script = Instance.new('LocalScript', deco)
 
 	local dragger = {}; 
@@ -1544,4 +825,734 @@ local function RXHUBTB_fake_script() -- deco.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(RXHUBTB_fake_script)()
+coroutine.wrap(VMBSBA_fake_script)()
+local function QQZQ_fake_script() -- flygui.Script 
+	local script = Instance.new('Script', flygui)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+	
+	
+end
+coroutine.wrap(QQZQ_fake_script)()
+local function WCTQ_fake_script() -- speed2.Script 
+	local script = Instance.new('Script', speed2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 35
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WCTQ_fake_script)()
+local function FSBIOS_fake_script() -- speed5.Script 
+	local script = Instance.new('Script', speed5)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 45
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FSBIOS_fake_script)()
+local function JAWRD_fake_script() -- speed7.Script 
+	local script = Instance.new('Script', speed7)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 70
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(JAWRD_fake_script)()
+local function YSINOWW_fake_script() -- loopspeed5.Script 
+	local script = Instance.new('Script', loopspeed5)
+
+	function Click(mouse)
+	_G.toggle = true
+	
+	while _G.toggle do
+	wait(0.3)
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 100
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(YSINOWW_fake_script)()
+local function VMTQA_fake_script() -- speed4.Script 
+	local script = Instance.new('Script', speed4)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 150
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(VMTQA_fake_script)()
+local function VIEVH_fake_script() -- speed6.Script 
+	local script = Instance.new('Script', speed6)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 250
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(VIEVH_fake_script)()
+local function THRB_fake_script() -- loopspeed2.Script 
+	local script = Instance.new('Script', loopspeed2)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 350
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(THRB_fake_script)()
+local function XCRYPBD_fake_script() -- speed3.Script 
+	local script = Instance.new('Script', speed3)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+	
+	
+end
+coroutine.wrap(XCRYPBD_fake_script)()
+local function FOAO_fake_script() -- loopspeed6.Script 
+	local script = Instance.new('Script', loopspeed6)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 150
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FOAO_fake_script)()
+local function MEMNLTT_fake_script() -- speed5_2.Script 
+	local script = Instance.new('Script', speed5_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 45
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(MEMNLTT_fake_script)()
+local function XVYZVA_fake_script() -- loopspeed7.Script 
+	local script = Instance.new('Script', loopspeed7)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 250
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(XVYZVA_fake_script)()
+local function ZTJOU_fake_script() -- loopspeed4.Script 
+	local script = Instance.new('Script', loopspeed4)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 70
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ZTJOU_fake_script)()
+local function GLLHV_fake_script() -- speed1.Script 
+	local script = Instance.new('Script', speed1)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 100
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GLLHV_fake_script)()
+local function KOFWXZ_fake_script() -- loopspeed.Script 
+	local script = Instance.new('Script', loopspeed)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 25
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(KOFWXZ_fake_script)()
+local function XEMRB_fake_script() -- ws25.Script 
+	local script = Instance.new('Script', ws25)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 25
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(XEMRB_fake_script)()
+local function IDRLIAQ_fake_script() -- loopspeed3.Script 
+	local script = Instance.new('Script', loopspeed3)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+			game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 50
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+	
+end
+coroutine.wrap(IDRLIAQ_fake_script)()
+local function UFPOS_fake_script() -- speed.Script 
+	local script = Instance.new('Script', speed)
+
+	function Click(mouse)
+		
+			game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 50
+		
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+	
+end
+coroutine.wrap(UFPOS_fake_script)()
+local function NBXM_fake_script() -- stoploops.Script 
+	local script = Instance.new('Script', stoploops)
+
+	function Click(mouse)
+	
+		_G.toggle = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(NBXM_fake_script)()
+local function ECDPVOK_fake_script() -- antigameplaypaused.Script 
+	local script = Instance.new('Script', antigameplaypaused)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.GameplayPaused = false
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ECDPVOK_fake_script)()
+local function UIAKX_fake_script() -- maxzoom100kmax.Script 
+	local script = Instance.new('Script', maxzoom100kmax)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.CameraMaxZoomDistance = 1000000000
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(UIAKX_fake_script)()
+local function WARYQ_fake_script() -- antifirstperson.Script 
+	local script = Instance.new('Script', antifirstperson)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.CameraMinZoomDistance = 0.5
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WARYQ_fake_script)()
+local function ASQKTSZ_fake_script() -- loopmaxzoom100kmax.Script 
+	local script = Instance.new('Script', loopmaxzoom100kmax)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.3)
+		game.Players.LocalPlayer.CameraMaxZoomDistance = 1000000000
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ASQKTSZ_fake_script)()
+local function AMOX_fake_script() -- loopantigameplaypaused.Script 
+	local script = Instance.new('Script', loopantigameplaypaused)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.3)
+		game.Players.LocalPlayer.GameplayPaused = false
+		end
+		
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(AMOX_fake_script)()
+local function IVFGJPT_fake_script() -- loopantifp.Script 
+	local script = Instance.new('Script', loopantifp)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.3)
+		game.Players.LocalPlayer.CameraMinZoomDistance = 0.5
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(IVFGJPT_fake_script)()
+local function NACOT_fake_script() -- antivoid.Script 
+	local script = Instance.new('Script', antivoid)
+
+	function Click(mouse)
+		
+		workspace.FallenPartsDestroyHeight=0/0
+		
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(NACOT_fake_script)()
+local function YZPPSST_fake_script() -- infjump.Script 
+	local script = Instance.new('Script', infjump)
+
+	function Click(mouse)
+	
+		
+	
+		local InfiniteJumpEnabled = true
+		game:GetService("UserInputService").JumpRequest:connect(function()
+			if InfiniteJumpEnabled then
+				game:GetService"Players".LocalPlayer.Character:FindFirstChildOfClass'Humanoid':ChangeState("Jumping")
+			end
+		end)
+	
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(YZPPSST_fake_script)()
+local function GVRKT_fake_script() -- loopantivoid.Script 
+	local script = Instance.new('Script', loopantivoid)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+		workspace.FallenPartsDestroyHeight=0/0
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GVRKT_fake_script)()
+local function NPTKM_fake_script() -- loopinfjump.Script 
+	local script = Instance.new('Script', loopinfjump)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.3)
+		
+	
+		local InfiniteJumpEnabled = true
+		game:GetService("UserInputService").JumpRequest:connect(function()
+			if InfiniteJumpEnabled then
+				game:GetService"Players".LocalPlayer.Character:FindFirstChildOfClass'Humanoid':ChangeState("Jumping")
+			end
+		end)
+	end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(NPTKM_fake_script)()
+local function QZMPS_fake_script() -- explorer.Script 
+	local script = Instance.new('Script', explorer)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/DEX-Explorer/main/Mobile.lua"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(QZMPS_fake_script)()
+local function RGUTBRN_fake_script() -- remotespy.Script 
+	local script = Instance.new('Script', remotespy)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/RS/main/SimpleSpyMobile"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(RGUTBRN_fake_script)()
+local function BFQGXH_fake_script() -- positionfinder.Script 
+	local script = Instance.new('Script', positionfinder)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://pastefy.app/fE00IA44/raw"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(BFQGXH_fake_script)()
+local function FHSESWI_fake_script() -- speed175.Script 
+	local script = Instance.new('Script', speed175)
+
+	function Click(mouse)
+		
+			game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 25
+		
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FHSESWI_fake_script)()
+local function STEGS_fake_script() -- loopspeed175.Script 
+	local script = Instance.new('Script', loopspeed175)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+			game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 25
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(STEGS_fake_script)()
+local function QOAGSUX_fake_script() -- jp150.Script 
+	local script = Instance.new('Script', jp150)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 50
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(QOAGSUX_fake_script)()
+local function AQEDZ_fake_script() -- jp275.Script 
+	local script = Instance.new('Script', jp275)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 75
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(AQEDZ_fake_script)()
+local function WAVRAI_fake_script() -- jp3100.Script 
+	local script = Instance.new('Script', jp3100)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 100
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WAVRAI_fake_script)()
+local function ELECKU_fake_script() -- jp4150.Script 
+	local script = Instance.new('Script', jp4150)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 150
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ELECKU_fake_script)()
+local function UDDMYL_fake_script() -- jp5250.Script 
+	local script = Instance.new('Script', jp5250)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 250
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(UDDMYL_fake_script)()
+local function KSTL_fake_script() -- jp6500.Script 
+	local script = Instance.new('Script', jp6500)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 500
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(KSTL_fake_script)()
+local function VXTTV_fake_script() -- jp7750.Script 
+	local script = Instance.new('Script', jp7750)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 750
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(VXTTV_fake_script)()
+local function DDPRH_fake_script() -- lpjp500.Script 
+	local script = Instance.new('Script', lpjp500)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 500
+		end
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(DDPRH_fake_script)()
+local function BMAEZY_fake_script() -- lpjp750.Script 
+	local script = Instance.new('Script', lpjp750)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 750
+		end
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(BMAEZY_fake_script)()
+local function WNJO_fake_script() -- lpjp50.Script 
+	local script = Instance.new('Script', lpjp50)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 50
+		end
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WNJO_fake_script)()
+local function XRLGFJL_fake_script() -- lpjpv75.Script 
+	local script = Instance.new('Script', lpjpv75)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 75
+		end
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(XRLGFJL_fake_script)()
+local function ZPNGUQ_fake_script() -- lpjp100.Script 
+	local script = Instance.new('Script', lpjp100)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 100
+		end
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ZPNGUQ_fake_script)()
+local function IZQU_fake_script() -- lpjp150.Script 
+	local script = Instance.new('Script', lpjp150)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 150
+		end
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(IZQU_fake_script)()
+local function AEJH_fake_script() -- lpjp250.Script 
+	local script = Instance.new('Script', lpjp250)
+
+	function Click(mouse)
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait( )
+			game.Players.LocalPlayer.Character.Humanoid.JumpPower = 250
+		end
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(AEJH_fake_script)()
+local function BOIKCB_fake_script() -- adonisbypass.Script 
+	local script = Instance.new('Script', adonisbypass)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua",true))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(BOIKCB_fake_script)()
