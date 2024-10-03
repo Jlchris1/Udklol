@@ -1,0 +1,3282 @@
+-- Gui to Lua
+-- Version: 3.2
+
+-- Instances:
+
+local antis = Instance.new("ScreenGui")
+local closeantigui = Instance.new("TextButton")
+local Frame = Instance.new("Frame")
+local antis_2 = Instance.new("TextButton")
+local tpmap = Instance.new("TextButton")
+local antiv2 = Instance.new("TextButton")
+local reseteverything = Instance.new("TextButton")
+local removevelociitydmg = Instance.new("TextButton")
+local antiragdoll = Instance.new("TextButton")
+local rejoin = Instance.new("TextButton")
+local antiswithoutautotp = Instance.new("TextButton")
+local antiv2withrag = Instance.new("TextButton")
+local antiswithouttpbacktomap = Instance.new("TextButton")
+local freezebody = Instance.new("TextButton")
+local freezewholebody = Instance.new("TextButton")
+local unfreeze = Instance.new("TextButton")
+local anchorroot = Instance.new("TextButton")
+local autofreezdearm = Instance.new("TextButton")
+local loopanchorroot = Instance.new("TextButton")
+local TextButton = Instance.new("TextButton")
+
+--Properties:
+
+antis.Name = "antis"
+antis.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+antis.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+antis.ResetOnSpawn = false
+
+closeantigui.Name = "close anti gui"
+closeantigui.Parent = antis
+closeantigui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+closeantigui.BorderColor3 = Color3.fromRGB(0, 0, 0)
+closeantigui.BorderSizePixel = 0
+closeantigui.Position = UDim2.new(0.514150918, 0, 0.337791502, 0)
+closeantigui.Size = UDim2.new(0, 72, 0, 50)
+closeantigui.Font = Enum.Font.SourceSansBold
+closeantigui.Text = "close anti gui"
+closeantigui.TextColor3 = Color3.fromRGB(255, 255, 0)
+closeantigui.TextSize = 14.000
+
+Frame.Parent = antis
+Frame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+Frame.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Frame.BorderSizePixel = 0
+Frame.Position = UDim2.new(0.167554662, 0, 0.147462279, 0)
+Frame.Size = UDim2.new(0, 902, 0, 83)
+
+antis_2.Name = "antis"
+antis_2.Parent = Frame
+antis_2.BackgroundColor3 = Color3.fromRGB(0, 0, 255)
+antis_2.BorderColor3 = Color3.fromRGB(0, 0, 0)
+antis_2.BorderSizePixel = 0
+antis_2.Position = UDim2.new(-0.00392353861, 0, 0.0120481923, 0)
+antis_2.Size = UDim2.new(0, 102, 0, 21)
+antis_2.Font = Enum.Font.SourceSansBold
+antis_2.Text = "activate antis"
+antis_2.TextColor3 = Color3.fromRGB(0, 0, 0)
+antis_2.TextSize = 22.000
+
+tpmap.Name = "tpmap"
+tpmap.Parent = Frame
+tpmap.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+tpmap.BorderColor3 = Color3.fromRGB(0, 0, 0)
+tpmap.BorderSizePixel = 0
+tpmap.Position = UDim2.new(0.212499574, 0, -0.0120481923, 0)
+tpmap.Size = UDim2.new(0, 99, 0, 23)
+tpmap.Font = Enum.Font.SourceSansBold
+tpmap.Text = "tp back to map"
+tpmap.TextColor3 = Color3.fromRGB(255, 255, 0)
+tpmap.TextSize = 15.000
+
+antiv2.Name = "anti v2"
+antiv2.Parent = Frame
+antiv2.BackgroundColor3 = Color3.fromRGB(255, 255, 0)
+antiv2.BorderColor3 = Color3.fromRGB(0, 0, 0)
+antiv2.BorderSizePixel = 0
+antiv2.Position = UDim2.new(-0.00170621008, 0, 0.746987939, 0)
+antiv2.Size = UDim2.new(0, 120, 0, 21)
+antiv2.Font = Enum.Font.SourceSans
+antiv2.Text = "anti v2"
+antiv2.TextColor3 = Color3.fromRGB(0, 0, 0)
+antiv2.TextSize = 14.000
+
+reseteverything.Name = "reset everything"
+reseteverything.Parent = Frame
+reseteverything.BackgroundColor3 = Color3.fromRGB(85, 255, 0)
+reseteverything.BorderColor3 = Color3.fromRGB(0, 0, 0)
+reseteverything.BorderSizePixel = 0
+reseteverything.Position = UDim2.new(0.237151489, 0, 0.783132553, 0)
+reseteverything.Size = UDim2.new(0, 99, 0, 20)
+reseteverything.Font = Enum.Font.SourceSansBold
+reseteverything.Text = "reset effects"
+reseteverything.TextColor3 = Color3.fromRGB(0, 0, 0)
+reseteverything.TextSize = 18.000
+
+removevelociitydmg.Name = "remove velociity dmg"
+removevelociitydmg.Parent = Frame
+removevelociitydmg.BackgroundColor3 = Color3.fromRGB(85, 0, 0)
+removevelociitydmg.BorderColor3 = Color3.fromRGB(0, 0, 0)
+removevelociitydmg.BorderSizePixel = 0
+removevelociitydmg.Position = UDim2.new(0.321312875, 0, -0.0120481923, 0)
+removevelociitydmg.Size = UDim2.new(0, 93, 0, 23)
+removevelociitydmg.Font = Enum.Font.SourceSansBold
+removevelociitydmg.Text = "remove velocity dmg"
+removevelociitydmg.TextColor3 = Color3.fromRGB(255, 255, 0)
+removevelociitydmg.TextSize = 12.000
+
+antiragdoll.Name = "anti ragdoll"
+antiragdoll.Parent = Frame
+antiragdoll.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+antiragdoll.BorderColor3 = Color3.fromRGB(0, 0, 0)
+antiragdoll.BorderSizePixel = 0
+antiragdoll.Position = UDim2.new(0.344225019, 0, 0.759036124, 0)
+antiragdoll.Size = UDim2.new(0, 117, 0, 20)
+antiragdoll.Font = Enum.Font.SourceSansBold
+antiragdoll.Text = "anti ragdoll"
+antiragdoll.TextColor3 = Color3.fromRGB(0, 0, 0)
+antiragdoll.TextSize = 19.000
+
+rejoin.Name = "rejoin"
+rejoin.Parent = Frame
+rejoin.BackgroundColor3 = Color3.fromRGB(85, 85, 127)
+rejoin.BorderColor3 = Color3.fromRGB(0, 0, 0)
+rejoin.BorderSizePixel = 0
+rejoin.Position = UDim2.new(0.424137294, 0, 0, 0)
+rejoin.Size = UDim2.new(0, 100, 0, 22)
+rejoin.Font = Enum.Font.SourceSansBold
+rejoin.Text = "rejoin"
+rejoin.TextColor3 = Color3.fromRGB(0, 0, 0)
+rejoin.TextSize = 25.000
+
+antiswithoutautotp.Name = "antis without auto tp"
+antiswithoutautotp.Parent = Frame
+antiswithoutautotp.BackgroundColor3 = Color3.fromRGB(0, 0, 255)
+antiswithoutautotp.BorderColor3 = Color3.fromRGB(0, 0, 0)
+antiswithoutautotp.BorderSizePixel = 0
+antiswithoutautotp.Position = UDim2.new(0.473065227, 0, 0.759036124, 0)
+antiswithoutautotp.Size = UDim2.new(0, 99, 0, 20)
+antiswithoutautotp.Font = Enum.Font.SourceSansBold
+antiswithoutautotp.Text = " antis (no tp)"
+antiswithoutautotp.TextColor3 = Color3.fromRGB(0, 0, 0)
+antiswithoutautotp.TextSize = 18.000
+
+antiv2withrag.Name = "anti v2 with rag"
+antiv2withrag.Parent = Frame
+antiv2withrag.BackgroundColor3 = Color3.fromRGB(255, 255, 0)
+antiv2withrag.BorderColor3 = Color3.fromRGB(0, 0, 0)
+antiv2withrag.BorderSizePixel = 0
+antiv2withrag.Position = UDim2.new(0.53499645, 0, 0, 0)
+antiv2withrag.Size = UDim2.new(0, 102, 0, 21)
+antiv2withrag.Font = Enum.Font.SourceSans
+antiv2withrag.Text = "anti v2 (with ragdoll)"
+antiv2withrag.TextColor3 = Color3.fromRGB(0, 0, 0)
+antiv2withrag.TextSize = 14.000
+
+antiswithouttpbacktomap.Name = "antis without tp back to map"
+antiswithouttpbacktomap.Parent = Frame
+antiswithouttpbacktomap.BackgroundColor3 = Color3.fromRGB(0, 0, 255)
+antiswithouttpbacktomap.BorderColor3 = Color3.fromRGB(0, 0, 0)
+antiswithouttpbacktomap.BorderSizePixel = 0
+antiswithouttpbacktomap.Position = UDim2.new(0.581091106, 0, 0.771084309, 0)
+antiswithouttpbacktomap.Size = UDim2.new(0, 121, 0, 20)
+antiswithouttpbacktomap.Font = Enum.Font.SourceSansBold
+antiswithouttpbacktomap.Text = "antis (no loop tp back)"
+antiswithouttpbacktomap.TextColor3 = Color3.fromRGB(0, 0, 0)
+antiswithouttpbacktomap.TextSize = 14.000
+
+freezebody.Name = "freeze body"
+freezebody.Parent = Frame
+freezebody.BackgroundColor3 = Color3.fromRGB(0, 255, 255)
+freezebody.BorderColor3 = Color3.fromRGB(0, 0, 0)
+freezebody.BorderSizePixel = 0
+freezebody.Position = UDim2.new(0.109219708, 0, 0, 0)
+freezebody.Size = UDim2.new(0, 94, 0, 22)
+freezebody.Font = Enum.Font.SourceSansBold
+freezebody.Text = "anchor body"
+freezebody.TextColor3 = Color3.fromRGB(0, 0, 0)
+freezebody.TextSize = 17.000
+
+freezewholebody.Name = "freeze whole body"
+freezewholebody.Parent = Frame
+freezewholebody.BackgroundColor3 = Color3.fromRGB(170, 255, 255)
+freezewholebody.BorderColor3 = Color3.fromRGB(0, 0, 0)
+freezewholebody.BorderSizePixel = 0
+freezewholebody.Position = UDim2.new(0.647320509, 0, -0.0120481923, 0)
+freezewholebody.Size = UDim2.new(0, 80, 0, 22)
+freezewholebody.Font = Enum.Font.SourceSansBold
+freezewholebody.Text = "freeze whole body"
+freezewholebody.TextColor3 = Color3.fromRGB(0, 0, 0)
+freezewholebody.TextSize = 12.000
+
+unfreeze.Name = "unfreeze"
+unfreeze.Parent = Frame
+unfreeze.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+unfreeze.BorderColor3 = Color3.fromRGB(0, 0, 0)
+unfreeze.BorderSizePixel = 0
+unfreeze.Position = UDim2.new(0.130837753, 0, 0.746987939, 0)
+unfreeze.Size = UDim2.new(0, 94, 0, 22)
+unfreeze.Font = Enum.Font.SourceSansBold
+unfreeze.Text = "unfreeze"
+unfreeze.TextColor3 = Color3.fromRGB(255, 255, 0)
+unfreeze.TextSize = 23.000
+
+anchorroot.Name = "anchor root"
+anchorroot.Parent = Frame
+anchorroot.BackgroundColor3 = Color3.fromRGB(170, 255, 255)
+anchorroot.BorderColor3 = Color3.fromRGB(0, 0, 0)
+anchorroot.BorderSizePixel = 0
+anchorroot.Position = UDim2.new(0.736012399, 0, -0.0120481923, 0)
+anchorroot.Size = UDim2.new(0, 110, 0, 21)
+anchorroot.Font = Enum.Font.SourceSansBold
+anchorroot.Text = "anchor root"
+anchorroot.TextColor3 = Color3.fromRGB(0, 0, 0)
+anchorroot.TextSize = 25.000
+
+autofreezdearm.Name = "auto freezde arm"
+autofreezdearm.Parent = Frame
+autofreezdearm.BackgroundColor3 = Color3.fromRGB(0, 49, 147)
+autofreezdearm.BorderColor3 = Color3.fromRGB(0, 0, 0)
+autofreezdearm.BorderSizePixel = 0
+autofreezdearm.Position = UDim2.new(0.715162575, 0, 0.783132553, 0)
+autofreezdearm.Size = UDim2.new(0, 111, 0, 19)
+autofreezdearm.Font = Enum.Font.SourceSansBold
+autofreezdearm.Text = "auto freeze arm"
+autofreezdearm.TextColor3 = Color3.fromRGB(0, 0, 0)
+autofreezdearm.TextSize = 19.000
+
+loopanchorroot.Name = "loop anchor root"
+loopanchorroot.Parent = Frame
+loopanchorroot.BackgroundColor3 = Color3.fromRGB(124, 186, 186)
+loopanchorroot.BorderColor3 = Color3.fromRGB(0, 0, 0)
+loopanchorroot.BorderSizePixel = 0
+loopanchorroot.Position = UDim2.new(0.856984496, 0, -0.0120481923, 0)
+loopanchorroot.Size = UDim2.new(0, 129, 0, 23)
+loopanchorroot.Font = Enum.Font.SourceSans
+loopanchorroot.Text = "loop anchor root"
+loopanchorroot.TextColor3 = Color3.fromRGB(0, 0, 0)
+loopanchorroot.TextSize = 14.000
+
+TextButton.Parent = Frame
+TextButton.BackgroundColor3 = Color3.fromRGB(87, 130, 130)
+TextButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+TextButton.BorderSizePixel = 0
+TextButton.Position = UDim2.new(0.838137448, 0, 0.759036124, 0)
+TextButton.Size = UDim2.new(0, 146, 0, 20)
+TextButton.Font = Enum.Font.SourceSansBold
+TextButton.Text = "loop anchor/unanchor root"
+TextButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+TextButton.TextSize = 14.000
+
+-- Scripts:
+
+local function XENJ_fake_script() -- closeantigui.toggle 
+	local script = Instance.new('LocalScript', closeantigui)
+
+	local back = script.Parent.Parent.Frame
+	local con = script.Parent.Parent.Frame
+	
+	local window = {
+		count = 0;
+		toggles = {},
+		closed = false;
+	}
+	script.Parent.MouseButton1Click:connect(function()
+		window.closed = not window.closed
+		script.Parent.Text = (window.closed and "Close anti gui" or "Open anti gui")
+		if script.Parent.Text == "Open anti gui" then
+			back:TweenSize(UDim2.new(0, 190,0, 0), "Out", "Sine", 0.5)
+			con:TweenSize(UDim2.new(0, 190,0, 0), "Out", "Sine", 0.5)
+			wait(0.1) do
+				con.Visible = false
+			end
+		else
+			back:TweenSize(UDim2.new(0, 662,0, 83), "Out", "Sine", 0.5)
+			con:TweenSize(UDim2.new(0, 662,0, 83), "Out", "Sine", 0.5)
+			wait(0.2) do
+				con.Visible = true
+			end
+		end
+	
+	end)
+end
+coroutine.wrap(XENJ_fake_script)()
+local function FJAMVRA_fake_script() -- closeantigui.dragger 
+	local script = Instance.new('LocalScript', closeantigui)
+
+	local dragger = {}; 
+	local resizer = {};
+	
+	do
+		local mouse = game:GetService("Players").LocalPlayer:GetMouse();
+		local inputService = game:GetService('UserInputService');
+		local heartbeat = game:GetService("RunService").Heartbeat;
+		-- // credits to Ririchi / Inori for this cute drag function :)
+		function dragger.new(frame)
+			local s, event = pcall(function()
+				return frame.MouseEnter
+			end)
+	
+			if s then
+				frame.Active = true;
+	
+				event:connect(function()
+					local input = frame.InputBegan:connect(function(key)
+						if key.UserInputType == Enum.UserInputType.MouseButton1 then
+							local objectPosition = Vector2.new(mouse.X - frame.AbsolutePosition.X, mouse.Y - frame.AbsolutePosition.Y);
+							while heartbeat:wait() and inputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+								frame:TweenPosition(UDim2.new(0, mouse.X - objectPosition.X + (frame.Size.X.Offset * frame.AnchorPoint.X), 0, mouse.Y - objectPosition.Y + (frame.Size.Y.Offset * frame.AnchorPoint.Y)), 'Out', 'Quad', 0.1, true);
+							end
+						end
+					end)
+	
+					local leave;
+					leave = frame.MouseLeave:connect(function()
+						input:disconnect();
+						leave:disconnect();
+					end)
+				end)
+			end
+		end
+	
+		function resizer.new(p, s)
+			p:GetPropertyChangedSignal('AbsoluteSize'):connect(function()
+				s.Size = UDim2.new(s.Size.X.Scale, s.Size.X.Offset, s.Size.Y.Scale, p.AbsoluteSize.Y);
+			end)
+		end
+	end
+	script.Parent.Active = true
+	script.Parent.Draggable = true
+end
+coroutine.wrap(FJAMVRA_fake_script)()
+local function UQWEFZ_fake_script() -- antis_2.LeftFoot 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftFoot.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(UQWEFZ_fake_script)()
+local function FHTCTRD_fake_script() -- antis_2.LeftLowerLeg massless 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftLowerLeg.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FHTCTRD_fake_script)()
+local function EPCZV_fake_script() -- antis_2.LeftUpperArm massless 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftUpperArm.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(EPCZV_fake_script)()
+local function XJKY_fake_script() -- antis_2.LeftUpperLeg 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftUpperLeg.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(XJKY_fake_script)()
+local function VHBT_fake_script() -- antis_2.RightFootMassless 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightFoot.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(VHBT_fake_script)()
+local function FCJFC_fake_script() -- antis_2.RightUpperLeg mass 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightUpperLeg.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FCJFC_fake_script)()
+local function CVVQ_fake_script() -- antis_2.Torso 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LowerTorso.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(CVVQ_fake_script)()
+local function FJNZC_fake_script() -- antis_2.UpperTorso 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.UpperTorso.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FJNZC_fake_script)()
+local function JYGE_fake_script() -- antis_2.fire et up 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+		while _G.toggle do
+			wait()
+			game:GetService("Players").LocalPlayer.Character.GetUpEvent:FireServer()
+	
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(JYGE_fake_script)()
+local function YMIBC_fake_script() -- antis_2.ani arm angle update 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.ArmAngleUpdate:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(YMIBC_fake_script)()
+local function FXJN_fake_script() -- antis_2.ant velocity dmg 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.VelocityDamage:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FXJN_fake_script)()
+local function XWMC_fake_script() -- antis_2.anti arm angle change 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.ArmAngleChange:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(XWMC_fake_script)()
+local function OJGT_fake_script() -- antis_2.inf jump 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		--[[
+		WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+	]]
+	local InfiniteJumpEnabled = true
+	game:GetService("UserInputService").JumpRequest:connect(function()
+		if InfiniteJumpEnabled then
+			game:GetService"Players".LocalPlayer.Character:FindFirstChildOfClass'Humanoid':ChangeState("Jumping")
+		end
+	end)
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(OJGT_fake_script)()
+local function ECIGLN_fake_script() -- antis_2.massless anvil 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game:GetService("Players").LocalPlayer.Backpack.Anvil.Handle.Massless = true
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ECIGLN_fake_script)()
+local function DJUIRUO_fake_script() -- antis_2.massless bomb 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game:GetService("Players").LocalPlayer.Backpack.Bomb.Handle.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(DJUIRUO_fake_script)()
+local function KBOGZHK_fake_script() -- antis_2.anti armangle 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.ArmAngle:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(KBOGZHK_fake_script)()
+local function UTGOMX_fake_script() -- antis_2.anti death detect 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.DeathDetect:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(UTGOMX_fake_script)()
+local function WUVUS_fake_script() -- antis_2.anti dmg 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Damage:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WUVUS_fake_script)()
+local function HEPAHXC_fake_script() -- antis_2.anti headwaist fling 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.HeadWaist:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HEPAHXC_fake_script)()
+local function BKSGB_fake_script() -- antis_2.anti ragdoll detect 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RagdollDetect:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(BKSGB_fake_script)()
+local function HIYDX_fake_script() -- antis_2.anti ragdoll event 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RagdollEvent:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HIYDX_fake_script)()
+local function WICURZT_fake_script() -- antis_2.antigetpicked 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.GetPicked:destroy()
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WICURZT_fake_script)()
+local function HSGH_fake_script() -- antis_2.antirag 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Ragdoll:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HSGH_fake_script)()
+local function DETGBH_fake_script() -- antis_2.head massless 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Head.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(DETGBH_fake_script)()
+local function RIEEL_fake_script() -- antis_2.lefthand 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftHand.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(RIEEL_fake_script)()
+local function ITVMD_fake_script() -- antis_2.leftlowerarm massless 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftLowerArm.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ITVMD_fake_script)()
+local function EUTBNQA_fake_script() -- antis_2.right lower leg massless 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightLowerLeg.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(EUTBNQA_fake_script)()
+local function FJDBQZ_fake_script() -- antis_2.set gravity 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.workspace.Gravity = 999999999999999999
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FJDBQZ_fake_script)()
+local function ZKROWMZ_fake_script() -- antis_2.set jp 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 150
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ZKROWMZ_fake_script)()
+local function DXHMTCU_fake_script() -- antis_2.set void height 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.workspace.FallenPartsDestroyHeight = 0/0
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(DXHMTCU_fake_script)()
+local function QKPA_fake_script() -- antis_2.HumanoidRootPart massless 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.HumanoidRootPart.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(QKPA_fake_script)()
+local function VNVGQVV_fake_script() -- antis_2.anti fling velocity 1 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		-- // Constants \\ --
+		-- [ Services ] --
+		local Services = setmetatable({}, {__index = function(Self, Index)
+			local NewService = game.GetService(game, Index)
+			if NewService then
+				Self[Index] = NewService
+			end
+			return NewService
+		end})
+	
+		-- [ LocalPlayer ] --
+		local LocalPlayer = Services.Players.LocalPlayer
+	
+		-- // Functions \\ --
+		local function PlayerAdded(Player)
+			local Detected = false
+			local Character;
+			local PrimaryPart;
+	
+			local function CharacterAdded(NewCharacter)
+				Character = NewCharacter
+				repeat
+					wait()
+					PrimaryPart = NewCharacter:FindFirstChild("HumanoidRootPart")
+				until PrimaryPart
+				Detected = false
+			end
+	
+			CharacterAdded(Player.Character or Player.CharacterAdded:Wait())
+			Player.CharacterAdded:Connect(CharacterAdded)
+			Services.RunService.Heartbeat:Connect(function()
+				if (Character and Character:IsDescendantOf(workspace)) and (PrimaryPart and PrimaryPart:IsDescendantOf(Character)) then
+					if PrimaryPart.AssemblyAngularVelocity.Magnitude > 50 or PrimaryPart.AssemblyLinearVelocity.Magnitude > 100 then
+						if Detected == false then
+							game.StarterGui:SetCore("ChatMakeSystemMessage", {
+								Text = "Fling Exploit detected, Player: " .. tostring(Player);
+								Color = Color3.fromRGB(255, 200, 0);
+							})
+						end
+						Detected = true
+						for i,v in ipairs(Character:GetDescendants()) do
+							if v:IsA("BasePart") then
+								v.CanCollide = false
+								v.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+								v.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+								v.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0)
+							end
+						end
+						PrimaryPart.CanCollide = false
+						PrimaryPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+						PrimaryPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+						PrimaryPart.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0)
+					end
+				end
+			end)
+		end
+	
+		-- // Event Listeners \\ --
+		for i,v in ipairs(Services.Players:GetPlayers()) do
+			if v ~= LocalPlayer then
+				PlayerAdded(v)
+			end
+		end
+		Services.Players.PlayerAdded:Connect(PlayerAdded)
+	
+		local LastPosition = nil
+		Services.RunService.Heartbeat:Connect(function()
+			pcall(function()
+				local PrimaryPart = LocalPlayer.Character.PrimaryPart
+				if PrimaryPart.AssemblyLinearVelocity.Magnitude > 250 or PrimaryPart.AssemblyAngularVelocity.Magnitude > 250 then
+					PrimaryPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+					PrimaryPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+					PrimaryPart.CFrame = LastPosition
+	
+					game.StarterGui:SetCore("ChatMakeSystemMessage", {
+						Text = "You were flung. Neutralizing velocity.";
+						Color = Color3.fromRGB(255, 0, 0);
+					})
+				elseif PrimaryPart.AssemblyLinearVelocity.Magnitude < 50 or PrimaryPart.AssemblyAngularVelocity.Magnitude > 50 then
+					LastPosition = PrimaryPart.CFrame
+				end
+			end)
+		end)
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(VNVGQVV_fake_script)()
+local function FAGB_fake_script() -- antis_2.anti fling velocity 2 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet(('https://pastebin.com/raw/GxdesRQx'),true))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FAGB_fake_script)()
+local function VMLNZC_fake_script() -- antis_2.noclip 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		local Noclip = nil
+		local Clip = nil
+	
+		function noclip()
+			Clip = false
+			local function Nocl()
+				if Clip == false and game.Players.LocalPlayer.Character ~= nil then
+					for _,v in pairs(game.Players.LocalPlayer.Character:GetDescendants()) do
+						if v:IsA('BasePart') and v.CanCollide and v.Name ~= floatName then
+							v.CanCollide = false
+						end
+					end
+				end
+				wait(0.21) -- basic optimization
+			end
+			Noclip = game:GetService('RunService').Stepped:Connect(Nocl)
+		end
+	
+		function clip()
+			if Noclip then Noclip:Disconnect() end
+			Clip = true
+		end
+	
+		noclip() -- to toggle noclip() and clip()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(VMLNZC_fake_script)()
+local function XXFHR_fake_script() -- antis_2.fly gui 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(XXFHR_fake_script)()
+local function BSNXSQF_fake_script() -- antis_2.loop tp back to map 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait()
+			local teleport_table = {
+				location1 = Vector3.new(-0.025310544297099113, -1.1263209581375122, 0.028784194961190224), -- your desired position
+				location2 = Vector3.new()  -- your desired position
+			}
+	
+			local tween_s = game:GetService('TweenService')
+			local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+	
+			local lp = game.Players.LocalPlayer
+	
+			function bypass_teleport(v)
+				if lp.Character and 
+					lp.Character:FindFirstChild('HumanoidRootPart') then
+					local cf = CFrame.new(v)
+					local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+					a:Play()
+					-- a.Completed:Wait()
+					-- print('Teleporting Done!')
+				end
+			end
+	
+			bypass_teleport(teleport_table.location1)
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(BSNXSQF_fake_script)()
+local function DRJYV_fake_script() -- antis_2.return arm 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait()
+			local args = {
+				[1] = CFrame.new(0.9999999403953552, 0.5630171298980713, 1.1920928955078125e-07) * CFrame.Angles(0.3890346884727478, 0.09347058832645416, -0.178352952003479)
+			}
+	
+			game:GetService("Players").LocalPlayer.Character.ArmAngleChange:FireServer(unpack(args))
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(DRJYV_fake_script)()
+local function HTZXUR_fake_script() -- antis_2.anti arm fling pt 2 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.9)
+			_G.toggle = true
+	
+			while _G.toggle do
+				wait(0.9)
+				game.Players.LocalPlayer.Character.RightLowerArm.Massless = true
+			end
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HTZXUR_fake_script)()
+local function QXJISFA_fake_script() -- antis_2.anti arm flng pt 3 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.9)
+			_G.toggle = true
+	
+			while _G.toggle do
+				wait(0.9)
+				game.Players.LocalPlayer.Character.RightHand.Massless = true
+			end
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(QXJISFA_fake_script)()
+local function SNTHJF_fake_script() -- antis_2.anti arm flin pt1 
+	local script = Instance.new('Script', antis_2)
+
+	function Click(mouse)
+		_G.toggle = true
+		
+		while _G.toggle do
+		wait(0.9)
+	_G.toggle = true
+	
+	while _G.toggle do
+	wait(0.9)
+		game.Players.LocalPlayer.Character.RightUpperArm.Massless = true
+	end
+	end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(SNTHJF_fake_script)()
+local function SLSI_fake_script() -- tpmap.tp to map 
+	local script = Instance.new('Script', tpmap)
+
+	function Click(mouse)
+	
+		
+			local teleport_table = {
+				location1 = Vector3.new(-21.656635284423828, 28.510021209716797, -135.94578552246094), -- your desired position
+				location2 = Vector3.new()  -- your desired position
+			}
+	
+			local tween_s = game:GetService('TweenService')
+			local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+	
+			local lp = game.Players.LocalPlayer
+	
+			function bypass_teleport(v)
+				if lp.Character and 
+					lp.Character:FindFirstChild('HumanoidRootPart') then
+					local cf = CFrame.new(v)
+					local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+					a:Play()
+					-- a.Completed:Wait()
+					-- print('Teleporting Done!')
+				end
+			end
+	
+			bypass_teleport(teleport_table.location1)
+		
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(SLSI_fake_script)()
+local function JCND_fake_script() -- antiv2.anti arm fling pt 2 
+	local script = Instance.new('Script', antiv2)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.9)
+			_G.toggle = true
+	
+			while _G.toggle do
+				wait(0.9)
+				game.Players.LocalPlayer.Character.RightLowerArm.Massless = true
+			end
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(JCND_fake_script)()
+local function RLYBPX_fake_script() -- antiv2.anti arm flng pt 3 
+	local script = Instance.new('Script', antiv2)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.9)
+			_G.toggle = true
+	
+			while _G.toggle do
+				wait(0.9)
+				game.Players.LocalPlayer.Character.RightHand.Massless = true
+			end
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(RLYBPX_fake_script)()
+local function WHPK_fake_script() -- antiv2.anti arm flin pt1 
+	local script = Instance.new('Script', antiv2)
+
+	function Click(mouse)
+		_G.toggle = true
+		
+		while _G.toggle do
+		wait(0.9)
+	_G.toggle = true
+	
+	while _G.toggle do
+	wait(0.9)
+		game.Players.LocalPlayer.Character.RightUpperArm.Massless = true
+	end
+	end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WHPK_fake_script)()
+local function JUJGUQ_fake_script() -- antiv2.anti dmg 
+	local script = Instance.new('Script', antiv2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Damage:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(JUJGUQ_fake_script)()
+local function UUJXXB_fake_script() -- antiv2.ant velocity dmg 
+	local script = Instance.new('Script', antiv2)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.VelocityDamage:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(UUJXXB_fake_script)()
+local function GCLSQD_fake_script() -- antiv2.return arm 
+	local script = Instance.new('Script', antiv2)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait()
+			local args = {
+				[1] = CFrame.new(0.9999999403953552, 0.5630171298980713, 1.1920928955078125e-07) * CFrame.Angles(0.3890346884727478, 0.09347058832645416, -0.178352952003479)
+			}
+	
+			game:GetService("Players").LocalPlayer.Character.ArmAngleChange:FireServer(unpack(args))
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GCLSQD_fake_script)()
+local function NTMAAP_fake_script() -- antiv2.set void height 
+	local script = Instance.new('Script', antiv2)
+
+	function Click(mouse)
+	
+		game.workspace.FallenPartsDestroyHeight = 0/0
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(NTMAAP_fake_script)()
+local function YUCM_fake_script() -- antiv2.massless bomb 
+	local script = Instance.new('Script', antiv2)
+
+	function Click(mouse)
+	
+		game:GetService("Players").LocalPlayer.Backpack.Bomb.Handle.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(YUCM_fake_script)()
+local function GAMN_fake_script() -- antiv2.massless anvil 
+	local script = Instance.new('Script', antiv2)
+
+	function Click(mouse)
+	
+		game:GetService("Players").LocalPlayer.Backpack.Anvil.Handle.Massless = true
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GAMN_fake_script)()
+local function WXAXBRS_fake_script() -- reseteverything.remove fire get up 
+	local script = Instance.new('Script', reseteverything)
+
+	function Click(mouse)
+	
+		_G.toggle = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WXAXBRS_fake_script)()
+local function XPXU_fake_script() -- reseteverything.reset gravity 
+	local script = Instance.new('Script', reseteverything)
+
+	function Click(mouse)
+	
+		game.workspace.Gravity = 192.2
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(XPXU_fake_script)()
+local function YDJBEEH_fake_script() -- reseteverything.reset void 
+	local script = Instance.new('Script', reseteverything)
+
+	function Click(mouse)
+	
+		game.workspace.FallenPartsDestroyHeight = -500
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(YDJBEEH_fake_script)()
+local function UHCHGMQ_fake_script() -- reseteverything.resewt jp 
+	local script = Instance.new('Script', reseteverything)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 50
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(UHCHGMQ_fake_script)()
+local function PGCRKFN_fake_script() -- reseteverything.turn off return arm 
+	local script = Instance.new('Script', reseteverything)
+
+	function Click(mouse)
+	
+		_G.ArmAngleChange = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(PGCRKFN_fake_script)()
+local function OKNQEV_fake_script() -- Frame.LocalScript 
+	local script = Instance.new('LocalScript', Frame)
+
+	local dragger = {}; 
+	local resizer = {};
+	
+	do
+		local mouse = game:GetService("Players").LocalPlayer:GetMouse();
+		local inputService = game:GetService('UserInputService');
+		local heartbeat = game:GetService("RunService").Heartbeat;
+		-- // credits to Ririchi / Inori for this cute drag function :)
+		function dragger.new(frame)
+			local s, event = pcall(function()
+				return frame.MouseEnter
+			end)
+	
+			if s then
+				frame.Active = true;
+	
+				event:connect(function()
+					local input = frame.InputBegan:connect(function(key)
+						if key.UserInputType == Enum.UserInputType.MouseButton1 then
+							local objectPosition = Vector2.new(mouse.X - frame.AbsolutePosition.X, mouse.Y - frame.AbsolutePosition.Y);
+							while heartbeat:wait() and inputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+								frame:TweenPosition(UDim2.new(0, mouse.X - objectPosition.X + (frame.Size.X.Offset * frame.AnchorPoint.X), 0, mouse.Y - objectPosition.Y + (frame.Size.Y.Offset * frame.AnchorPoint.Y)), 'Out', 'Quad', 0.1, true);
+							end
+						end
+					end)
+	
+					local leave;
+					leave = frame.MouseLeave:connect(function()
+						input:disconnect();
+						leave:disconnect();
+					end)
+				end)
+			end
+		end
+	
+		function resizer.new(p, s)
+			p:GetPropertyChangedSignal('AbsoluteSize'):connect(function()
+				s.Size = UDim2.new(s.Size.X.Scale, s.Size.X.Offset, s.Size.Y.Scale, p.AbsoluteSize.Y);
+			end)
+		end
+	end
+	script.Parent.Active = true
+	script.Parent.Draggable = true
+end
+coroutine.wrap(OKNQEV_fake_script)()
+local function HYIATA_fake_script() -- removevelociitydmg.anti dmg 
+	local script = Instance.new('Script', removevelociitydmg)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Damage:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HYIATA_fake_script)()
+local function SOTHERI_fake_script() -- removevelociitydmg.ant velocity dmg 
+	local script = Instance.new('Script', removevelociitydmg)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.VelocityDamage:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(SOTHERI_fake_script)()
+local function TABFPI_fake_script() -- antiragdoll.anti dmg 
+	local script = Instance.new('Script', antiragdoll)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Damage:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(TABFPI_fake_script)()
+local function YNWKDOH_fake_script() -- antiragdoll.antigetpicked 
+	local script = Instance.new('Script', antiragdoll)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.GetPicked:destroy()
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(YNWKDOH_fake_script)()
+local function QPBWUED_fake_script() -- antiragdoll.antirag 
+	local script = Instance.new('Script', antiragdoll)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Ragdoll:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(QPBWUED_fake_script)()
+local function GTLEISZ_fake_script() -- antiragdoll.anti dmg 
+	local script = Instance.new('Script', antiragdoll)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Damage:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GTLEISZ_fake_script)()
+local function GLES_fake_script() -- antiragdoll.fire et up 
+	local script = Instance.new('Script', antiragdoll)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+		while _G.toggle do
+			wait()
+			game:GetService("Players").LocalPlayer.Character.GetUpEvent:FireServer()
+	
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GLES_fake_script)()
+local function CGMWXJ_fake_script() -- antiragdoll.anti ragdoll event 
+	local script = Instance.new('Script', antiragdoll)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RagdollEvent:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(CGMWXJ_fake_script)()
+local function PSVF_fake_script() -- rejoin.Script 
+	local script = Instance.new('Script', rejoin)
+
+	function Click(mouse)
+	
+		local TeleportService = game:GetService("TeleportService")
+		local Players = game:GetService("Players")
+		local LocalPlayer = Players.LocalPlayer
+	
+		local Rejoin = coroutine.create(function()
+			local Success, ErrorMessage = pcall(function()
+				TeleportService:Teleport(game.PlaceId, LocalPlayer)
+			end)
+	
+			if ErrorMessage and not Success then
+				warn(ErrorMessage)
+			end
+		end)
+	
+		coroutine.resume(Rejoin)
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(PSVF_fake_script)()
+local function VKGOX_fake_script() -- antiswithoutautotp.LeftFoot 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftFoot.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(VKGOX_fake_script)()
+local function DVUBI_fake_script() -- antiswithoutautotp.LeftLowerLeg massless 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftLowerLeg.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(DVUBI_fake_script)()
+local function HVZNVAN_fake_script() -- antiswithoutautotp.LeftUpperArm massless 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftUpperArm.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HVZNVAN_fake_script)()
+local function LMNCCK_fake_script() -- antiswithoutautotp.LeftUpperLeg 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftUpperLeg.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(LMNCCK_fake_script)()
+local function OLGA_fake_script() -- antiswithoutautotp.RightFootMassless 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightFoot.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(OLGA_fake_script)()
+local function OTYXBL_fake_script() -- antiswithoutautotp.RightUpperLeg mass 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightUpperLeg.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(OTYXBL_fake_script)()
+local function SDXX_fake_script() -- antiswithoutautotp.Torso 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LowerTorso.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(SDXX_fake_script)()
+local function WNRWYV_fake_script() -- antiswithoutautotp.UpperTorso 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.UpperTorso.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WNRWYV_fake_script)()
+local function CURWJBN_fake_script() -- antiswithoutautotp.fire et up 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+		while _G.toggle do
+			wait()
+			game:GetService("Players").LocalPlayer.Character.GetUpEvent:FireServer()
+	
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(CURWJBN_fake_script)()
+local function FOSMUC_fake_script() -- antiswithoutautotp.ani arm angle update 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.ArmAngleUpdate:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FOSMUC_fake_script)()
+local function GKGW_fake_script() -- antiswithoutautotp.ant velocity dmg 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.VelocityDamage:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GKGW_fake_script)()
+local function ZAQC_fake_script() -- antiswithoutautotp.anti arm angle change 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.ArmAngleChange:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ZAQC_fake_script)()
+local function XJCV_fake_script() -- antiswithoutautotp.fly gui 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(XJCV_fake_script)()
+local function NGEP_fake_script() -- antiswithoutautotp.massless anvil 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game:GetService("Players").LocalPlayer.Backpack.Anvil.Handle.Massless = true
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(NGEP_fake_script)()
+local function GYBATT_fake_script() -- antiswithoutautotp.massless bomb 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game:GetService("Players").LocalPlayer.Backpack.Bomb.Handle.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GYBATT_fake_script)()
+local function CLHV_fake_script() -- antiswithoutautotp.anti armangle 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.ArmAngle:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(CLHV_fake_script)()
+local function BGZM_fake_script() -- antiswithoutautotp.anti death detect 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.DeathDetect:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(BGZM_fake_script)()
+local function ZDSCSN_fake_script() -- antiswithoutautotp.anti dmg 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Damage:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ZDSCSN_fake_script)()
+local function DWTB_fake_script() -- antiswithoutautotp.anti headwaist fling 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.HeadWaist:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(DWTB_fake_script)()
+local function ZZPDTES_fake_script() -- antiswithoutautotp.anti ragdoll detect 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RagdollDetect:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ZZPDTES_fake_script)()
+local function YMXN_fake_script() -- antiswithoutautotp.anti ragdoll event 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RagdollEvent:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(YMXN_fake_script)()
+local function ZXWG_fake_script() -- antiswithoutautotp.antigetpicked 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.GetPicked:destroy()
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ZXWG_fake_script)()
+local function QNQG_fake_script() -- antiswithoutautotp.antirag 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Ragdoll:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(QNQG_fake_script)()
+local function WREANDI_fake_script() -- antiswithoutautotp.head massless 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Head.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WREANDI_fake_script)()
+local function PGIA_fake_script() -- antiswithoutautotp.lefthand 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftHand.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(PGIA_fake_script)()
+local function LSEZUS_fake_script() -- antiswithoutautotp.leftlowerarm massless 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftLowerArm.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(LSEZUS_fake_script)()
+local function KMET_fake_script() -- antiswithoutautotp.right lower leg massless 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightLowerLeg.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(KMET_fake_script)()
+local function RVWSII_fake_script() -- antiswithoutautotp.set gravity 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.workspace.Gravity = 999999999999999999
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(RVWSII_fake_script)()
+local function BMFHRGC_fake_script() -- antiswithoutautotp.set jp 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 150
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(BMFHRGC_fake_script)()
+local function SMJPE_fake_script() -- antiswithoutautotp.set void height 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.workspace.FallenPartsDestroyHeight = 0/0
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(SMJPE_fake_script)()
+local function VYVKJB_fake_script() -- antiswithoutautotp.HumanoidRootPart massless 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.HumanoidRootPart.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(VYVKJB_fake_script)()
+local function MKON_fake_script() -- antiswithoutautotp.noclip 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		local Noclip = nil
+		local Clip = nil
+	
+		function noclip()
+			Clip = false
+			local function Nocl()
+				if Clip == false and game.Players.LocalPlayer.Character ~= nil then
+					for _,v in pairs(game.Players.LocalPlayer.Character:GetDescendants()) do
+						if v:IsA('BasePart') and v.CanCollide and v.Name ~= floatName then
+							v.CanCollide = false
+						end
+					end
+				end
+				wait(0.21) -- basic optimization
+			end
+			Noclip = game:GetService('RunService').Stepped:Connect(Nocl)
+		end
+	
+		function clip()
+			if Noclip then Noclip:Disconnect() end
+			Clip = true
+		end
+	
+		noclip() -- to toggle noclip() and clip()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(MKON_fake_script)()
+local function MFJP_fake_script() -- antiswithoutautotp.anti arm fling pt 2 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.9)
+			_G.toggle = true
+	
+			while _G.toggle do
+				wait(0.9)
+				game.Players.LocalPlayer.Character.RightLowerArm.Massless = true
+			end
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(MFJP_fake_script)()
+local function YUTXIB_fake_script() -- antiswithoutautotp.anti arm flng pt 3 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.9)
+			_G.toggle = true
+	
+			while _G.toggle do
+				wait(0.9)
+				game.Players.LocalPlayer.Character.RightHand.Massless = true
+			end
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(YUTXIB_fake_script)()
+local function HTHTTCS_fake_script() -- antiswithoutautotp.anti arm flin pt1 
+	local script = Instance.new('Script', antiswithoutautotp)
+
+	function Click(mouse)
+		_G.toggle = true
+		
+		while _G.toggle do
+		wait(0.9)
+	_G.toggle = true
+	
+	while _G.toggle do
+	wait(0.9)
+		game.Players.LocalPlayer.Character.RightUpperArm.Massless = true
+	end
+	end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HTHTTCS_fake_script)()
+local function JYZYFJ_fake_script() -- antiv2withrag.return arm 
+	local script = Instance.new('Script', antiv2withrag)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait()
+			local args = {
+				[1] = CFrame.new(0.9999999403953552, 0.5630171298980713, 1.1920928955078125e-07) * CFrame.Angles(0.3890346884727478, 0.09347058832645416, -0.178352952003479)
+			}
+	
+			game:GetService("Players").LocalPlayer.Character.ArmAngleChange:FireServer(unpack(args))
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(JYZYFJ_fake_script)()
+local function WMEU_fake_script() -- antiv2withrag.set void height 
+	local script = Instance.new('Script', antiv2withrag)
+
+	function Click(mouse)
+	
+		game.workspace.FallenPartsDestroyHeight = 0/0
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WMEU_fake_script)()
+local function FYJSL_fake_script() -- antiv2withrag.massless bomb 
+	local script = Instance.new('Script', antiv2withrag)
+
+	function Click(mouse)
+	
+		game:GetService("Players").LocalPlayer.Backpack.Bomb.Handle.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FYJSL_fake_script)()
+local function CELVI_fake_script() -- antiv2withrag.massless anvil 
+	local script = Instance.new('Script', antiv2withrag)
+
+	function Click(mouse)
+	
+		game:GetService("Players").LocalPlayer.Backpack.Anvil.Handle.Massless = true
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(CELVI_fake_script)()
+local function SKYHX_fake_script() -- antiv2withrag.anti arm fling pt 2 
+	local script = Instance.new('Script', antiv2withrag)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.9)
+			_G.toggle = true
+	
+			while _G.toggle do
+				wait(0.9)
+				game.Players.LocalPlayer.Character.RightLowerArm.Massless = true
+			end
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(SKYHX_fake_script)()
+local function JCSQ_fake_script() -- antiv2withrag.anti arm flng pt 3 
+	local script = Instance.new('Script', antiv2withrag)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.9)
+			_G.toggle = true
+	
+			while _G.toggle do
+				wait(0.9)
+				game.Players.LocalPlayer.Character.RightHand.Massless = true
+			end
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(JCSQ_fake_script)()
+local function BMTAFL_fake_script() -- antiv2withrag.anti arm flin pt1 
+	local script = Instance.new('Script', antiv2withrag)
+
+	function Click(mouse)
+		_G.toggle = true
+		
+		while _G.toggle do
+		wait(0.9)
+	_G.toggle = true
+	
+	while _G.toggle do
+	wait(0.9)
+		game.Players.LocalPlayer.Character.RightUpperArm.Massless = true
+	end
+	end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(BMTAFL_fake_script)()
+local function TMWLM_fake_script() -- antiswithouttpbacktomap.LeftFoot 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftFoot.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(TMWLM_fake_script)()
+local function IDFWQG_fake_script() -- antiswithouttpbacktomap.LeftLowerLeg massless 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftLowerLeg.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(IDFWQG_fake_script)()
+local function WECNK_fake_script() -- antiswithouttpbacktomap.LeftUpperArm massless 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftUpperArm.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WECNK_fake_script)()
+local function ZGLQW_fake_script() -- antiswithouttpbacktomap.LeftUpperLeg 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftUpperLeg.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ZGLQW_fake_script)()
+local function GLYLGPZ_fake_script() -- antiswithouttpbacktomap.RightFootMassless 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightFoot.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GLYLGPZ_fake_script)()
+local function ZWTNQU_fake_script() -- antiswithouttpbacktomap.RightUpperLeg mass 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightUpperLeg.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ZWTNQU_fake_script)()
+local function VOJQMV_fake_script() -- antiswithouttpbacktomap.Torso 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LowerTorso.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(VOJQMV_fake_script)()
+local function WUFM_fake_script() -- antiswithouttpbacktomap.UpperTorso 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.UpperTorso.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WUFM_fake_script)()
+local function HXHJ_fake_script() -- antiswithouttpbacktomap.fire et up 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+		while _G.toggle do
+			wait()
+			game:GetService("Players").LocalPlayer.Character.GetUpEvent:FireServer()
+	
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HXHJ_fake_script)()
+local function TCBRA_fake_script() -- antiswithouttpbacktomap.ani arm angle update 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.ArmAngleUpdate:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(TCBRA_fake_script)()
+local function HXFZNI_fake_script() -- antiswithouttpbacktomap.ant velocity dmg 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.VelocityDamage:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HXFZNI_fake_script)()
+local function GRKEOA_fake_script() -- antiswithouttpbacktomap.anti arm angle change 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.ArmAngleChange:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GRKEOA_fake_script)()
+local function PHKACF_fake_script() -- antiswithouttpbacktomap.inf jump 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		--[[
+		WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+	]]
+	local InfiniteJumpEnabled = true
+	game:GetService("UserInputService").JumpRequest:connect(function()
+		if InfiniteJumpEnabled then
+			game:GetService"Players".LocalPlayer.Character:FindFirstChildOfClass'Humanoid':ChangeState("Jumping")
+		end
+	end)
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(PHKACF_fake_script)()
+local function JZKNV_fake_script() -- antiswithouttpbacktomap.massless bomb 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game:GetService("Players").LocalPlayer.Backpack.Bomb.Handle.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(JZKNV_fake_script)()
+local function TRQU_fake_script() -- antiswithouttpbacktomap.return arm 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait()
+			local args = {
+				[1] = CFrame.new(0.9999999403953552, 0.5630171298980713, 1.1920928955078125e-07) * CFrame.Angles(0.3890346884727478, 0.09347058832645416, -0.178352952003479)
+			}
+	
+			game:GetService("Players").LocalPlayer.Character.ArmAngleChange:FireServer(unpack(args))
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(TRQU_fake_script)()
+local function TPEWD_fake_script() -- antiswithouttpbacktomap.anti armangle 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.ArmAngle:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(TPEWD_fake_script)()
+local function KZVYHA_fake_script() -- antiswithouttpbacktomap.anti death detect 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.DeathDetect:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(KZVYHA_fake_script)()
+local function GJOH_fake_script() -- antiswithouttpbacktomap.anti dmg 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Damage:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GJOH_fake_script)()
+local function EHJTTYC_fake_script() -- antiswithouttpbacktomap.anti headwaist fling 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.HeadWaist:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(EHJTTYC_fake_script)()
+local function VCOEJNZ_fake_script() -- antiswithouttpbacktomap.anti ragdoll detect 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RagdollDetect:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(VCOEJNZ_fake_script)()
+local function PTLN_fake_script() -- antiswithouttpbacktomap.anti ragdoll event 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RagdollEvent:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(PTLN_fake_script)()
+local function OSGQND_fake_script() -- antiswithouttpbacktomap.antigetpicked 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.GetPicked:destroy()
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(OSGQND_fake_script)()
+local function UOWR_fake_script() -- antiswithouttpbacktomap.antirag 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Ragdoll:destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(UOWR_fake_script)()
+local function JRVLPQH_fake_script() -- antiswithouttpbacktomap.head massless 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Head.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(JRVLPQH_fake_script)()
+local function EFQGRIC_fake_script() -- antiswithouttpbacktomap.lefthand 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftHand.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(EFQGRIC_fake_script)()
+local function SNRWNZG_fake_script() -- antiswithouttpbacktomap.leftlowerarm massless 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftLowerArm.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(SNRWNZG_fake_script)()
+local function UWBPQT_fake_script() -- antiswithouttpbacktomap.right lower leg massless 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightLowerLeg.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(UWBPQT_fake_script)()
+local function RXMAV_fake_script() -- antiswithouttpbacktomap.set gravity 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.workspace.Gravity = 999999999999999999
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(RXMAV_fake_script)()
+local function NIRZM_fake_script() -- antiswithouttpbacktomap.set jp 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = 150
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(NIRZM_fake_script)()
+local function QWAMVHA_fake_script() -- antiswithouttpbacktomap.set void height 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.workspace.FallenPartsDestroyHeight = 0/0
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(QWAMVHA_fake_script)()
+local function UCPPDN_fake_script() -- antiswithouttpbacktomap.HumanoidRootPart massless 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.HumanoidRootPart.Massless = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(UCPPDN_fake_script)()
+local function DYUTDV_fake_script() -- antiswithouttpbacktomap.anti fling velocity 1 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		-- // Constants \\ --
+		-- [ Services ] --
+		local Services = setmetatable({}, {__index = function(Self, Index)
+			local NewService = game.GetService(game, Index)
+			if NewService then
+				Self[Index] = NewService
+			end
+			return NewService
+		end})
+	
+		-- [ LocalPlayer ] --
+		local LocalPlayer = Services.Players.LocalPlayer
+	
+		-- // Functions \\ --
+		local function PlayerAdded(Player)
+			local Detected = false
+			local Character;
+			local PrimaryPart;
+	
+			local function CharacterAdded(NewCharacter)
+				Character = NewCharacter
+				repeat
+					wait()
+					PrimaryPart = NewCharacter:FindFirstChild("HumanoidRootPart")
+				until PrimaryPart
+				Detected = false
+			end
+	
+			CharacterAdded(Player.Character or Player.CharacterAdded:Wait())
+			Player.CharacterAdded:Connect(CharacterAdded)
+			Services.RunService.Heartbeat:Connect(function()
+				if (Character and Character:IsDescendantOf(workspace)) and (PrimaryPart and PrimaryPart:IsDescendantOf(Character)) then
+					if PrimaryPart.AssemblyAngularVelocity.Magnitude > 50 or PrimaryPart.AssemblyLinearVelocity.Magnitude > 100 then
+						if Detected == false then
+							game.StarterGui:SetCore("ChatMakeSystemMessage", {
+								Text = "Fling Exploit detected, Player: " .. tostring(Player);
+								Color = Color3.fromRGB(255, 200, 0);
+							})
+						end
+						Detected = true
+						for i,v in ipairs(Character:GetDescendants()) do
+							if v:IsA("BasePart") then
+								v.CanCollide = false
+								v.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+								v.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+								v.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0)
+							end
+						end
+						PrimaryPart.CanCollide = false
+						PrimaryPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+						PrimaryPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+						PrimaryPart.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0)
+					end
+				end
+			end)
+		end
+	
+		-- // Event Listeners \\ --
+		for i,v in ipairs(Services.Players:GetPlayers()) do
+			if v ~= LocalPlayer then
+				PlayerAdded(v)
+			end
+		end
+		Services.Players.PlayerAdded:Connect(PlayerAdded)
+	
+		local LastPosition = nil
+		Services.RunService.Heartbeat:Connect(function()
+			pcall(function()
+				local PrimaryPart = LocalPlayer.Character.PrimaryPart
+				if PrimaryPart.AssemblyLinearVelocity.Magnitude > 250 or PrimaryPart.AssemblyAngularVelocity.Magnitude > 250 then
+					PrimaryPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+					PrimaryPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+					PrimaryPart.CFrame = LastPosition
+	
+					game.StarterGui:SetCore("ChatMakeSystemMessage", {
+						Text = "You were flung. Neutralizing velocity.";
+						Color = Color3.fromRGB(255, 0, 0);
+					})
+				elseif PrimaryPart.AssemblyLinearVelocity.Magnitude < 50 or PrimaryPart.AssemblyAngularVelocity.Magnitude > 50 then
+					LastPosition = PrimaryPart.CFrame
+				end
+			end)
+		end)
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(DYUTDV_fake_script)()
+local function VMMESB_fake_script() -- antiswithouttpbacktomap.anti fling velocity 2 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet(('https://pastebin.com/raw/GxdesRQx'),true))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(VMMESB_fake_script)()
+local function SPMRSK_fake_script() -- antiswithouttpbacktomap.massless anvil 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		game:GetService("Players").LocalPlayer.Backpack.Anvil.Handle.Massless = true
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(SPMRSK_fake_script)()
+local function FPWOKZO_fake_script() -- antiswithouttpbacktomap.fly gui 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FPWOKZO_fake_script)()
+local function RPWJN_fake_script() -- antiswithouttpbacktomap.anti arm fling pt 2 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.9)
+			_G.toggle = true
+	
+			while _G.toggle do
+				wait(0.9)
+				game.Players.LocalPlayer.Character.RightLowerArm.Massless = true
+			end
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(RPWJN_fake_script)()
+local function WJLPMPP_fake_script() -- antiswithouttpbacktomap.anti arm flng pt 3 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.9)
+			_G.toggle = true
+	
+			while _G.toggle do
+				wait(0.9)
+				game.Players.LocalPlayer.Character.RightHand.Massless = true
+			end
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WJLPMPP_fake_script)()
+local function XDOTERO_fake_script() -- antiswithouttpbacktomap.anti arm flin pt1 
+	local script = Instance.new('Script', antiswithouttpbacktomap)
+
+	function Click(mouse)
+		_G.toggle = true
+		
+		while _G.toggle do
+		wait(0.9)
+	_G.toggle = true
+	
+	while _G.toggle do
+	wait(0.9)
+		game.Players.LocalPlayer.Character.RightUpperArm.Massless = true
+	end
+	end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(XDOTERO_fake_script)()
+local function LCHQH_fake_script() -- freezebody.anchor right hand 
+	local script = Instance.new('Script', freezebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightHand.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(LCHQH_fake_script)()
+local function NEMSZCG_fake_script() -- freezebody.right lower arm 
+	local script = Instance.new('Script', freezebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightLowerArm.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(NEMSZCG_fake_script)()
+local function DJOSX_fake_script() -- freezebody.right upper 
+	local script = Instance.new('Script', freezebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightUpperArm.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(DJOSX_fake_script)()
+local function MDSZZIF_fake_script() -- freezebody.root 
+	local script = Instance.new('Script', freezebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.HumanoidRootPart.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(MDSZZIF_fake_script)()
+local function MWJHAMV_fake_script() -- freezewholebody.right lower arm 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightLowerArm.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(MWJHAMV_fake_script)()
+local function HUTVFH_fake_script() -- freezewholebody.right upper 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightUpperArm.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HUTVFH_fake_script)()
+local function UNXK_fake_script() -- freezewholebody.root 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.HumanoidRootPart.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(UNXK_fake_script)()
+local function EINNI_fake_script() -- freezewholebody.anchor right hand 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightHand.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(EINNI_fake_script)()
+local function DYFZMH_fake_script() -- freezewholebody.left hand 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftHand.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(DYFZMH_fake_script)()
+local function POOEW_fake_script() -- freezewholebody.left upper arm 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftUpperArm.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(POOEW_fake_script)()
+local function IBYZL_fake_script() -- freezewholebody.left lower arm 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftLowerArm.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(IBYZL_fake_script)()
+local function YMMBCVF_fake_script() -- freezewholebody.lowertorso 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightHand.UpperTorso.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(YMMBCVF_fake_script)()
+local function QTXSCU_fake_script() -- freezewholebody.leftlowerleg 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftLowerLeg.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(QTXSCU_fake_script)()
+local function WTXOKU_fake_script() -- freezewholebody.leftupperleg 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftFoot.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WTXOKU_fake_script)()
+local function ADQAW_fake_script() -- freezewholebody.leftfoot 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightLowerLeg.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ADQAW_fake_script)()
+local function LWPYPCX_fake_script() -- freezewholebody.right upperleg 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightUpperLeg.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(LWPYPCX_fake_script)()
+local function XNLX_fake_script() -- freezewholebody.right foot 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.HumanoidRootPart.RightFoot = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(XNLX_fake_script)()
+local function GTIGKP_fake_script() -- freezewholebody.uppertorso 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightHand.LowerTorso.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GTIGKP_fake_script)()
+local function OQEYBYT_fake_script() -- freezewholebody.head 
+	local script = Instance.new('Script', freezewholebody)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Head.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(OQEYBYT_fake_script)()
+local function RCJQI_fake_script() -- unfreeze.head 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.Head.Anchored = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(RCJQI_fake_script)()
+local function FXUGG_fake_script() -- unfreeze.left hand 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftHand.Anchored = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FXUGG_fake_script)()
+local function KSLVU_fake_script() -- unfreeze.left lower arm 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftLowerArm.Anchored = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(KSLVU_fake_script)()
+local function ETIQK_fake_script() -- unfreeze.left upper arm 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftUpperArm.Anchored = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ETIQK_fake_script)()
+local function ZAHEP_fake_script() -- unfreeze.leftfoot 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightLowerLeg.Anchored = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ZAHEP_fake_script)()
+local function GXFMX_fake_script() -- unfreeze.leftlowerleg 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftLowerLeg.Anchored = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GXFMX_fake_script)()
+local function JRMUXP_fake_script() -- unfreeze.leftupperleg 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.LeftFoot.Anchored = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(JRMUXP_fake_script)()
+local function JCGOJ_fake_script() -- unfreeze.lowertorso 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightHand.UpperTorso = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(JCGOJ_fake_script)()
+local function KUMCCA_fake_script() -- unfreeze.right foot 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.HumanoidRootPart.RightFoot = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(KUMCCA_fake_script)()
+local function GUTWUGQ_fake_script() -- unfreeze.right lower arm 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightLowerArm.Anchored = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GUTWUGQ_fake_script)()
+local function QZVJV_fake_script() -- unfreeze.right upper 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightUpperArm.Anchored = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(QZVJV_fake_script)()
+local function WKDUQCM_fake_script() -- unfreeze.right upperleg 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightUpperLeg.Anchored = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(WKDUQCM_fake_script)()
+local function SGFJD_fake_script() -- unfreeze.root 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.HumanoidRootPart.Anchored = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(SGFJD_fake_script)()
+local function QIMNIH_fake_script() -- unfreeze.uppertorso 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightHand.LowerTorso = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(QIMNIH_fake_script)()
+local function MSIHNPM_fake_script() -- unfreeze.anchor right hand 
+	local script = Instance.new('Script', unfreeze)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.RightHand.Anchored = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(MSIHNPM_fake_script)()
+local function PCUE_fake_script() -- anchorroot.root 
+	local script = Instance.new('Script', anchorroot)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.Character.HumanoidRootPart.Anchored = true
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(PCUE_fake_script)()
+local function AORFBV_fake_script() -- autofreezdearm.anti arm fling pt 2 
+	local script = Instance.new('Script', autofreezdearm)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.9)
+			_G.toggle = true
+	
+			while _G.toggle do
+				wait(0.9)
+				game.Players.LocalPlayer.Character.RightLowerArm.Anchored = true
+			end
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(AORFBV_fake_script)()
+local function NSAHI_fake_script() -- autofreezdearm.anti arm flng pt 3 
+	local script = Instance.new('Script', autofreezdearm)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait(0.9)
+			_G.toggle = true
+	
+			while _G.toggle do
+				wait(0.9)
+				game.Players.LocalPlayer.Character.RightHand.Anchored = true
+			end
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(NSAHI_fake_script)()
+local function JOGGXV_fake_script() -- autofreezdearm.anti arm flin pt1 
+	local script = Instance.new('Script', autofreezdearm)
+
+	function Click(mouse)
+		_G.toggle = true
+		
+		while _G.toggle do
+		wait(0.9)
+	_G.toggle = true
+	
+	while _G.toggle do
+	wait(0.9)
+		game.Players.LocalPlayer.Character.RightUpperArm.Anchored = true
+	end
+	end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(JOGGXV_fake_script)()
+local function DOKOZBA_fake_script() -- loopanchorroot.anti arm flin pt1 
+	local script = Instance.new('Script', loopanchorroot)
+
+	function Click(mouse)
+		_G.toggle = true
+		
+		while _G.toggle do
+		wait(0.9)
+	_G.toggle = true
+	
+	while _G.toggle do
+	wait(0.9)
+		game.Players.LocalPlayer.Character.HumanoidRootPart.Anchored = true
+	end
+	end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(DOKOZBA_fake_script)()
