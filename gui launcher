@@ -9,6 +9,9 @@ local bps = Instance.new("TextButton")
 local sdn = Instance.new("TextButton")
 local sas = Instance.new("TextButton")
 local destroyui = Instance.new("TextButton")
+local explorer = Instance.new("TextButton")
+local positionfinder = Instance.new("TextButton")
+local remotespy = Instance.new("TextButton")
 
 --Properties:
 
@@ -70,9 +73,45 @@ destroyui.Text = "destroy gui"
 destroyui.TextColor3 = Color3.fromRGB(255, 0, 0)
 destroyui.TextSize = 27.000
 
+explorer.Name = "explorer"
+explorer.Parent = Frame
+explorer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+explorer.BorderColor3 = Color3.fromRGB(0, 0, 0)
+explorer.BorderSizePixel = 0
+explorer.Position = UDim2.new(0, 0, 0.292576432, 0)
+explorer.Size = UDim2.new(0, 138, 0, 50)
+explorer.Font = Enum.Font.SourceSansBold
+explorer.Text = "dex explorer"
+explorer.TextColor3 = Color3.fromRGB(255, 0, 0)
+explorer.TextSize = 28.000
+
+positionfinder.Name = "position finder"
+positionfinder.Parent = Frame
+positionfinder.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+positionfinder.BorderColor3 = Color3.fromRGB(0, 0, 0)
+positionfinder.BorderSizePixel = 0
+positionfinder.Position = UDim2.new(0.338747114, 0, 0.292576432, 0)
+positionfinder.Size = UDim2.new(0, 138, 0, 50)
+positionfinder.Font = Enum.Font.SourceSansBold
+positionfinder.Text = "position finder"
+positionfinder.TextColor3 = Color3.fromRGB(255, 0, 0)
+positionfinder.TextSize = 24.000
+
+remotespy.Name = "remote spy"
+remotespy.Parent = Frame
+remotespy.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+remotespy.BorderColor3 = Color3.fromRGB(0, 0, 0)
+remotespy.BorderSizePixel = 0
+remotespy.Position = UDim2.new(0.677494228, 0, 0.292576432, 0)
+remotespy.Size = UDim2.new(0, 138, 0, 50)
+remotespy.Font = Enum.Font.SourceSansBold
+remotespy.Text = "remote spy"
+remotespy.TextColor3 = Color3.fromRGB(255, 0, 0)
+remotespy.TextSize = 32.000
+
 -- Scripts:
 
-local function VSGJ_fake_script() -- bps.Script 
+local function KNVEJHW_fake_script() -- bps.Script 
 	local script = Instance.new('Script', bps)
 
 	function Click(mouse)
@@ -84,8 +123,8 @@ local function VSGJ_fake_script() -- bps.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(VSGJ_fake_script)()
-local function DXCDHQX_fake_script() -- sdn.Script 
+coroutine.wrap(KNVEJHW_fake_script)()
+local function EGJLR_fake_script() -- sdn.Script 
 	local script = Instance.new('Script', sdn)
 
 	function Click(mouse)
@@ -97,8 +136,8 @@ local function DXCDHQX_fake_script() -- sdn.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(DXCDHQX_fake_script)()
-local function ZEOTFW_fake_script() -- sas.Script 
+coroutine.wrap(EGJLR_fake_script)()
+local function BPBCCFR_fake_script() -- sas.Script 
 	local script = Instance.new('Script', sas)
 
 	function Click(mouse)
@@ -188,8 +227,8 @@ local function ZEOTFW_fake_script() -- sas.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(ZEOTFW_fake_script)()
-local function MUQKBQ_fake_script() -- destroyui.Script 
+coroutine.wrap(BPBCCFR_fake_script)()
+local function XVQG_fake_script() -- destroyui.Script 
 	local script = Instance.new('Script', destroyui)
 
 	function Click(mouse)
@@ -201,4 +240,43 @@ local function MUQKBQ_fake_script() -- destroyui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(MUQKBQ_fake_script)()
+coroutine.wrap(XVQG_fake_script)()
+local function EURG_fake_script() -- explorer.expl 
+	local script = Instance.new('Script', explorer)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/DEX-Explorer/main/Mobile.lua"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(EURG_fake_script)()
+local function AHWEP_fake_script() -- positionfinder.pos 
+	local script = Instance.new('Script', positionfinder)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://pastefy.app/fE00IA44/raw"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(AHWEP_fake_script)()
+local function CWCHCN_fake_script() -- remotespy.rem 
+	local script = Instance.new('Script', remotespy)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/RS/main/SimpleSpyMobile"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(CWCHCN_fake_script)()
