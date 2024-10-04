@@ -35,7 +35,7 @@ hyperloop.TextSize = 20.000
 
 -- Scripts:
 
-local function QRODQM_fake_script() -- hyperloop.RightUpperArm 
+local function JUZW_fake_script() -- hyperloop.RightUpperArm 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -129,7 +129,7 @@ local function QRODQM_fake_script() -- hyperloop.RightUpperArm
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.RightUpperArm, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -169,7 +169,7 @@ local function QRODQM_fake_script() -- hyperloop.RightUpperArm
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.RightUpperArm, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -284,8 +284,8 @@ local function QRODQM_fake_script() -- hyperloop.RightUpperArm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QRODQM_fake_script)()
-local function FNDWL_fake_script() -- hyperloop.RightLowerArm 
+coroutine.wrap(JUZW_fake_script)()
+local function NFEW_fake_script() -- hyperloop.RightLowerArm 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -379,7 +379,7 @@ local function FNDWL_fake_script() -- hyperloop.RightLowerArm
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.RightLowerArm, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -419,7 +419,7 @@ local function FNDWL_fake_script() -- hyperloop.RightLowerArm
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.RightUpperArm, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -534,8 +534,8 @@ local function FNDWL_fake_script() -- hyperloop.RightLowerArm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(FNDWL_fake_script)()
-local function LOND_fake_script() -- hyperloop.RightHand 
+coroutine.wrap(NFEW_fake_script)()
+local function VNXNXS_fake_script() -- hyperloop.RightHand 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -629,7 +629,7 @@ local function LOND_fake_script() -- hyperloop.RightHand
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.RightHand, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -669,7 +669,7 @@ local function LOND_fake_script() -- hyperloop.RightHand
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.RightHand, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -784,8 +784,8 @@ local function LOND_fake_script() -- hyperloop.RightHand
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(LOND_fake_script)()
-local function JZLT_fake_script() -- hyperloop.LeftUpperArm 
+coroutine.wrap(VNXNXS_fake_script)()
+local function GHMJ_fake_script() -- hyperloop.LeftUpperArm 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -879,7 +879,7 @@ local function JZLT_fake_script() -- hyperloop.LeftUpperArm
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.LeftUpperArm, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.02) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -919,7 +919,7 @@ local function JZLT_fake_script() -- hyperloop.LeftUpperArm
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.LeftUpperArm, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -1034,8 +1034,8 @@ local function JZLT_fake_script() -- hyperloop.LeftUpperArm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(JZLT_fake_script)()
-local function UXFIHE_fake_script() -- hyperloop.LeftLowerArm 
+coroutine.wrap(GHMJ_fake_script)()
+local function ZTQWF_fake_script() -- hyperloop.LeftLowerArm 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -1129,7 +1129,7 @@ local function UXFIHE_fake_script() -- hyperloop.LeftLowerArm
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.LeftLowerArm, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -1169,7 +1169,7 @@ local function UXFIHE_fake_script() -- hyperloop.LeftLowerArm
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.LeftLowerArm, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -1284,8 +1284,8 @@ local function UXFIHE_fake_script() -- hyperloop.LeftLowerArm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(UXFIHE_fake_script)()
-local function TYNY_fake_script() -- hyperloop.LeftHand 
+coroutine.wrap(ZTQWF_fake_script)()
+local function BTZIGTG_fake_script() -- hyperloop.LeftHand 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -1379,7 +1379,7 @@ local function TYNY_fake_script() -- hyperloop.LeftHand
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.LeftHand, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -1419,7 +1419,7 @@ local function TYNY_fake_script() -- hyperloop.LeftHand
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.LeftHand, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -1534,8 +1534,8 @@ local function TYNY_fake_script() -- hyperloop.LeftHand
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(TYNY_fake_script)()
-local function YMYPC_fake_script() -- hyperloop.RightUpperLeg 
+coroutine.wrap(BTZIGTG_fake_script)()
+local function QTRCQ_fake_script() -- hyperloop.RightUpperLeg 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -1629,7 +1629,7 @@ local function YMYPC_fake_script() -- hyperloop.RightUpperLeg
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.RightUpperLeg, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -1669,7 +1669,7 @@ local function YMYPC_fake_script() -- hyperloop.RightUpperLeg
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.RightUpperLeg, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -1784,258 +1784,8 @@ local function YMYPC_fake_script() -- hyperloop.RightUpperLeg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YMYPC_fake_script)()
-local function NUZKHQ_fake_script() -- hyperloop.for arm angle tests 
-	local script = Instance.new('Script', hyperloop)
-
-	function Click(mouse)
-	
-		local prefix = '+'
-	
-		repeat wait() until game:IsLoaded()
-		local plrs = game:GetService("Players")
-		local plr = plrs.LocalPlayer
-		local loopAll = false
-		local loopSinglePlayer = nil
-		local whitelist = {"bamned_alt3"}  -- Username to avoid from getting looped
-		local loopKill = {}
-	
-		local UserInputService = game:GetService("UserInputService")
-	
-		local function shouldAvoid(player)
-			return table.find(whitelist, player.Name) ~= nil
-		end
-	
-		local function isWhitelisted(player)
-			return table.find(whitelist, player.Name) ~= nil
-		end
-	
-		local function handleRightArm(v)
-			local rightArm = v.Character:FindFirstChild("Right Arm")
-			if rightArm then
-				rightArm:Destroy()
-				local arm = Instance.new("Part")
-				arm.Size = Vector3.new(1, 3, 1) -- Adjust size if needed
-				arm.Position = v.Character.Torso.Position + Vector3.new(2, 0, 0) -- Adjust position if needed
-				arm.Anchored = false
-				arm.CanCollide = false
-				arm.Color = Color3.new(1, 0, 0) -- Adjust color if needed
-				arm.Parent = game.Workspace -- Make sure the arm is visible
-			end
-		end
-	
-		-- Function to apply changes to a player character
-		local function ApplyChangesToPlayer(player)
-			-- Check if the player's character exists
-			local character = player.Character
-			if character and not shouldAvoid(player) then
-				-- Apply the desired changes to the ArmAngleChange remote event
-				local armAngleChange = character:FindFirstChild("ArmAngleChange")
-				if armAngleChange then
-					armAngleChange:FireServer(CFrame.new(-9e37, 0, 9e37))
-				end
-	
-				-- Apply the desired changes to the HeadWaist
-				local HeadWaist = character:FindFirstChild("HeadWaist")
-				if HeadWaist then
-					HeadWaist:FireServer(CFrame.new(-9e37, 0, 9e37))
-				end
-	
-				-- Apply the desired changes to the HeadAngleChange remote event
-				local headAngleChange = character:FindFirstChild("HeadAngleChange")
-				if headAngleChange then
-					headAngleChange:FireServer(CFrame.new(-9e37, 0, 9e37))
-				end
-	
-				-- Instantly kill the player
-				local humanoid = character:FindFirstChildOfClass("Humanoid")
-				if humanoid then
-					humanoid.Health = 0
-				end
-			end
-		end
-	
-		local function loopActions()
-			while loopAll do
-				for _, v in ipairs(plrs:GetPlayers()) do
-					if v ~= plr and not shouldAvoid(v) then
-						pcall(function()
-							-- Launch player randomly
-							local respawnPosition
-							local rand = math.random(1, 4)
-							if rand == 1 then
-								-- Void
-								respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-							elseif rand == 2 then
-								-- Sideways
-								respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
-							elseif rand == 3 then
-								-- Sky
-								respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
-							else
-								-- Space
-								respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-							end
-							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
-							wait(0.0) -- Adjust the wait time if necessary
-							plr.Character.Picking:FireServer(v.Character.LeftFoot, Vector3.new(9e37, -9e37, 9e37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
-							plr.Character.PuttingDown:FireServer()
-	
-							-- Apply arm angle change
-							local armAngleChange = v.Character:FindFirstChild("ArmAngleChange")
-							if armAngleChange then
-								armAngleChange:FireServer(CFrame.new(-9e37, 0, 9e37))
-							end
-						end)
-					end
-				end
-	
-				wait(0.085)
-			end
-		end
-	
-		local function loopSinglePlayerActions()
-			while loopSinglePlayer do
-				local player = loopSinglePlayer
-				if player and player.Character and not shouldAvoid(player) then
-					pcall(function()
-						-- Launch player randomly
-						local respawnPosition
-						local rand = math.random(1, 4)
-						if rand == 1 then
-							-- Void
-							respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-						elseif rand == 2 then
-							-- Sideways
-							respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
-						elseif rand == 3 then
-							-- Sky
-							respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
-						else
-							-- Space
-							respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-						end
-						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
-						wait(0.0) -- Adjust the wait time if necessary
-						plr.Character.Picking:FireServer(player.Character.LeftFoot, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
-						plr.Character.PuttingDown:FireServer()
-	
-						-- Apply arm angle change
-						local armAngleChange = player.Character:FindFirstChild("ArmAngleChange")
-						if armAngleChange then
-							armAngleChange:FireServer(CFrame.new(-9e37, 9e37, 9e37))
-						end
-	
-						ApplyChangesToPlayer(player)
-					end)
-				end
-	
-				wait(0.085)
-			end
-		end
-	
-		local function startLoopAll()
-			loopAll = true
-			spawn(loopActions)
-		end
-	
-		local function stopLoopAll()
-			loopAll = false
-		end
-	
-		local function startLoopSinglePlayer(player)
-			loopSinglePlayer = player
-			spawn(loopSinglePlayerActions)
-		end
-	
-		local function stopLoopSinglePlayer()
-			loopSinglePlayer = nil
-		end
-	
-		UserInputService.InputBegan:Connect(function(input, gameProcessed)
-			if not gameProcessed and input.KeyCode == Enum.KeyCode.G then
-				if loopAll then
-					stopLoopAll()
-					stopLoopSinglePlayer()
-				else
-					startLoopAll()
-				end
-			end
-		end)
-	
-		local function findPlayer(Target)
-			if game:GetService("Players"):FindFirstChild(Target) then
-				return game:GetService("Players"):FindFirstChild(Target)
-			else
-				if Target ~= nil and Target ~= "" and Target ~= " " and Target then
-					local name = Target
-					local found = false
-					for _, v in pairs(game:GetService("Players"):GetPlayers()) do
-						if not found and (v.Name:lower():sub(1, #name) == name:lower() or v.DisplayName:lower():sub(1, #name) == name:lower()) then
-							name = v
-							found = true
-						end
-					end
-					if name ~= nil and name ~= Target then
-						return name
-					end
-				end
-			end
-		end
-	
-		plr.Chatted:Connect(function(msg)
-			local args = msg:lower():split(" ")
-			local command = args[1]
-			local target = args[2]
-	
-			if command == prefix .. "wl" and target then
-				-- Add player to whitelist
-				local playerToAdd = findPlayer(target)
-				if playerToAdd and not isWhitelisted(playerToAdd) then
-					table.insert(whitelist, playerToAdd.Name)
-				end
-			elseif command == prefix .. "lol" then
-				startLoopAll()
-			elseif command == prefix .. "rc" then
-				stopLoopAll()
-				stopLoopSinglePlayer()
-			elseif command == prefix .. "kill" and target then
-				-- Add player to loopKill and activate loopAll
-				local playerToKill = findPlayer(target)
-				if playerToKill then
-					startLoopSinglePlayer(playerToKill)
-				end
-			end
-		end)
-	
-		plr.CharacterAdded:Connect(function(character)
-			-- Fling player randomly upon respawn
-			local respawnPosition
-			local rand = math.random(1, 4)
-			if rand == 1 then
-				-- Void
-				respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-			elseif rand == 2 then
-				-- Sideways
-				respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
-			elseif rand == 3 then
-				-- Sky
-				respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
-			else
-				-- Space
-				respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-			end
-			character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
-		end)
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(NUZKHQ_fake_script)()
-local function HSMWTX_fake_script() -- hyperloop.RightFoot 
+coroutine.wrap(QTRCQ_fake_script)()
+local function EQTB_fake_script() -- hyperloop.RightFoot 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -2129,7 +1879,7 @@ local function HSMWTX_fake_script() -- hyperloop.RightFoot
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.RightUpperArm, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -2169,7 +1919,7 @@ local function HSMWTX_fake_script() -- hyperloop.RightFoot
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.Left, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -2284,8 +2034,8 @@ local function HSMWTX_fake_script() -- hyperloop.RightFoot
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(HSMWTX_fake_script)()
-local function WNMKTX_fake_script() -- hyperloop.LeftUpperLeg 
+coroutine.wrap(EQTB_fake_script)()
+local function CUCRYM_fake_script() -- hyperloop.LeftUpperLeg 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -2379,7 +2129,7 @@ local function WNMKTX_fake_script() -- hyperloop.LeftUpperLeg
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.LeftUpperLeg, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -2419,7 +2169,7 @@ local function WNMKTX_fake_script() -- hyperloop.LeftUpperLeg
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.LeftUpperLeg, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.02) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -2534,8 +2284,8 @@ local function WNMKTX_fake_script() -- hyperloop.LeftUpperLeg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(WNMKTX_fake_script)()
-local function GTYOGWH_fake_script() -- hyperloop.RightLowerLeg 
+coroutine.wrap(CUCRYM_fake_script)()
+local function FZXYTP_fake_script() -- hyperloop.RightLowerLeg 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -2629,7 +2379,7 @@ local function GTYOGWH_fake_script() -- hyperloop.RightLowerLeg
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.RightFoot, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -2669,7 +2419,7 @@ local function GTYOGWH_fake_script() -- hyperloop.RightLowerLeg
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.RightFoot, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -2784,8 +2534,8 @@ local function GTYOGWH_fake_script() -- hyperloop.RightLowerLeg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(GTYOGWH_fake_script)()
-local function GIOI_fake_script() -- hyperloop.LeftLowerLeg 
+coroutine.wrap(FZXYTP_fake_script)()
+local function HAXP_fake_script() -- hyperloop.LeftLowerLeg 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -2879,7 +2629,7 @@ local function GIOI_fake_script() -- hyperloop.LeftLowerLeg
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.LeftLowerLeg, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -2919,7 +2669,7 @@ local function GIOI_fake_script() -- hyperloop.LeftLowerLeg
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.LeftLowerLeg, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -3034,8 +2784,8 @@ local function GIOI_fake_script() -- hyperloop.LeftLowerLeg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(GIOI_fake_script)()
-local function MAEX_fake_script() -- hyperloop.LeftFoot 
+coroutine.wrap(HAXP_fake_script)()
+local function THTZELU_fake_script() -- hyperloop.LeftFoot 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -3129,7 +2879,7 @@ local function MAEX_fake_script() -- hyperloop.LeftFoot
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.LeftFoot, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -3169,7 +2919,7 @@ local function MAEX_fake_script() -- hyperloop.LeftFoot
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.LeftFoot, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -3284,8 +3034,8 @@ local function MAEX_fake_script() -- hyperloop.LeftFoot
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(MAEX_fake_script)()
-local function XXVDOO_fake_script() -- hyperloop.LowerTorso 
+coroutine.wrap(THTZELU_fake_script)()
+local function MAXDAK_fake_script() -- hyperloop.LowerTorso 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -3379,7 +3129,7 @@ local function XXVDOO_fake_script() -- hyperloop.LowerTorso
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.LowerTorso, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -3419,7 +3169,7 @@ local function XXVDOO_fake_script() -- hyperloop.LowerTorso
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.LowerTorso, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -3534,8 +3284,8 @@ local function XXVDOO_fake_script() -- hyperloop.LowerTorso
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(XXVDOO_fake_script)()
-local function SLHMR_fake_script() -- hyperloop.UpperTorso 
+coroutine.wrap(MAXDAK_fake_script)()
+local function MOQS_fake_script() -- hyperloop.UpperTorso 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -3629,7 +3379,7 @@ local function SLHMR_fake_script() -- hyperloop.UpperTorso
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.UpperTorso, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -3669,7 +3419,7 @@ local function SLHMR_fake_script() -- hyperloop.UpperTorso
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.RightUpperArm, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -3784,8 +3534,8 @@ local function SLHMR_fake_script() -- hyperloop.UpperTorso
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(SLHMR_fake_script)()
-local function CTKLZCD_fake_script() -- hyperloop.HumanoidRootPart 
+coroutine.wrap(MOQS_fake_script)()
+local function ZRSZ_fake_script() -- hyperloop.HumanoidRootPart 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -3879,7 +3629,7 @@ local function CTKLZCD_fake_script() -- hyperloop.HumanoidRootPart
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.HumanoidRootPart, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -3919,7 +3669,7 @@ local function CTKLZCD_fake_script() -- hyperloop.HumanoidRootPart
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.HumanoidRootPart, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -4034,258 +3784,8 @@ local function CTKLZCD_fake_script() -- hyperloop.HumanoidRootPart
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(CTKLZCD_fake_script)()
-local function TYAXB_fake_script() -- hyperloop.for arm angle tests 
-	local script = Instance.new('Script', hyperloop)
-
-	function Click(mouse)
-	
-		local prefix = '+'
-	
-		repeat wait() until game:IsLoaded()
-		local plrs = game:GetService("Players")
-		local plr = plrs.LocalPlayer
-		local loopAll = false
-		local loopSinglePlayer = nil
-		local whitelist = {"bamned_alt3"}  -- Username to avoid from getting looped
-		local loopKill = {}
-	
-		local UserInputService = game:GetService("UserInputService")
-	
-		local function shouldAvoid(player)
-			return table.find(whitelist, player.Name) ~= nil
-		end
-	
-		local function isWhitelisted(player)
-			return table.find(whitelist, player.Name) ~= nil
-		end
-	
-		local function handleRightArm(v)
-			local rightArm = v.Character:FindFirstChild("Right Arm")
-			if rightArm then
-				rightArm:Destroy()
-				local arm = Instance.new("Part")
-				arm.Size = Vector3.new(1, 3, 1) -- Adjust size if needed
-				arm.Position = v.Character.Torso.Position + Vector3.new(2, 0, 0) -- Adjust position if needed
-				arm.Anchored = false
-				arm.CanCollide = false
-				arm.Color = Color3.new(1, 0, 0) -- Adjust color if needed
-				arm.Parent = game.Workspace -- Make sure the arm is visible
-			end
-		end
-	
-		-- Function to apply changes to a player character
-		local function ApplyChangesToPlayer(player)
-			-- Check if the player's character exists
-			local character = player.Character
-			if character and not shouldAvoid(player) then
-				-- Apply the desired changes to the ArmAngleChange remote event
-				local armAngleChange = character:FindFirstChild("ArmAngleChange")
-				if armAngleChange then
-					armAngleChange:FireServer(CFrame.new(-9e37, 0, -9e37))
-				end
-	
-				-- Apply the desired changes to the HeadWaist
-				local HeadWaist = character:FindFirstChild("HeadWaist")
-				if HeadWaist then
-					HeadWaist:FireServer(CFrame.new(-9e37, 0, -9e37))
-				end
-	
-				-- Apply the desired changes to the HeadAngleChange remote event
-				local headAngleChange = character:FindFirstChild("HeadAngleChange")
-				if headAngleChange then
-					headAngleChange:FireServer(CFrame.new(-9e37, 0, -9e37))
-				end
-	
-				-- Instantly kill the player
-				local humanoid = character:FindFirstChildOfClass("Humanoid")
-				if humanoid then
-					humanoid.Health = 0
-				end
-			end
-		end
-	
-		local function loopActions()
-			while loopAll do
-				for _, v in ipairs(plrs:GetPlayers()) do
-					if v ~= plr and not shouldAvoid(v) then
-						pcall(function()
-							-- Launch player randomly
-							local respawnPosition
-							local rand = math.random(1, 4)
-							if rand == 1 then
-								-- Void
-								respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-							elseif rand == 2 then
-								-- Sideways
-								respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
-							elseif rand == 3 then
-								-- Sky
-								respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
-							else
-								-- Space
-								respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-							end
-							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
-							wait(0.0) -- Adjust the wait time if necessary
-							plr.Character.Picking:FireServer(v.Character.LeftFoot, Vector3.new(9e37, -9e37, 9e37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
-							plr.Character.PuttingDown:FireServer()
-	
-							-- Apply arm angle change
-							local armAngleChange = v.Character:FindFirstChild("ArmAngleChange")
-							if armAngleChange then
-								armAngleChange:FireServer(CFrame.new(-9e37, 9e37, 9e37))
-							end
-						end)
-					end
-				end
-	
-				wait(0.09)
-			end
-		end
-	
-		local function loopSinglePlayerActions()
-			while loopSinglePlayer do
-				local player = loopSinglePlayer
-				if player and player.Character and not shouldAvoid(player) then
-					pcall(function()
-						-- Launch player randomly
-						local respawnPosition
-						local rand = math.random(1, 4)
-						if rand == 1 then
-							-- Void
-							respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-						elseif rand == 2 then
-							-- Sideways
-							respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
-						elseif rand == 3 then
-							-- Sky
-							respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
-						else
-							-- Space
-							respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-						end
-						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
-						wait(0.0) -- Adjust the wait time if necessary
-						plr.Character.Picking:FireServer(player.Character.LeftFoot, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
-						plr.Character.PuttingDown:FireServer()
-	
-						-- Apply arm angle change
-						local armAngleChange = player.Character:FindFirstChild("ArmAngleChange")
-						if armAngleChange then
-							armAngleChange:FireServer(CFrame.new(-9e37, 0, -9e37))
-						end
-	
-						ApplyChangesToPlayer(player)
-					end)
-				end
-	
-				wait(0.09)
-			end
-		end
-	
-		local function startLoopAll()
-			loopAll = true
-			spawn(loopActions)
-		end
-	
-		local function stopLoopAll()
-			loopAll = false
-		end
-	
-		local function startLoopSinglePlayer(player)
-			loopSinglePlayer = player
-			spawn(loopSinglePlayerActions)
-		end
-	
-		local function stopLoopSinglePlayer()
-			loopSinglePlayer = nil
-		end
-	
-		UserInputService.InputBegan:Connect(function(input, gameProcessed)
-			if not gameProcessed and input.KeyCode == Enum.KeyCode.G then
-				if loopAll then
-					stopLoopAll()
-					stopLoopSinglePlayer()
-				else
-					startLoopAll()
-				end
-			end
-		end)
-	
-		local function findPlayer(Target)
-			if game:GetService("Players"):FindFirstChild(Target) then
-				return game:GetService("Players"):FindFirstChild(Target)
-			else
-				if Target ~= nil and Target ~= "" and Target ~= " " and Target then
-					local name = Target
-					local found = false
-					for _, v in pairs(game:GetService("Players"):GetPlayers()) do
-						if not found and (v.Name:lower():sub(1, #name) == name:lower() or v.DisplayName:lower():sub(1, #name) == name:lower()) then
-							name = v
-							found = true
-						end
-					end
-					if name ~= nil and name ~= Target then
-						return name
-					end
-				end
-			end
-		end
-	
-		plr.Chatted:Connect(function(msg)
-			local args = msg:lower():split(" ")
-			local command = args[1]
-			local target = args[2]
-	
-			if command == prefix .. "wl" and target then
-				-- Add player to whitelist
-				local playerToAdd = findPlayer(target)
-				if playerToAdd and not isWhitelisted(playerToAdd) then
-					table.insert(whitelist, playerToAdd.Name)
-				end
-			elseif command == prefix .. "lol" then
-				startLoopAll()
-			elseif command == prefix .. "rc" then
-				stopLoopAll()
-				stopLoopSinglePlayer()
-			elseif command == prefix .. "kill" and target then
-				-- Add player to loopKill and activate loopAll
-				local playerToKill = findPlayer(target)
-				if playerToKill then
-					startLoopSinglePlayer(playerToKill)
-				end
-			end
-		end)
-	
-		plr.CharacterAdded:Connect(function(character)
-			-- Fling player randomly upon respawn
-			local respawnPosition
-			local rand = math.random(1, 4)
-			if rand == 1 then
-				-- Void
-				respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-			elseif rand == 2 then
-				-- Sideways
-				respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
-			elseif rand == 3 then
-				-- Sky
-				respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
-			else
-				-- Space
-				respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-			end
-			character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
-		end)
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(TYAXB_fake_script)()
-local function CHCRPSA_fake_script() -- hyperloop.RightLowerLeg 
+coroutine.wrap(ZRSZ_fake_script)()
+local function NGMGSC_fake_script() -- hyperloop.RightLowerLeg 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -4379,7 +3879,7 @@ local function CHCRPSA_fake_script() -- hyperloop.RightLowerLeg
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.RightLowerLeg, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -4419,7 +3919,7 @@ local function CHCRPSA_fake_script() -- hyperloop.RightLowerLeg
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.RightLowerLeg, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -4534,258 +4034,8 @@ local function CHCRPSA_fake_script() -- hyperloop.RightLowerLeg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(CHCRPSA_fake_script)()
-local function ZLXH_fake_script() -- hyperloop.for arm angle tests 
-	local script = Instance.new('Script', hyperloop)
-
-	function Click(mouse)
-	
-		local prefix = '+'
-	
-		repeat wait() until game:IsLoaded()
-		local plrs = game:GetService("Players")
-		local plr = plrs.LocalPlayer
-		local loopAll = false
-		local loopSinglePlayer = nil
-		local whitelist = {"bamned_alt3"}  -- Username to avoid from getting looped
-		local loopKill = {}
-	
-		local UserInputService = game:GetService("UserInputService")
-	
-		local function shouldAvoid(player)
-			return table.find(whitelist, player.Name) ~= nil
-		end
-	
-		local function isWhitelisted(player)
-			return table.find(whitelist, player.Name) ~= nil
-		end
-	
-		local function handleRightArm(v)
-			local rightArm = v.Character:FindFirstChild("Right Arm")
-			if rightArm then
-				rightArm:Destroy()
-				local arm = Instance.new("Part")
-				arm.Size = Vector3.new(1, 3, 1) -- Adjust size if needed
-				arm.Position = v.Character.Torso.Position + Vector3.new(2, 0, 0) -- Adjust position if needed
-				arm.Anchored = false
-				arm.CanCollide = false
-				arm.Color = Color3.new(1, 0, 0) -- Adjust color if needed
-				arm.Parent = game.Workspace -- Make sure the arm is visible
-			end
-		end
-	
-		-- Function to apply changes to a player character
-		local function ApplyChangesToPlayer(player)
-			-- Check if the player's character exists
-			local character = player.Character
-			if character and not shouldAvoid(player) then
-				-- Apply the desired changes to the ArmAngleChange remote event
-				local armAngleChange = character:FindFirstChild("ArmAngleChange")
-				if armAngleChange then
-					armAngleChange:FireServer(CFrame.new(9e37, 0, -9e37))
-				end
-	
-				-- Apply the desired changes to the HeadWaist
-				local HeadWaist = character:FindFirstChild("HeadWaist")
-				if HeadWaist then
-					HeadWaist:FireServer(CFrame.new(9e37, 0, -9e37))
-				end
-	
-				-- Apply the desired changes to the HeadAngleChange remote event
-				local headAngleChange = character:FindFirstChild("HeadAngleChange")
-				if headAngleChange then
-					headAngleChange:FireServer(CFrame.new(-9e37, 9e37, 9e37))
-				end
-	
-				-- Instantly kill the player
-				local humanoid = character:FindFirstChildOfClass("Humanoid")
-				if humanoid then
-					humanoid.Health = 0
-				end
-			end
-		end
-	
-		local function loopActions()
-			while loopAll do
-				for _, v in ipairs(plrs:GetPlayers()) do
-					if v ~= plr and not shouldAvoid(v) then
-						pcall(function()
-							-- Launch player randomly
-							local respawnPosition
-							local rand = math.random(1, 4)
-							if rand == 1 then
-								-- Void
-								respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-							elseif rand == 2 then
-								-- Sideways
-								respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
-							elseif rand == 3 then
-								-- Sky
-								respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
-							else
-								-- Space
-								respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-							end
-							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
-							wait(0.0) -- Adjust the wait time if necessary
-							plr.Character.Picking:FireServer(v.Character.LeftFoot, Vector3.new(9e37, -9e37, 9e37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
-							plr.Character.PuttingDown:FireServer()
-	
-							-- Apply arm angle change
-							local armAngleChange = v.Character:FindFirstChild("ArmAngleChange")
-							if armAngleChange then
-								armAngleChange:FireServer(CFrame.new(9e37, 0, -9e37))
-							end
-						end)
-					end
-				end
-	
-				wait(0.095)
-			end
-		end
-	
-		local function loopSinglePlayerActions()
-			while loopSinglePlayer do
-				local player = loopSinglePlayer
-				if player and player.Character and not shouldAvoid(player) then
-					pcall(function()
-						-- Launch player randomly
-						local respawnPosition
-						local rand = math.random(1, 4)
-						if rand == 1 then
-							-- Void
-							respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-						elseif rand == 2 then
-							-- Sideways
-							respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
-						elseif rand == 3 then
-							-- Sky
-							respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
-						else
-							-- Space
-							respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-						end
-						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
-						wait(0.0) -- Adjust the wait time if necessary
-						plr.Character.Picking:FireServer(player.Character.LeftFoot, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
-						plr.Character.PuttingDown:FireServer()
-	
-						-- Apply arm angle change
-						local armAngleChange = player.Character:FindFirstChild("ArmAngleChange")
-						if armAngleChange then
-							armAngleChange:FireServer(CFrame.new(9e37, 0, -9e37))
-						end
-	
-						ApplyChangesToPlayer(player)
-					end)
-				end
-	
-				wait(0.095)
-			end
-		end
-	
-		local function startLoopAll()
-			loopAll = true
-			spawn(loopActions)
-		end
-	
-		local function stopLoopAll()
-			loopAll = false
-		end
-	
-		local function startLoopSinglePlayer(player)
-			loopSinglePlayer = player
-			spawn(loopSinglePlayerActions)
-		end
-	
-		local function stopLoopSinglePlayer()
-			loopSinglePlayer = nil
-		end
-	
-		UserInputService.InputBegan:Connect(function(input, gameProcessed)
-			if not gameProcessed and input.KeyCode == Enum.KeyCode.G then
-				if loopAll then
-					stopLoopAll()
-					stopLoopSinglePlayer()
-				else
-					startLoopAll()
-				end
-			end
-		end)
-	
-		local function findPlayer(Target)
-			if game:GetService("Players"):FindFirstChild(Target) then
-				return game:GetService("Players"):FindFirstChild(Target)
-			else
-				if Target ~= nil and Target ~= "" and Target ~= " " and Target then
-					local name = Target
-					local found = false
-					for _, v in pairs(game:GetService("Players"):GetPlayers()) do
-						if not found and (v.Name:lower():sub(1, #name) == name:lower() or v.DisplayName:lower():sub(1, #name) == name:lower()) then
-							name = v
-							found = true
-						end
-					end
-					if name ~= nil and name ~= Target then
-						return name
-					end
-				end
-			end
-		end
-	
-		plr.Chatted:Connect(function(msg)
-			local args = msg:lower():split(" ")
-			local command = args[1]
-			local target = args[2]
-	
-			if command == prefix .. "wl" and target then
-				-- Add player to whitelist
-				local playerToAdd = findPlayer(target)
-				if playerToAdd and not isWhitelisted(playerToAdd) then
-					table.insert(whitelist, playerToAdd.Name)
-				end
-			elseif command == prefix .. "lol" then
-				startLoopAll()
-			elseif command == prefix .. "rc" then
-				stopLoopAll()
-				stopLoopSinglePlayer()
-			elseif command == prefix .. "kill" and target then
-				-- Add player to loopKill and activate loopAll
-				local playerToKill = findPlayer(target)
-				if playerToKill then
-					startLoopSinglePlayer(playerToKill)
-				end
-			end
-		end)
-	
-		plr.CharacterAdded:Connect(function(character)
-			-- Fling player randomly upon respawn
-			local respawnPosition
-			local rand = math.random(1, 4)
-			if rand == 1 then
-				-- Void
-				respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-			elseif rand == 2 then
-				-- Sideways
-				respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
-			elseif rand == 3 then
-				-- Sky
-				respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
-			else
-				-- Space
-				respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
-			end
-			character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
-		end)
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(ZLXH_fake_script)()
-local function BJTH_fake_script() -- hyperloop.Head 
+coroutine.wrap(NGMGSC_fake_script)()
+local function ZWRSJFP_fake_script() -- hyperloop.Head 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -4879,7 +4129,7 @@ local function BJTH_fake_script() -- hyperloop.Head
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.Head, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.3) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -4919,7 +4169,7 @@ local function BJTH_fake_script() -- hyperloop.Head
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.Head, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -5034,8 +4284,8 @@ local function BJTH_fake_script() -- hyperloop.Head
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(BJTH_fake_script)()
-local function ADSA_fake_script() -- hyperloop.for arm angle tests 
+coroutine.wrap(ZWRSJFP_fake_script)()
+local function PJRP_fake_script() -- hyperloop.for arm angle tests 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -5082,7 +4332,7 @@ local function ADSA_fake_script() -- hyperloop.for arm angle tests
 				-- Apply the desired changes to the ArmAngleChange remote event
 				local armAngleChange = character:FindFirstChild("ArmAngleChange")
 				if armAngleChange then
-					armAngleChange:FireServer(CFrame.new(9e37, 0, 9e37))
+					armAngleChange:FireServer(CFrame.new(0, 9e37, 0))
 				end
 	
 				-- Apply the desired changes to the HeadWaist
@@ -5129,7 +4379,7 @@ local function ADSA_fake_script() -- hyperloop.for arm angle tests
 							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 							wait(0.0) -- Adjust the wait time if necessary
 							plr.Character.Picking:FireServer(v.Character.LeftFoot, Vector3.new(9e37, -9e37, 9e37)) -- Adjust the force to a lower value
-							wait(0.0) -- Adjust the wait time between picking and putting down
+							wait(0.2) -- Adjust the wait time between picking and putting down
 							plr.Character.PuttingDown:FireServer()
 	
 							-- Apply arm angle change
@@ -5169,7 +4419,7 @@ local function ADSA_fake_script() -- hyperloop.for arm angle tests
 						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
 						wait(0.0) -- Adjust the wait time if necessary
 						plr.Character.Picking:FireServer(player.Character.LeftFoot, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
-						wait(0.0) -- Adjust the wait time between picking and putting down
+						wait(0.3) -- Adjust the wait time between picking and putting down
 						plr.Character.PuttingDown:FireServer()
 	
 						-- Apply arm angle change
@@ -5284,8 +4534,758 @@ local function ADSA_fake_script() -- hyperloop.for arm angle tests
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(ADSA_fake_script)()
-local function OYCFVC_fake_script() -- Frame.LocalScript 
+coroutine.wrap(PJRP_fake_script)()
+local function OIJO_fake_script() -- hyperloop.for arm angle tests 
+	local script = Instance.new('Script', hyperloop)
+
+	function Click(mouse)
+	
+		local prefix = '+'
+	
+		repeat wait() until game:IsLoaded()
+		local plrs = game:GetService("Players")
+		local plr = plrs.LocalPlayer
+		local loopAll = false
+		local loopSinglePlayer = nil
+		local whitelist = {"bamned_alt3"}  -- Username to avoid from getting looped
+		local loopKill = {}
+	
+		local UserInputService = game:GetService("UserInputService")
+	
+		local function shouldAvoid(player)
+			return table.find(whitelist, player.Name) ~= nil
+		end
+	
+		local function isWhitelisted(player)
+			return table.find(whitelist, player.Name) ~= nil
+		end
+	
+		local function handleRightArm(v)
+			local rightArm = v.Character:FindFirstChild("Right Arm")
+			if rightArm then
+				rightArm:Destroy()
+				local arm = Instance.new("Part")
+				arm.Size = Vector3.new(1, 3, 1) -- Adjust size if needed
+				arm.Position = v.Character.Torso.Position + Vector3.new(2, 0, 0) -- Adjust position if needed
+				arm.Anchored = false
+				arm.CanCollide = false
+				arm.Color = Color3.new(1, 0, 0) -- Adjust color if needed
+				arm.Parent = game.Workspace -- Make sure the arm is visible
+			end
+		end
+	
+		-- Function to apply changes to a player character
+		local function ApplyChangesToPlayer(player)
+			-- Check if the player's character exists
+			local character = player.Character
+			if character and not shouldAvoid(player) then
+				-- Apply the desired changes to the ArmAngleChange remote event
+				local armAngleChange = character:FindFirstChild("ArmAngleChange")
+				if armAngleChange then
+					armAngleChange:FireServer(CFrame.new(-9e37, 0, 9e37))
+				end
+	
+				-- Apply the desired changes to the HeadWaist
+				local HeadWaist = character:FindFirstChild("HeadWaist")
+				if HeadWaist then
+					HeadWaist:FireServer(CFrame.new(-9e37, 9e37, 0))
+				end
+	
+				-- Apply the desired changes to the HeadAngleChange remote event
+				local headAngleChange = character:FindFirstChild("HeadAngleChange")
+				if headAngleChange then
+					headAngleChange:FireServer(CFrame.new(-9e37, 0, 9e37))
+				end
+	
+				-- Instantly kill the player
+				local humanoid = character:FindFirstChildOfClass("Humanoid")
+				if humanoid then
+					humanoid.Health = 0
+				end
+			end
+		end
+	
+		local function loopActions()
+			while loopAll do
+				for _, v in ipairs(plrs:GetPlayers()) do
+					if v ~= plr and not shouldAvoid(v) then
+						pcall(function()
+							-- Launch player randomly
+							local respawnPosition
+							local rand = math.random(1, 4)
+							if rand == 1 then
+								-- Void
+								respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+							elseif rand == 2 then
+								-- Sideways
+								respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
+							elseif rand == 3 then
+								-- Sky
+								respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
+							else
+								-- Space
+								respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+							end
+							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
+							wait(0.0) -- Adjust the wait time if necessary
+							plr.Character.Picking:FireServer(v.Character.LeftFoot, Vector3.new(9e37, -9e37, 9e37)) -- Adjust the force to a lower value
+							wait(0.3) -- Adjust the wait time between picking and putting down
+							plr.Character.PuttingDown:FireServer()
+	
+							-- Apply arm angle change
+							local armAngleChange = v.Character:FindFirstChild("ArmAngleChange")
+							if armAngleChange then
+								armAngleChange:FireServer(CFrame.new(-9e37, 0, 9e37))
+							end
+						end)
+					end
+				end
+	
+				wait(0.085)
+			end
+		end
+	
+		local function loopSinglePlayerActions()
+			while loopSinglePlayer do
+				local player = loopSinglePlayer
+				if player and player.Character and not shouldAvoid(player) then
+					pcall(function()
+						-- Launch player randomly
+						local respawnPosition
+						local rand = math.random(1, 4)
+						if rand == 1 then
+							-- Void
+							respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+						elseif rand == 2 then
+							-- Sideways
+							respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
+						elseif rand == 3 then
+							-- Sky
+							respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
+						else
+							-- Space
+							respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+						end
+						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
+						wait(0.0) -- Adjust the wait time if necessary
+						plr.Character.Picking:FireServer(player.Character.LeftFoot, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
+						wait(0.3) -- Adjust the wait time between picking and putting down
+						plr.Character.PuttingDown:FireServer()
+	
+						-- Apply arm angle change
+						local armAngleChange = player.Character:FindFirstChild("ArmAngleChange")
+						if armAngleChange then
+							armAngleChange:FireServer(CFrame.new(-9e37, 9e37, 9e37))
+						end
+	
+						ApplyChangesToPlayer(player)
+					end)
+				end
+	
+				wait(0.085)
+			end
+		end
+	
+		local function startLoopAll()
+			loopAll = true
+			spawn(loopActions)
+		end
+	
+		local function stopLoopAll()
+			loopAll = false
+		end
+	
+		local function startLoopSinglePlayer(player)
+			loopSinglePlayer = player
+			spawn(loopSinglePlayerActions)
+		end
+	
+		local function stopLoopSinglePlayer()
+			loopSinglePlayer = nil
+		end
+	
+		UserInputService.InputBegan:Connect(function(input, gameProcessed)
+			if not gameProcessed and input.KeyCode == Enum.KeyCode.G then
+				if loopAll then
+					stopLoopAll()
+					stopLoopSinglePlayer()
+				else
+					startLoopAll()
+				end
+			end
+		end)
+	
+		local function findPlayer(Target)
+			if game:GetService("Players"):FindFirstChild(Target) then
+				return game:GetService("Players"):FindFirstChild(Target)
+			else
+				if Target ~= nil and Target ~= "" and Target ~= " " and Target then
+					local name = Target
+					local found = false
+					for _, v in pairs(game:GetService("Players"):GetPlayers()) do
+						if not found and (v.Name:lower():sub(1, #name) == name:lower() or v.DisplayName:lower():sub(1, #name) == name:lower()) then
+							name = v
+							found = true
+						end
+					end
+					if name ~= nil and name ~= Target then
+						return name
+					end
+				end
+			end
+		end
+	
+		plr.Chatted:Connect(function(msg)
+			local args = msg:lower():split(" ")
+			local command = args[1]
+			local target = args[2]
+	
+			if command == prefix .. "wl" and target then
+				-- Add player to whitelist
+				local playerToAdd = findPlayer(target)
+				if playerToAdd and not isWhitelisted(playerToAdd) then
+					table.insert(whitelist, playerToAdd.Name)
+				end
+			elseif command == prefix .. "lol" then
+				startLoopAll()
+			elseif command == prefix .. "rc" then
+				stopLoopAll()
+				stopLoopSinglePlayer()
+			elseif command == prefix .. "kill" and target then
+				-- Add player to loopKill and activate loopAll
+				local playerToKill = findPlayer(target)
+				if playerToKill then
+					startLoopSinglePlayer(playerToKill)
+				end
+			end
+		end)
+	
+		plr.CharacterAdded:Connect(function(character)
+			-- Fling player randomly upon respawn
+			local respawnPosition
+			local rand = math.random(1, 4)
+			if rand == 1 then
+				-- Void
+				respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+			elseif rand == 2 then
+				-- Sideways
+				respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
+			elseif rand == 3 then
+				-- Sky
+				respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
+			else
+				-- Space
+				respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+			end
+			character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
+		end)
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(OIJO_fake_script)()
+local function XYXCAQG_fake_script() -- hyperloop.for arm angle tests 
+	local script = Instance.new('Script', hyperloop)
+
+	function Click(mouse)
+	
+		local prefix = '+'
+	
+		repeat wait() until game:IsLoaded()
+		local plrs = game:GetService("Players")
+		local plr = plrs.LocalPlayer
+		local loopAll = false
+		local loopSinglePlayer = nil
+		local whitelist = {"bamned_alt3"}  -- Username to avoid from getting looped
+		local loopKill = {}
+	
+		local UserInputService = game:GetService("UserInputService")
+	
+		local function shouldAvoid(player)
+			return table.find(whitelist, player.Name) ~= nil
+		end
+	
+		local function isWhitelisted(player)
+			return table.find(whitelist, player.Name) ~= nil
+		end
+	
+		local function handleRightArm(v)
+			local rightArm = v.Character:FindFirstChild("Right Arm")
+			if rightArm then
+				rightArm:Destroy()
+				local arm = Instance.new("Part")
+				arm.Size = Vector3.new(1, 3, 1) -- Adjust size if needed
+				arm.Position = v.Character.Torso.Position + Vector3.new(2, 0, 0) -- Adjust position if needed
+				arm.Anchored = false
+				arm.CanCollide = false
+				arm.Color = Color3.new(1, 0, 0) -- Adjust color if needed
+				arm.Parent = game.Workspace -- Make sure the arm is visible
+			end
+		end
+	
+		-- Function to apply changes to a player character
+		local function ApplyChangesToPlayer(player)
+			-- Check if the player's character exists
+			local character = player.Character
+			if character and not shouldAvoid(player) then
+				-- Apply the desired changes to the ArmAngleChange remote event
+				local armAngleChange = character:FindFirstChild("ArmAngleChange")
+				if armAngleChange then
+					armAngleChange:FireServer(CFrame.new(-9e37, 0, -9e37))
+				end
+	
+				-- Apply the desired changes to the HeadWaist
+				local HeadWaist = character:FindFirstChild("HeadWaist")
+				if HeadWaist then
+					HeadWaist:FireServer(CFrame.new(0, 9e37, -9e37))
+				end
+	
+				-- Apply the desired changes to the HeadAngleChange remote event
+				local headAngleChange = character:FindFirstChild("HeadAngleChange")
+				if headAngleChange then
+					headAngleChange:FireServer(CFrame.new(-9e37, 0, -9e37))
+				end
+	
+				-- Instantly kill the player
+				local humanoid = character:FindFirstChildOfClass("Humanoid")
+				if humanoid then
+					humanoid.Health = 0
+				end
+			end
+		end
+	
+		local function loopActions()
+			while loopAll do
+				for _, v in ipairs(plrs:GetPlayers()) do
+					if v ~= plr and not shouldAvoid(v) then
+						pcall(function()
+							-- Launch player randomly
+							local respawnPosition
+							local rand = math.random(1, 4)
+							if rand == 1 then
+								-- Void
+								respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+							elseif rand == 2 then
+								-- Sideways
+								respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
+							elseif rand == 3 then
+								-- Sky
+								respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
+							else
+								-- Space
+								respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+							end
+							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
+							wait(0.0) -- Adjust the wait time if necessary
+							plr.Character.Picking:FireServer(v.Character.LeftFoot, Vector3.new(9e37, -9e37, 9e37)) -- Adjust the force to a lower value
+							wait(0.3) -- Adjust the wait time between picking and putting down
+							plr.Character.PuttingDown:FireServer()
+	
+							-- Apply arm angle change
+							local armAngleChange = v.Character:FindFirstChild("ArmAngleChange")
+							if armAngleChange then
+								armAngleChange:FireServer(CFrame.new(-9e37, 9e37, 9e37))
+							end
+						end)
+					end
+				end
+	
+				wait(0.09)
+			end
+		end
+	
+		local function loopSinglePlayerActions()
+			while loopSinglePlayer do
+				local player = loopSinglePlayer
+				if player and player.Character and not shouldAvoid(player) then
+					pcall(function()
+						-- Launch player randomly
+						local respawnPosition
+						local rand = math.random(1, 4)
+						if rand == 1 then
+							-- Void
+							respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+						elseif rand == 2 then
+							-- Sideways
+							respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
+						elseif rand == 3 then
+							-- Sky
+							respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
+						else
+							-- Space
+							respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+						end
+						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
+						wait(0.0) -- Adjust the wait time if necessary
+						plr.Character.Picking:FireServer(player.Character.LeftFoot, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
+						wait(0.3) -- Adjust the wait time between picking and putting down
+						plr.Character.PuttingDown:FireServer()
+	
+						-- Apply arm angle change
+						local armAngleChange = player.Character:FindFirstChild("ArmAngleChange")
+						if armAngleChange then
+							armAngleChange:FireServer(CFrame.new(-9e37, 0, -9e37))
+						end
+	
+						ApplyChangesToPlayer(player)
+					end)
+				end
+	
+				wait(0.09)
+			end
+		end
+	
+		local function startLoopAll()
+			loopAll = true
+			spawn(loopActions)
+		end
+	
+		local function stopLoopAll()
+			loopAll = false
+		end
+	
+		local function startLoopSinglePlayer(player)
+			loopSinglePlayer = player
+			spawn(loopSinglePlayerActions)
+		end
+	
+		local function stopLoopSinglePlayer()
+			loopSinglePlayer = nil
+		end
+	
+		UserInputService.InputBegan:Connect(function(input, gameProcessed)
+			if not gameProcessed and input.KeyCode == Enum.KeyCode.G then
+				if loopAll then
+					stopLoopAll()
+					stopLoopSinglePlayer()
+				else
+					startLoopAll()
+				end
+			end
+		end)
+	
+		local function findPlayer(Target)
+			if game:GetService("Players"):FindFirstChild(Target) then
+				return game:GetService("Players"):FindFirstChild(Target)
+			else
+				if Target ~= nil and Target ~= "" and Target ~= " " and Target then
+					local name = Target
+					local found = false
+					for _, v in pairs(game:GetService("Players"):GetPlayers()) do
+						if not found and (v.Name:lower():sub(1, #name) == name:lower() or v.DisplayName:lower():sub(1, #name) == name:lower()) then
+							name = v
+							found = true
+						end
+					end
+					if name ~= nil and name ~= Target then
+						return name
+					end
+				end
+			end
+		end
+	
+		plr.Chatted:Connect(function(msg)
+			local args = msg:lower():split(" ")
+			local command = args[1]
+			local target = args[2]
+	
+			if command == prefix .. "wl" and target then
+				-- Add player to whitelist
+				local playerToAdd = findPlayer(target)
+				if playerToAdd and not isWhitelisted(playerToAdd) then
+					table.insert(whitelist, playerToAdd.Name)
+				end
+			elseif command == prefix .. "lol" then
+				startLoopAll()
+			elseif command == prefix .. "rc" then
+				stopLoopAll()
+				stopLoopSinglePlayer()
+			elseif command == prefix .. "kill" and target then
+				-- Add player to loopKill and activate loopAll
+				local playerToKill = findPlayer(target)
+				if playerToKill then
+					startLoopSinglePlayer(playerToKill)
+				end
+			end
+		end)
+	
+		plr.CharacterAdded:Connect(function(character)
+			-- Fling player randomly upon respawn
+			local respawnPosition
+			local rand = math.random(1, 4)
+			if rand == 1 then
+				-- Void
+				respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+			elseif rand == 2 then
+				-- Sideways
+				respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
+			elseif rand == 3 then
+				-- Sky
+				respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
+			else
+				-- Space
+				respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+			end
+			character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
+		end)
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(XYXCAQG_fake_script)()
+local function OWYUNG_fake_script() -- hyperloop.for arm angle tests 
+	local script = Instance.new('Script', hyperloop)
+
+	function Click(mouse)
+	
+		local prefix = '+'
+	
+		repeat wait() until game:IsLoaded()
+		local plrs = game:GetService("Players")
+		local plr = plrs.LocalPlayer
+		local loopAll = false
+		local loopSinglePlayer = nil
+		local whitelist = {"bamned_alt3"}  -- Username to avoid from getting looped
+		local loopKill = {}
+	
+		local UserInputService = game:GetService("UserInputService")
+	
+		local function shouldAvoid(player)
+			return table.find(whitelist, player.Name) ~= nil
+		end
+	
+		local function isWhitelisted(player)
+			return table.find(whitelist, player.Name) ~= nil
+		end
+	
+		local function handleRightArm(v)
+			local rightArm = v.Character:FindFirstChild("Right Arm")
+			if rightArm then
+				rightArm:Destroy()
+				local arm = Instance.new("Part")
+				arm.Size = Vector3.new(1, 3, 1) -- Adjust size if needed
+				arm.Position = v.Character.Torso.Position + Vector3.new(2, 0, 0) -- Adjust position if needed
+				arm.Anchored = false
+				arm.CanCollide = false
+				arm.Color = Color3.new(1, 0, 0) -- Adjust color if needed
+				arm.Parent = game.Workspace -- Make sure the arm is visible
+			end
+		end
+	
+		-- Function to apply changes to a player character
+		local function ApplyChangesToPlayer(player)
+			-- Check if the player's character exists
+			local character = player.Character
+			if character and not shouldAvoid(player) then
+				-- Apply the desired changes to the ArmAngleChange remote event
+				local armAngleChange = character:FindFirstChild("ArmAngleChange")
+				if armAngleChange then
+					armAngleChange:FireServer(CFrame.new(9e37, 0, -9e37))
+				end
+	
+				-- Apply the desired changes to the HeadWaist
+				local HeadWaist = character:FindFirstChild("HeadWaist")
+				if HeadWaist then
+					HeadWaist:FireServer(CFrame.new(9e37, 9e37, 9e37))
+				end
+	
+				-- Apply the desired changes to the HeadAngleChange remote event
+				local headAngleChange = character:FindFirstChild("HeadAngleChange")
+				if headAngleChange then
+					headAngleChange:FireServer(CFrame.new(-9e37, 9e37, 9e37))
+				end
+	
+				-- Instantly kill the player
+				local humanoid = character:FindFirstChildOfClass("Humanoid")
+				if humanoid then
+					humanoid.Health = 0
+				end
+			end
+		end
+	
+		local function loopActions()
+			while loopAll do
+				for _, v in ipairs(plrs:GetPlayers()) do
+					if v ~= plr and not shouldAvoid(v) then
+						pcall(function()
+							-- Launch player randomly
+							local respawnPosition
+							local rand = math.random(1, 4)
+							if rand == 1 then
+								-- Void
+								respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+							elseif rand == 2 then
+								-- Sideways
+								respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
+							elseif rand == 3 then
+								-- Sky
+								respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
+							else
+								-- Space
+								respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+							end
+							v.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
+							wait(0.0) -- Adjust the wait time if necessary
+							plr.Character.Picking:FireServer(v.Character.LeftFoot, Vector3.new(9e37, -9e37, 9e37)) -- Adjust the force to a lower value
+							wait(0.3) -- Adjust the wait time between picking and putting down
+							plr.Character.PuttingDown:FireServer()
+	
+							-- Apply arm angle change
+							local armAngleChange = v.Character:FindFirstChild("ArmAngleChange")
+							if armAngleChange then
+								armAngleChange:FireServer(CFrame.new(9e37, 0, -9e37))
+							end
+						end)
+					end
+				end
+	
+				wait(0.095)
+			end
+		end
+	
+		local function loopSinglePlayerActions()
+			while loopSinglePlayer do
+				local player = loopSinglePlayer
+				if player and player.Character and not shouldAvoid(player) then
+					pcall(function()
+						-- Launch player randomly
+						local respawnPosition
+						local rand = math.random(1, 4)
+						if rand == 1 then
+							-- Void
+							respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+						elseif rand == 2 then
+							-- Sideways
+							respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
+						elseif rand == 3 then
+							-- Sky
+							respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
+						else
+							-- Space
+							respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+						end
+						player.Character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
+						wait(0.0) -- Adjust the wait time if necessary
+						plr.Character.Picking:FireServer(player.Character.LeftFoot, Vector3.new(8.999999813669171e+37, -8.999999813669171e+37, 8.999999813669171e+37)) -- Adjust the force to a lower value
+						wait(0.3) -- Adjust the wait time between picking and putting down
+						plr.Character.PuttingDown:FireServer()
+	
+						-- Apply arm angle change
+						local armAngleChange = player.Character:FindFirstChild("ArmAngleChange")
+						if armAngleChange then
+							armAngleChange:FireServer(CFrame.new(9e37, 0, -9e37))
+						end
+	
+						ApplyChangesToPlayer(player)
+					end)
+				end
+	
+				wait(0.095)
+			end
+		end
+	
+		local function startLoopAll()
+			loopAll = true
+			spawn(loopActions)
+		end
+	
+		local function stopLoopAll()
+			loopAll = false
+		end
+	
+		local function startLoopSinglePlayer(player)
+			loopSinglePlayer = player
+			spawn(loopSinglePlayerActions)
+		end
+	
+		local function stopLoopSinglePlayer()
+			loopSinglePlayer = nil
+		end
+	
+		UserInputService.InputBegan:Connect(function(input, gameProcessed)
+			if not gameProcessed and input.KeyCode == Enum.KeyCode.G then
+				if loopAll then
+					stopLoopAll()
+					stopLoopSinglePlayer()
+				else
+					startLoopAll()
+				end
+			end
+		end)
+	
+		local function findPlayer(Target)
+			if game:GetService("Players"):FindFirstChild(Target) then
+				return game:GetService("Players"):FindFirstChild(Target)
+			else
+				if Target ~= nil and Target ~= "" and Target ~= " " and Target then
+					local name = Target
+					local found = false
+					for _, v in pairs(game:GetService("Players"):GetPlayers()) do
+						if not found and (v.Name:lower():sub(1, #name) == name:lower() or v.DisplayName:lower():sub(1, #name) == name:lower()) then
+							name = v
+							found = true
+						end
+					end
+					if name ~= nil and name ~= Target then
+						return name
+					end
+				end
+			end
+		end
+	
+		plr.Chatted:Connect(function(msg)
+			local args = msg:lower():split(" ")
+			local command = args[1]
+			local target = args[2]
+	
+			if command == prefix .. "wl" and target then
+				-- Add player to whitelist
+				local playerToAdd = findPlayer(target)
+				if playerToAdd and not isWhitelisted(playerToAdd) then
+					table.insert(whitelist, playerToAdd.Name)
+				end
+			elseif command == prefix .. "lol" then
+				startLoopAll()
+			elseif command == prefix .. "rc" then
+				stopLoopAll()
+				stopLoopSinglePlayer()
+			elseif command == prefix .. "kill" and target then
+				-- Add player to loopKill and activate loopAll
+				local playerToKill = findPlayer(target)
+				if playerToKill then
+					startLoopSinglePlayer(playerToKill)
+				end
+			end
+		end)
+	
+		plr.CharacterAdded:Connect(function(character)
+			-- Fling player randomly upon respawn
+			local respawnPosition
+			local rand = math.random(1, 4)
+			if rand == 1 then
+				-- Void
+				respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+			elseif rand == 2 then
+				-- Sideways
+				respawnPosition = Vector3.new(math.random(-50, 50), 200, math.random(-50, 50))
+			elseif rand == 3 then
+				-- Sky
+				respawnPosition = Vector3.new(math.random(-50, 50), 500, math.random(-50, 50))
+			else
+				-- Space
+				respawnPosition = Vector3.new(math.random(-50, 50), 1000, math.random(-50, 50)) -- Adjust Y position to make them float
+			end
+			character:SetPrimaryPartCFrame(CFrame.new(respawnPosition))
+		end)
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(OWYUNG_fake_script)()
+local function JDZUHB_fake_script() -- Frame.LocalScript 
 	local script = Instance.new('LocalScript', Frame)
 
 	local dragger = {}; 
@@ -5332,4 +5332,4 @@ local function OYCFVC_fake_script() -- Frame.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(OYCFVC_fake_script)()
+coroutine.wrap(JDZUHB_fake_script)()
