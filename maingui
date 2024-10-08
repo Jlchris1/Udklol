@@ -37,7 +37,6 @@ mainframe.BorderColor3 = Color3.fromRGB(0, 0, 0)
 mainframe.BorderSizePixel = 0
 mainframe.Position = UDim2.new(0.647574127, 0, 0.276063085, 0)
 mainframe.Size = UDim2.new(0, 249, 0, 218)
-mainframe.CanvasPosition = Vector2.new(0, 1650)
 mainframe.CanvasSize = UDim2.new(0, 0, 4, 0)
 
 coolpicktool.Name = "cool pick tool"
@@ -234,7 +233,7 @@ toggle.TextSize = 30.000
 
 -- Scripts:
 
-local function TURNGK_fake_script() -- coolpicktool.Script 
+local function NTTAF_fake_script() -- coolpicktool.Script 
 	local script = Instance.new('Script', coolpicktool)
 
 	function Click(mouse)
@@ -273,8 +272,8 @@ local function TURNGK_fake_script() -- coolpicktool.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(TURNGK_fake_script)()
-local function XAADJ_fake_script() -- dmgsoundspammer.Script 
+coroutine.wrap(NTTAF_fake_script)()
+local function IYYMXAP_fake_script() -- dmgsoundspammer.Script 
 	local script = Instance.new('Script', dmgsoundspammer)
 
 	function Click(mouse)
@@ -291,8 +290,8 @@ local function XAADJ_fake_script() -- dmgsoundspammer.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(XAADJ_fake_script)()
-local function CUHPL_fake_script() -- floatpt2.Script 
+coroutine.wrap(IYYMXAP_fake_script)()
+local function YMUM_fake_script() -- floatpt2.Script 
 	local script = Instance.new('Script', floatpt2)
 
 	function Click(mouse)
@@ -455,8 +454,8 @@ local function CUHPL_fake_script() -- floatpt2.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(CUHPL_fake_script)()
-local function TWVWM_fake_script() -- floatpt3.F-real7 
+coroutine.wrap(YMUM_fake_script)()
+local function WFNRNRY_fake_script() -- floatpt3.F-real7 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -619,8 +618,8 @@ local function TWVWM_fake_script() -- floatpt3.F-real7
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(TWVWM_fake_script)()
-local function YLVPTB_fake_script() -- floatpt3.F-real5 
+coroutine.wrap(WFNRNRY_fake_script)()
+local function QAQERQ_fake_script() -- floatpt3.F-real5 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -783,8 +782,8 @@ local function YLVPTB_fake_script() -- floatpt3.F-real5
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YLVPTB_fake_script)()
-local function VOEYSZY_fake_script() -- floatpt3.F-real6 
+coroutine.wrap(QAQERQ_fake_script)()
+local function OVYUX_fake_script() -- floatpt3.F-real6 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -947,8 +946,8 @@ local function VOEYSZY_fake_script() -- floatpt3.F-real6
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(VOEYSZY_fake_script)()
-local function ZEIAER_fake_script() -- floatpt3.F-real4 
+coroutine.wrap(OVYUX_fake_script)()
+local function YFAHUDY_fake_script() -- floatpt3.F-real4 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -1111,8 +1110,8 @@ local function ZEIAER_fake_script() -- floatpt3.F-real4
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(ZEIAER_fake_script)()
-local function JAJC_fake_script() -- floatpt3.F-real1 
+coroutine.wrap(YFAHUDY_fake_script)()
+local function ACAYEDA_fake_script() -- floatpt3.F-real1 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -1275,8 +1274,8 @@ local function JAJC_fake_script() -- floatpt3.F-real1
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(JAJC_fake_script)()
-local function TDFF_fake_script() -- floatpt3.F-real2 
+coroutine.wrap(ACAYEDA_fake_script)()
+local function OSSV_fake_script() -- floatpt3.F-real2 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -1439,8 +1438,8 @@ local function TDFF_fake_script() -- floatpt3.F-real2
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(TDFF_fake_script)()
-local function KUINM_fake_script() -- floatpt3.F-real3 
+coroutine.wrap(OSSV_fake_script)()
+local function SNOUV_fake_script() -- floatpt3.F-real3 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -1603,8 +1602,8 @@ local function KUINM_fake_script() -- floatpt3.F-real3
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(KUINM_fake_script)()
-local function LHYT_fake_script() -- chrisgui.Script 
+coroutine.wrap(SNOUV_fake_script)()
+local function GSDFFD_fake_script() -- chrisgui.Script 
 	local script = Instance.new('Script', chrisgui)
 
 	function Click(mouse)
@@ -1616,8 +1615,8 @@ local function LHYT_fake_script() -- chrisgui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(LHYT_fake_script)()
-local function XXPCCZV_fake_script() -- instantkillv3.Script 
+coroutine.wrap(GSDFFD_fake_script)()
+local function AMONT_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -1866,8 +1865,8 @@ local function XXPCCZV_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(XXPCCZV_fake_script)()
-local function LSKIOT_fake_script() -- instantkillv3.Script 
+coroutine.wrap(AMONT_fake_script)()
+local function TYDQTQ_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -2116,8 +2115,8 @@ local function LSKIOT_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(LSKIOT_fake_script)()
-local function KWOFJO_fake_script() -- instantkillv3.Script 
+coroutine.wrap(TYDQTQ_fake_script)()
+local function FIFVJD_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -2366,8 +2365,8 @@ local function KWOFJO_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(KWOFJO_fake_script)()
-local function IJVLRT_fake_script() -- instantkillv3.Script 
+coroutine.wrap(FIFVJD_fake_script)()
+local function RVCSEV_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -2616,8 +2615,8 @@ local function IJVLRT_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(IJVLRT_fake_script)()
-local function RADXP_fake_script() -- instantkillv3.Script 
+coroutine.wrap(RVCSEV_fake_script)()
+local function HHJKY_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -2866,8 +2865,8 @@ local function RADXP_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(RADXP_fake_script)()
-local function XTJMY_fake_script() -- instantkillv3.Script 
+coroutine.wrap(HHJKY_fake_script)()
+local function PRQZL_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -3116,8 +3115,8 @@ local function XTJMY_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(XTJMY_fake_script)()
-local function RRFUY_fake_script() -- instantkillv3.Script 
+coroutine.wrap(PRQZL_fake_script)()
+local function HCLNBG_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -3366,8 +3365,8 @@ local function RRFUY_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(RRFUY_fake_script)()
-local function AHMRKFU_fake_script() -- instantkillv3.Script 
+coroutine.wrap(HCLNBG_fake_script)()
+local function IBZAOP_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -3616,8 +3615,8 @@ local function AHMRKFU_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(AHMRKFU_fake_script)()
-local function YZFNERP_fake_script() -- trappick.Script 
+coroutine.wrap(IBZAOP_fake_script)()
+local function NOIUUW_fake_script() -- trappick.Script 
 	local script = Instance.new('Script', trappick)
 
 	function Click(mouse)
@@ -3629,8 +3628,8 @@ local function YZFNERP_fake_script() -- trappick.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YZFNERP_fake_script)()
-local function QMWRFO_fake_script() -- turnoffspamsound.Script 
+coroutine.wrap(NOIUUW_fake_script)()
+local function DOIP_fake_script() -- turnoffspamsound.Script 
 	local script = Instance.new('Script', turnoffspamsound)
 
 	function Click(mouse)
@@ -3643,8 +3642,8 @@ local function QMWRFO_fake_script() -- turnoffspamsound.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QMWRFO_fake_script)()
-local function AWDDPKD_fake_script() -- v1.Script 
+coroutine.wrap(DOIP_fake_script)()
+local function DNCYC_fake_script() -- v1.Script 
 	local script = Instance.new('Script', v1)
 
 	function Click(mouse)
@@ -3765,8 +3764,8 @@ local function AWDDPKD_fake_script() -- v1.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(AWDDPKD_fake_script)()
-local function REBMYEO_fake_script() -- v3loop.Script 
+coroutine.wrap(DNCYC_fake_script)()
+local function YUZGSD_fake_script() -- v3loop.Script 
 	local script = Instance.new('Script', v3loop)
 
 	function Click(mouse)
@@ -4015,8 +4014,8 @@ local function REBMYEO_fake_script() -- v3loop.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(REBMYEO_fake_script)()
-local function BIJWVPS_fake_script() -- instakillv3.torso 
+coroutine.wrap(YUZGSD_fake_script)()
+local function SVTONZ_fake_script() -- instakillv3.torso 
 	local script = Instance.new('Script', instakillv3)
 
 	function Click(mouse)
@@ -4266,8 +4265,8 @@ local function BIJWVPS_fake_script() -- instakillv3.torso
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(BIJWVPS_fake_script)()
-local function EYGJ_fake_script() -- instakillv3.rightarm 
+coroutine.wrap(SVTONZ_fake_script)()
+local function YOMUR_fake_script() -- instakillv3.rightarm 
 	local script = Instance.new('Script', instakillv3)
 
 	function Click(mouse)
@@ -4517,8 +4516,8 @@ local function EYGJ_fake_script() -- instakillv3.rightarm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(EYGJ_fake_script)()
-local function NLODDL_fake_script() -- instakillv3.leftarm 
+coroutine.wrap(YOMUR_fake_script)()
+local function CMVLAE_fake_script() -- instakillv3.leftarm 
 	local script = Instance.new('Script', instakillv3)
 
 	function Click(mouse)
@@ -4768,8 +4767,8 @@ local function NLODDL_fake_script() -- instakillv3.leftarm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(NLODDL_fake_script)()
-local function MBHYX_fake_script() -- instakillv3.right leg 
+coroutine.wrap(CMVLAE_fake_script)()
+local function HFHILSB_fake_script() -- instakillv3.right leg 
 	local script = Instance.new('Script', instakillv3)
 
 	function Click(mouse)
@@ -5019,8 +5018,8 @@ local function MBHYX_fake_script() -- instakillv3.right leg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(MBHYX_fake_script)()
-local function ILRZQL_fake_script() -- instakillv3.head 
+coroutine.wrap(HFHILSB_fake_script)()
+local function XYVFW_fake_script() -- instakillv3.head 
 	local script = Instance.new('Script', instakillv3)
 
 	function Click(mouse)
@@ -5270,8 +5269,8 @@ local function ILRZQL_fake_script() -- instakillv3.head
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(ILRZQL_fake_script)()
-local function JMWCZLH_fake_script() -- instakillv3.leftleg 
+coroutine.wrap(XYVFW_fake_script)()
+local function AZJN_fake_script() -- instakillv3.leftleg 
 	local script = Instance.new('Script', instakillv3)
 
 	function Click(mouse)
@@ -5521,8 +5520,8 @@ local function JMWCZLH_fake_script() -- instakillv3.leftleg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(JMWCZLH_fake_script)()
-local function YBEVQ_fake_script() -- hyperloop1.script2 
+coroutine.wrap(AZJN_fake_script)()
+local function JRVD_fake_script() -- hyperloop1.script2 
 	local script = Instance.new('Script', hyperloop1)
 
 	function Click(mouse)
@@ -5534,8 +5533,8 @@ local function YBEVQ_fake_script() -- hyperloop1.script2
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YBEVQ_fake_script)()
-local function IPYQUDP_fake_script() -- hyperloop1.script1 
+coroutine.wrap(JRVD_fake_script)()
+local function GMOT_fake_script() -- hyperloop1.script1 
 	local script = Instance.new('Script', hyperloop1)
 
 	function Click(mouse)
@@ -5547,8 +5546,8 @@ local function IPYQUDP_fake_script() -- hyperloop1.script1
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(IPYQUDP_fake_script)()
-local function OEGGGN_fake_script() -- severeanti.Script 
+coroutine.wrap(GMOT_fake_script)()
+local function GUMPJ_fake_script() -- severeanti.Script 
 	local script = Instance.new('Script', severeanti)
 
 	function Click(mouse)
@@ -5560,8 +5559,8 @@ local function OEGGGN_fake_script() -- severeanti.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(OEGGGN_fake_script)()
-local function GGWCZRS_fake_script() -- armanlegui.Script 
+coroutine.wrap(GUMPJ_fake_script)()
+local function EQOVC_fake_script() -- armanlegui.Script 
 	local script = Instance.new('Script', armanlegui)
 
 	function Click(mouse)
@@ -5573,8 +5572,8 @@ local function GGWCZRS_fake_script() -- armanlegui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(GGWCZRS_fake_script)()
-local function XVCWI_fake_script() -- anvilkillall.Script 
+coroutine.wrap(EQOVC_fake_script)()
+local function TNWZWGG_fake_script() -- anvilkillall.Script 
 	local script = Instance.new('Script', anvilkillall)
 
 	function Click(mouse)
@@ -5582,83 +5581,81 @@ local function XVCWI_fake_script() -- anvilkillall.Script
 		local Players = game:GetService("Players")
 		local Workspace = game:GetService("Workspace")
 		local TweenService = game:GetService("TweenService")
+		local Debris = game:GetService("Debris")
 	
 		-- Orbit settings
-		local orbitRadius = 0 -- Radius of the orbit
-		local orbitSpeed = 0 -- Speed of orbiting (higher is faster)
+		local orbitRadius = 0 -- Adjust as needed for visibility
+		local orbitSpeed = 0 -- Adjust for speed of orbit
 		local orbitHeight = 0 -- Height offset from the player
-		local damageAmount = 0 -- Damage amount dealt by the anvil
-		local anvilVelocityMagnitude = 10000 -- Massive velocity for the anvils
-		local flingForceMagnitude = 0 -- Force magnitude for the fling effect
+		local anvilVelocityMagnitude = 10000 -- Speed of the anvils
+		local creationDelay = 0.5 -- Delay in seconds between anvil creations
 	
-		-- Function to get a random player (including dead players)
+		-- Function to get a random player, prioritizing alive players
 		local function getRandomPlayer(excludedPlayer)
 			local validPlayers = {}
+			local deadPlayers = {}
+	
 			for _, player in pairs(Players:GetPlayers()) do
-				if player ~= excludedPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-					-- Include players regardless of their health
-					table.insert(validPlayers, player)
+				if player ~= excludedPlayer and player.Character then
+					local humanoid = player.Character:FindFirstChild("Humanoid")
+					if humanoid then
+						if humanoid.Health > 0 then
+							table.insert(validPlayers, player) -- Alive players
+						else
+							table.insert(deadPlayers, player) -- Dead players
+						end
+					end
 				end
 			end
-			return #validPlayers > 0 and validPlayers[math.random(1, #validPlayers)] or nil
-		end
 	
-		-- Function to apply damage to the player and fling them if the anvil touches them
-		local function onAnvilTouch(hit)
-			local player = Players:GetPlayerFromCharacter(hit.Parent)
-			if player and hit.Parent:FindFirstChild("Humanoid") then
-				local humanoid = hit.Parent.Humanoid
-				humanoid:TakeDamage(damageAmount) -- Apply damage
-	
-				-- Apply fling effect
-				local humanoidRootPart = hit.Parent:FindFirstChild("HumanoidRootPart")
-				if humanoidRootPart then
-					-- Create BodyVelocity to apply a force
-					local bodyVelocity = Instance.new("BodyVelocity")
-					bodyVelocity.Velocity = (humanoidRootPart.Position - hit.Position).unit * flingForceMagnitude
-					bodyVelocity.MaxForce = Vector3.new(0, 0, 0) -- Ensure it has enough force to fling the player
-					bodyVelocity.Parent = humanoidRootPart
-	
-					-- Remove the BodyVelocity after a short duration to prevent continuous force application
-					game:GetService("Debris"):AddItem(bodyVelocity, 0) -- Adjust the duration as needed
-				end
+			-- First try to pick from alive players
+			if #validPlayers > 0 then
+				return validPlayers[math.random(1, #validPlayers)]
+				-- If no alive players, then pick from dead players
+			elseif #deadPlayers > 0 then
+				return deadPlayers[math.random(1, #deadPlayers)]
 			end
+			return nil -- No valid players found
 		end
 	
 		-- Function to make all anvils orbit a random player
 		local function orbitRandomPlayer(excludedPlayer)
-			while true do  -- Continuous loop to keep checking for the nearest player
+			while true do
 				-- Loop through all objects in the workspace
 				for _, object in pairs(Workspace:GetDescendants()) do
-					-- Check if the object is named "Anvil", is a BasePart, and is unanchored
-					if object.Name == "Anvil" and object:IsA("BasePart") and not object.Anchored then
-						-- Connect the touch event to the onAnvilTouch function
-						object.Touched:Connect(onAnvilTouch)
+					-- Check if the object is named "Anvil", is a MeshPart, and is unanchored
+					if object.Name == "Anvil" and object:IsA("MeshPart") and not object.Anchored and object.Parent == Workspace then
+						-- Ensure the anvil's collision is off
+						object.CanCollide = false
 	
 						local randomPlayer = getRandomPlayer(excludedPlayer)
 	
 						if randomPlayer and randomPlayer.Character then
-							local humanoidRootPart = randomPlayer.Character.HumanoidRootPart
+							local humanoidRootPart = randomPlayer.Character:FindFirstChild("HumanoidRootPart")
 	
-							-- Calculate the new position for the anvil to orbit around the player
-							local time = tick() * orbitSpeed -- Use tick() for a smooth, frame-independent speed
-							local orbitX = humanoidRootPart.Position.X + orbitRadius * math.cos(time)
-							local orbitZ = humanoidRootPart.Position.Z + orbitRadius * math.sin(time)
-							local orbitPosition = Vector3.new(orbitX, humanoidRootPart.Position.Y + orbitHeight, orbitZ)
+							if humanoidRootPart then
+								-- Calculate the new position for the anvil to orbit around the player
+								local time = tick() * orbitSpeed
+								local orbitX = humanoidRootPart.Position.X + orbitRadius * math.cos(time)
+								local orbitZ = humanoidRootPart.Position.Z + orbitRadius * math.sin(time)
+								local orbitPosition = Vector3.new(orbitX, humanoidRootPart.Position.Y + orbitHeight, orbitZ)
 	
-							-- Set the velocity of the anvil
-							local direction = (orbitPosition - object.Position).unit
-							object.Velocity = direction * anvilVelocityMagnitude
+								-- Create and set BodyVelocity to the anvil
+								local bodyVelocity = Instance.new("BodyVelocity")
+								bodyVelocity.Velocity = (orbitPosition - object.Position).unit * anvilVelocityMagnitude
+								bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5) -- Ensure it has enough force
+								bodyVelocity.Parent = object
 	
-							-- Tween the anvil to the new orbit position (optional, if you want both effects)
-							local tweenInfo = TweenInfo.new(0, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
-							local tween = TweenService:Create(object, tweenInfo, {Position = orbitPosition})
-							tween:Play()
+								-- Tween the anvil to the new orbit position
+								local tweenInfo = TweenInfo.new(0, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut) -- Adjust tween duration as needed
+								local tween = TweenService:Create(object, tweenInfo, {Position = orbitPosition})
+								tween:Play()
+							end
 						end
 					end
 				end
 	
-				wait() -- Wait before the next update
+				wait(0.15) -- Wait before the next update (0.2 seconds)
 			end
 		end
 	
@@ -5666,48 +5663,59 @@ local function XVCWI_fake_script() -- anvilkillall.Script
 		local function createAnvils()
 			for _, player in pairs(Players:GetPlayers()) do
 				if player.Character then
-					local anvil = Instance.new("Part") -- Create a new part
+					local anvil = Instance.new("MeshPart") -- Create a new MeshPart
 					anvil.Name = "Anvil"
-					anvil.Size = Vector3.new(30, 30, 30) -- Adjust size as needed
+					anvil.Size = Vector3.new(2, 2, 2) -- Adjust size as needed
 					anvil.Anchored = false -- Ensure the anvil can fall
-					anvil.CanCollide = false -- Ensure it interacts with players
+					anvil.CanCollide = false -- Ensure it interacts with players (collision off)
 					anvil.Position = player.Character.HumanoidRootPart.Position + Vector3.new(0, 0, 0) -- Start above the player
+	
+					-- Create and set BodyVelocity to the anvil
+					local bodyVelocity = Instance.new("BodyVelocity")
+					bodyVelocity.Velocity = Vector3.new(0, -10, 0) -- Initial downward velocity
+					bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5) -- Ensure it has enough force
+					bodyVelocity.Parent = anvil
+	
 					anvil.Parent = Workspace
 	
 					-- Make the anvil last longer by adding a lifespan
-					game:GetService("Debris"):AddItem(anvil, 100) -- Anvil lasts for 100 seconds
+					Debris:AddItem(anvil, 2) -- Anvil lasts for 100 seconds
+	
+					wait(creationDelay) -- Wait for a short duration before creating the next anvil
 				end
 			end
 		end
 	
 		-- Main function to initialize the script
 		local function initialize()
+			-- Create anvils at the start
+			createAnvils()
+	
 			-- Start the function to make anvils orbit random players
 			local localPlayer = Players.LocalPlayer -- Get the local player
 			orbitRandomPlayer(localPlayer)
-	
-			-- Create anvils at the start
-			createAnvils()
 		end
 	
 		-- Connect to the CharacterAdded event
 		local player = Players.LocalPlayer
 		player.CharacterAdded:Connect(function()
 			-- Wait for the character to be fully loaded before initializing
-			player.CharacterAdded:Wait()
+			player.CharacterAdded:Wait(0.6)
 			initialize() -- Reinitialize the script on respawn
 		end)
 	
 		-- Call the function to initialize the script initially
 		initialize()
 	
+	
+	
 	end
 	
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(XVCWI_fake_script)()
-local function HFUYNV_fake_script() -- toggle.LocalScript 
+coroutine.wrap(TNWZWGG_fake_script)()
+local function ZBLO_fake_script() -- toggle.LocalScript 
 	local script = Instance.new('LocalScript', toggle)
 
 	local back = script.Parent.Parent.mainframe
@@ -5737,8 +5745,8 @@ local function HFUYNV_fake_script() -- toggle.LocalScript
 	
 	end)
 end
-coroutine.wrap(HFUYNV_fake_script)()
-local function JWDW_fake_script() -- toggle.LocalScript 
+coroutine.wrap(ZBLO_fake_script)()
+local function TZYYNC_fake_script() -- toggle.LocalScript 
 	local script = Instance.new('LocalScript', toggle)
 
 	local dragger = {}; 
@@ -5785,4 +5793,4 @@ local function JWDW_fake_script() -- toggle.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(JWDW_fake_script)()
+coroutine.wrap(TZYYNC_fake_script)()
