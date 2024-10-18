@@ -133,13 +133,13 @@ close.BorderSizePixel = 0
 close.Position = UDim2.new(0.468328834, 0, 0.207783639, 0)
 close.Size = UDim2.new(0, 50, 0, 50)
 close.Font = Enum.Font.SourceSansBold
-close.Text = "X"
+close.Text = "close"
 close.TextColor3 = Color3.fromRGB(255, 0, 0)
-close.TextSize = 70.000
+close.TextSize = 25.000
 
 -- Scripts:
 
-local function WIVJ_fake_script() -- antiv2.anti arm fling pt 2 
+local function KMBI_fake_script() -- antiv2.anti arm fling pt 2 
 	local script = Instance.new('Script', antiv2)
 
 	function Click(mouse)
@@ -161,8 +161,8 @@ local function WIVJ_fake_script() -- antiv2.anti arm fling pt 2
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(WIVJ_fake_script)()
-local function EVRDBF_fake_script() -- antiv2.anti arm flng pt 3 
+coroutine.wrap(KMBI_fake_script)()
+local function RAPP_fake_script() -- antiv2.anti arm flng pt 3 
 	local script = Instance.new('Script', antiv2)
 
 	function Click(mouse)
@@ -184,8 +184,8 @@ local function EVRDBF_fake_script() -- antiv2.anti arm flng pt 3
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(EVRDBF_fake_script)()
-local function KETLV_fake_script() -- antiv2.anti arm flin pt1 
+coroutine.wrap(RAPP_fake_script)()
+local function QYQAXOI_fake_script() -- antiv2.anti arm flin pt1 
 	local script = Instance.new('Script', antiv2)
 
 	function Click(mouse)
@@ -206,8 +206,8 @@ local function KETLV_fake_script() -- antiv2.anti arm flin pt1
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(KETLV_fake_script)()
-local function IRSWN_fake_script() -- antiv2.anti dmg 
+coroutine.wrap(QYQAXOI_fake_script)()
+local function TDDRM_fake_script() -- antiv2.anti dmg 
 	local script = Instance.new('Script', antiv2)
 
 	function Click(mouse)
@@ -219,8 +219,8 @@ local function IRSWN_fake_script() -- antiv2.anti dmg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(IRSWN_fake_script)()
-local function TRTV_fake_script() -- antiv2.ant velocity dmg 
+coroutine.wrap(TDDRM_fake_script)()
+local function JBZA_fake_script() -- antiv2.ant velocity dmg 
 	local script = Instance.new('Script', antiv2)
 
 	function Click(mouse)
@@ -232,8 +232,8 @@ local function TRTV_fake_script() -- antiv2.ant velocity dmg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(TRTV_fake_script)()
-local function UHJN_fake_script() -- antiv2.return arm 
+coroutine.wrap(JBZA_fake_script)()
+local function XZAU_fake_script() -- antiv2.return arm 
 	local script = Instance.new('Script', antiv2)
 
 	function Click(mouse)
@@ -254,8 +254,8 @@ local function UHJN_fake_script() -- antiv2.return arm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(UHJN_fake_script)()
-local function OZQW_fake_script() -- antiv2.set void height 
+coroutine.wrap(XZAU_fake_script)()
+local function XRAZ_fake_script() -- antiv2.set void height 
 	local script = Instance.new('Script', antiv2)
 
 	function Click(mouse)
@@ -267,8 +267,8 @@ local function OZQW_fake_script() -- antiv2.set void height
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(OZQW_fake_script)()
-local function JLDHJH_fake_script() -- antiv2.massless bomb 
+coroutine.wrap(XRAZ_fake_script)()
+local function OEJYZZD_fake_script() -- antiv2.massless bomb 
 	local script = Instance.new('Script', antiv2)
 
 	function Click(mouse)
@@ -280,8 +280,8 @@ local function JLDHJH_fake_script() -- antiv2.massless bomb
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(JLDHJH_fake_script)()
-local function RXQTPSC_fake_script() -- antiv2.massless anvil 
+coroutine.wrap(OEJYZZD_fake_script)()
+local function TOJPB_fake_script() -- antiv2.massless anvil 
 	local script = Instance.new('Script', antiv2)
 
 	function Click(mouse)
@@ -292,8 +292,8 @@ local function RXQTPSC_fake_script() -- antiv2.massless anvil
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(RXQTPSC_fake_script)()
-local function SJGFH_fake_script() -- antiv2withrag.return arm 
+coroutine.wrap(TOJPB_fake_script)()
+local function MTAT_fake_script() -- antiv2withrag.return arm 
 	local script = Instance.new('Script', antiv2withrag)
 
 	function Click(mouse)
@@ -314,8 +314,8 @@ local function SJGFH_fake_script() -- antiv2withrag.return arm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(SJGFH_fake_script)()
-local function FOOWIFC_fake_script() -- antiv2withrag.set void height 
+coroutine.wrap(MTAT_fake_script)()
+local function MOBJIA_fake_script() -- antiv2withrag.set void height 
 	local script = Instance.new('Script', antiv2withrag)
 
 	function Click(mouse)
@@ -327,8 +327,8 @@ local function FOOWIFC_fake_script() -- antiv2withrag.set void height
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(FOOWIFC_fake_script)()
-local function OAIZYE_fake_script() -- antiv2withrag.massless bomb 
+coroutine.wrap(MOBJIA_fake_script)()
+local function QTPUHKA_fake_script() -- antiv2withrag.massless bomb 
 	local script = Instance.new('Script', antiv2withrag)
 
 	function Click(mouse)
@@ -340,8 +340,8 @@ local function OAIZYE_fake_script() -- antiv2withrag.massless bomb
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(OAIZYE_fake_script)()
-local function JMEOPRZ_fake_script() -- antiv2withrag.massless anvil 
+coroutine.wrap(QTPUHKA_fake_script)()
+local function YIZUUJJ_fake_script() -- antiv2withrag.massless anvil 
 	local script = Instance.new('Script', antiv2withrag)
 
 	function Click(mouse)
@@ -352,8 +352,8 @@ local function JMEOPRZ_fake_script() -- antiv2withrag.massless anvil
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(JMEOPRZ_fake_script)()
-local function WTXDV_fake_script() -- antiv2withrag.anti arm fling pt 2 
+coroutine.wrap(YIZUUJJ_fake_script)()
+local function UFSG_fake_script() -- antiv2withrag.anti arm fling pt 2 
 	local script = Instance.new('Script', antiv2withrag)
 
 	function Click(mouse)
@@ -375,8 +375,8 @@ local function WTXDV_fake_script() -- antiv2withrag.anti arm fling pt 2
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(WTXDV_fake_script)()
-local function NOCOWNS_fake_script() -- antiv2withrag.anti arm flng pt 3 
+coroutine.wrap(UFSG_fake_script)()
+local function OWKLEH_fake_script() -- antiv2withrag.anti arm flng pt 3 
 	local script = Instance.new('Script', antiv2withrag)
 
 	function Click(mouse)
@@ -398,8 +398,8 @@ local function NOCOWNS_fake_script() -- antiv2withrag.anti arm flng pt 3
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(NOCOWNS_fake_script)()
-local function NNYCBU_fake_script() -- antiv2withrag.anti arm flin pt1 
+coroutine.wrap(OWKLEH_fake_script)()
+local function TRNE_fake_script() -- antiv2withrag.anti arm flin pt1 
 	local script = Instance.new('Script', antiv2withrag)
 
 	function Click(mouse)
@@ -420,8 +420,8 @@ local function NNYCBU_fake_script() -- antiv2withrag.anti arm flin pt1
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(NNYCBU_fake_script)()
-local function RJIL_fake_script() -- antipick.aap 
+coroutine.wrap(TRNE_fake_script)()
+local function RBETGUL_fake_script() -- antipick.aap 
 	local script = Instance.new('Script', antipick)
 
 	function Click(mouse)
@@ -429,51 +429,36 @@ local function RJIL_fake_script() -- antipick.aap
 		local Players = game:GetService("Players")
 		local player = Players.LocalPlayer
 	
-		-- Function to refresh the player's hair and worn gear by duplicating first, then destroying old ones
-		local function refreshPlayerGearAndHair()
+		-- Function to refresh all accessories (including hair) on the player's character
+		local function refreshCharacterItems()
 			local character = player.Character or player.CharacterAdded:Wait()
 	
-			-- Duplicate hair accessories (hat-type accessories) first, then destroy old ones
-			for _, accessory in pairs(character:GetChildren()) do
-				if accessory:IsA("Accessory") and accessory:FindFirstChild("Handle") and accessory.AccessoryType == Enum.AccessoryType.Hat then
-					local clone = accessory:Clone()
-					clone.Parent = character
-					wait(0.01) -- Small delay to ensure the clone is set
-					accessory:Destroy() -- Destroy the old hair accessory
-				end
-			end
+			-- Ensure all parts and accessories are loaded before proceeding
+			character:WaitForChild("Humanoid")
 	
-			-- Duplicate worn gear (other non-hair accessories) first, then destroy old ones
+			-- Refresh all accessories (hair, hats, gear)
 			for _, accessory in pairs(character:GetChildren()) do
-				if accessory:IsA("Accessory") and accessory:FindFirstChild("Handle") and 
-					(accessory.AccessoryType == Enum.AccessoryType.Back or 
-						accessory.AccessoryType == Enum.AccessoryType.Neck or 
-						accessory.AccessoryType == Enum.AccessoryType.Shoulder or
-						accessory.AccessoryType == Enum.AccessoryType.Waist or 
-						accessory.AccessoryType == Enum.AccessoryType.Front or
-						accessory.AccessoryType == Enum.AccessoryType.Hip) then
-	
-					local clone = accessory:Clone()
-					clone.Parent = character
-					wait(0.01) -- Small delay to ensure the clone is set
-					accessory:Destroy() -- Destroy the old worn gear
+				if accessory:IsA("Accessory") and accessory:FindFirstChild("Handle") then
+					local clone = accessory:Clone()  -- Clone the accessory
+					clone.Parent = character         -- Attach the clone to the character
+					wait()                        -- Small delay to ensure the clone is attached
+					accessory:Destroy()              -- Destroy the old accessory after cloning
 				end
 			end
 		end
 	
-		-- Function to handle character respawn
+		-- Function to handle character respawn and initialize the refresh process upon respawn
 		local function onCharacterAdded()
-			-- Wait a brief moment for the character to fully load
-			wait()
-			refreshPlayerGearAndHair() -- Refresh hair and worn gear
+			wait()  -- Brief delay to ensure character is fully loaded
+			refreshCharacterItems()  -- Refresh items after respawn
 		end
 	
-		-- Connect the function to the CharacterAdded event
+		-- Connect to CharacterAdded event to run the script upon respawn
 		player.CharacterAdded:Connect(onCharacterAdded)
 	
 		-- Call the function when the script is first run, if the character already exists
 		if player.Character then
-			onCharacterAdded() -- Refresh immediately if the character is already loaded
+			onCharacterAdded()  -- Refresh immediately if the character is already loaded
 		end
 	
 	end
@@ -481,8 +466,8 @@ local function RJIL_fake_script() -- antipick.aap
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(RJIL_fake_script)()
-local function RNHGK_fake_script() -- antipick.ap 
+coroutine.wrap(RBETGUL_fake_script)()
+local function VZJAUAK_fake_script() -- antipick.ap 
 	local script = Instance.new('Script', antipick)
 
 	function Click(mouse)
@@ -551,8 +536,8 @@ local function RNHGK_fake_script() -- antipick.ap
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(RNHGK_fake_script)()
-local function QAGAO_fake_script() -- antipick.mb 
+coroutine.wrap(VZJAUAK_fake_script)()
+local function GCWGH_fake_script() -- antipick.mb 
 	local script = Instance.new('Script', antipick)
 
 	function Click(mouse)
@@ -591,8 +576,60 @@ local function QAGAO_fake_script() -- antipick.mb
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QAGAO_fake_script)()
-local function OJYBUV_fake_script() -- antiragdoll.anti dmg 
+coroutine.wrap(GCWGH_fake_script)()
+local function FQTXXO_fake_script() -- antipick.anchor upon respawn 
+	local script = Instance.new('Script', antipick)
+
+	function Click(mouse)
+	
+		local Players = game:GetService("Players")
+		local player = Players.LocalPlayer
+	
+		-- Function to anchor all body parts for 0.8 seconds
+		local function anchorBodyForTime()
+			local character = player.Character or player.CharacterAdded:Wait()
+	
+			-- Ensure the character's Humanoid is fully loaded
+			character:WaitForChild("Humanoid")
+	
+			-- Anchor all the body parts
+			for _, part in pairs(character:GetChildren()) do
+				if part:IsA("BasePart") then
+					part.Anchored = true -- Anchor the body part
+				end
+			end
+	
+			-- Wait for 0.8 seconds
+			wait(1)
+	
+			-- Un-anchor the body parts
+			for _, part in pairs(character:GetChildren()) do
+				if part:IsA("BasePart") then
+					part.Anchored = false -- Un-anchor the body part
+				end
+			end
+		end
+	
+		-- Function to handle character respawn
+		local function onCharacterAdded()
+			wait() -- Small delay to ensure character is fully loaded
+			anchorBodyForTime() -- Anchor the body for 0.8 seconds after respawn
+		end
+	
+		-- Connect the CharacterAdded event to run the function upon respawn
+		player.CharacterAdded:Connect(onCharacterAdded)
+	
+		-- Initialize when the script is first run, if the character already exists
+		if player.Character then
+			onCharacterAdded() -- Anchor the body if the character is already loaded
+		end
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FQTXXO_fake_script)()
+local function HUCHU_fake_script() -- antiragdoll.anti dmg 
 	local script = Instance.new('Script', antiragdoll)
 
 	function Click(mouse)
@@ -604,8 +641,8 @@ local function OJYBUV_fake_script() -- antiragdoll.anti dmg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(OJYBUV_fake_script)()
-local function LNIH_fake_script() -- antiragdoll.antigetpicked 
+coroutine.wrap(HUCHU_fake_script)()
+local function ILXESP_fake_script() -- antiragdoll.antigetpicked 
 	local script = Instance.new('Script', antiragdoll)
 
 	function Click(mouse)
@@ -616,8 +653,8 @@ local function LNIH_fake_script() -- antiragdoll.antigetpicked
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(LNIH_fake_script)()
-local function BTVQDN_fake_script() -- antiragdoll.antirag 
+coroutine.wrap(ILXESP_fake_script)()
+local function YSKSC_fake_script() -- antiragdoll.antirag 
 	local script = Instance.new('Script', antiragdoll)
 
 	function Click(mouse)
@@ -629,8 +666,8 @@ local function BTVQDN_fake_script() -- antiragdoll.antirag
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(BTVQDN_fake_script)()
-local function QLWX_fake_script() -- antiragdoll.anti dmg 
+coroutine.wrap(YSKSC_fake_script)()
+local function WTRYID_fake_script() -- antiragdoll.anti dmg 
 	local script = Instance.new('Script', antiragdoll)
 
 	function Click(mouse)
@@ -642,8 +679,8 @@ local function QLWX_fake_script() -- antiragdoll.anti dmg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QLWX_fake_script)()
-local function DIUF_fake_script() -- antiragdoll.fire et up 
+coroutine.wrap(WTRYID_fake_script)()
+local function JAJZWR_fake_script() -- antiragdoll.fire et up 
 	local script = Instance.new('Script', antiragdoll)
 
 	function Click(mouse)
@@ -660,8 +697,8 @@ local function DIUF_fake_script() -- antiragdoll.fire et up
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(DIUF_fake_script)()
-local function FGPVMR_fake_script() -- antiragdoll.anti ragdoll event 
+coroutine.wrap(JAJZWR_fake_script)()
+local function BBRS_fake_script() -- antiragdoll.anti ragdoll event 
 	local script = Instance.new('Script', antiragdoll)
 
 	function Click(mouse)
@@ -673,8 +710,8 @@ local function FGPVMR_fake_script() -- antiragdoll.anti ragdoll event
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(FGPVMR_fake_script)()
-local function MQXC_fake_script() -- freezewholebody.right lower arm 
+coroutine.wrap(BBRS_fake_script)()
+local function FFFPZQW_fake_script() -- freezewholebody.right lower arm 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -686,8 +723,8 @@ local function MQXC_fake_script() -- freezewholebody.right lower arm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(MQXC_fake_script)()
-local function SVDEBH_fake_script() -- freezewholebody.right upper 
+coroutine.wrap(FFFPZQW_fake_script)()
+local function JUMGW_fake_script() -- freezewholebody.right upper 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -699,8 +736,8 @@ local function SVDEBH_fake_script() -- freezewholebody.right upper
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(SVDEBH_fake_script)()
-local function OORNSZ_fake_script() -- freezewholebody.root 
+coroutine.wrap(JUMGW_fake_script)()
+local function EZQOP_fake_script() -- freezewholebody.root 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -712,8 +749,8 @@ local function OORNSZ_fake_script() -- freezewholebody.root
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(OORNSZ_fake_script)()
-local function YYQIK_fake_script() -- freezewholebody.anchor right hand 
+coroutine.wrap(EZQOP_fake_script)()
+local function QPDKVL_fake_script() -- freezewholebody.anchor right hand 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -725,8 +762,8 @@ local function YYQIK_fake_script() -- freezewholebody.anchor right hand
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YYQIK_fake_script)()
-local function BLHVX_fake_script() -- freezewholebody.left hand 
+coroutine.wrap(QPDKVL_fake_script)()
+local function YOACDGO_fake_script() -- freezewholebody.left hand 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -738,8 +775,8 @@ local function BLHVX_fake_script() -- freezewholebody.left hand
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(BLHVX_fake_script)()
-local function WCRXERY_fake_script() -- freezewholebody.left upper arm 
+coroutine.wrap(YOACDGO_fake_script)()
+local function CNCKQ_fake_script() -- freezewholebody.left upper arm 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -751,8 +788,8 @@ local function WCRXERY_fake_script() -- freezewholebody.left upper arm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(WCRXERY_fake_script)()
-local function GOCZS_fake_script() -- freezewholebody.left lower arm 
+coroutine.wrap(CNCKQ_fake_script)()
+local function YQXEXB_fake_script() -- freezewholebody.left lower arm 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -764,8 +801,8 @@ local function GOCZS_fake_script() -- freezewholebody.left lower arm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(GOCZS_fake_script)()
-local function JNZY_fake_script() -- freezewholebody.lowertorso 
+coroutine.wrap(YQXEXB_fake_script)()
+local function EYRHK_fake_script() -- freezewholebody.lowertorso 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -777,8 +814,8 @@ local function JNZY_fake_script() -- freezewholebody.lowertorso
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(JNZY_fake_script)()
-local function CVTSKC_fake_script() -- freezewholebody.leftlowerleg 
+coroutine.wrap(EYRHK_fake_script)()
+local function ZLMD_fake_script() -- freezewholebody.leftlowerleg 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -790,8 +827,8 @@ local function CVTSKC_fake_script() -- freezewholebody.leftlowerleg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(CVTSKC_fake_script)()
-local function JWPKAXS_fake_script() -- freezewholebody.leftupperleg 
+coroutine.wrap(ZLMD_fake_script)()
+local function PMYD_fake_script() -- freezewholebody.leftupperleg 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -803,8 +840,8 @@ local function JWPKAXS_fake_script() -- freezewholebody.leftupperleg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(JWPKAXS_fake_script)()
-local function YBMXVJ_fake_script() -- freezewholebody.leftfoot 
+coroutine.wrap(PMYD_fake_script)()
+local function GIYYW_fake_script() -- freezewholebody.leftfoot 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -816,8 +853,8 @@ local function YBMXVJ_fake_script() -- freezewholebody.leftfoot
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YBMXVJ_fake_script)()
-local function FQLVKGO_fake_script() -- freezewholebody.right upperleg 
+coroutine.wrap(GIYYW_fake_script)()
+local function BYMWYV_fake_script() -- freezewholebody.right upperleg 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -829,8 +866,8 @@ local function FQLVKGO_fake_script() -- freezewholebody.right upperleg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(FQLVKGO_fake_script)()
-local function YQJHJ_fake_script() -- freezewholebody.right foot 
+coroutine.wrap(BYMWYV_fake_script)()
+local function MCJWXQ_fake_script() -- freezewholebody.right foot 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -842,8 +879,8 @@ local function YQJHJ_fake_script() -- freezewholebody.right foot
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YQJHJ_fake_script)()
-local function HNBG_fake_script() -- freezewholebody.uppertorso 
+coroutine.wrap(MCJWXQ_fake_script)()
+local function YHURS_fake_script() -- freezewholebody.uppertorso 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -855,8 +892,8 @@ local function HNBG_fake_script() -- freezewholebody.uppertorso
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(HNBG_fake_script)()
-local function QCZOLC_fake_script() -- freezewholebody.head 
+coroutine.wrap(YHURS_fake_script)()
+local function EEKR_fake_script() -- freezewholebody.head 
 	local script = Instance.new('Script', freezewholebody)
 
 	function Click(mouse)
@@ -868,8 +905,8 @@ local function QCZOLC_fake_script() -- freezewholebody.head
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QCZOLC_fake_script)()
-local function MWKTRQS_fake_script() -- freezebody.anchor right hand 
+coroutine.wrap(EEKR_fake_script)()
+local function JBZE_fake_script() -- freezebody.anchor right hand 
 	local script = Instance.new('Script', freezebody)
 
 	function Click(mouse)
@@ -881,8 +918,8 @@ local function MWKTRQS_fake_script() -- freezebody.anchor right hand
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(MWKTRQS_fake_script)()
-local function ODSMG_fake_script() -- freezebody.right lower arm 
+coroutine.wrap(JBZE_fake_script)()
+local function COZDXFB_fake_script() -- freezebody.right lower arm 
 	local script = Instance.new('Script', freezebody)
 
 	function Click(mouse)
@@ -894,8 +931,8 @@ local function ODSMG_fake_script() -- freezebody.right lower arm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(ODSMG_fake_script)()
-local function NADUY_fake_script() -- freezebody.right upper 
+coroutine.wrap(COZDXFB_fake_script)()
+local function VBBTSRG_fake_script() -- freezebody.right upper 
 	local script = Instance.new('Script', freezebody)
 
 	function Click(mouse)
@@ -907,8 +944,8 @@ local function NADUY_fake_script() -- freezebody.right upper
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(NADUY_fake_script)()
-local function YJCVA_fake_script() -- freezebody.root 
+coroutine.wrap(VBBTSRG_fake_script)()
+local function RGMNMAF_fake_script() -- freezebody.root 
 	local script = Instance.new('Script', freezebody)
 
 	function Click(mouse)
@@ -920,8 +957,8 @@ local function YJCVA_fake_script() -- freezebody.root
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YJCVA_fake_script)()
-local function GQRFB_fake_script() -- unfreeze.head 
+coroutine.wrap(RGMNMAF_fake_script)()
+local function UWRBM_fake_script() -- unfreeze.head 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -933,8 +970,8 @@ local function GQRFB_fake_script() -- unfreeze.head
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(GQRFB_fake_script)()
-local function XCCJ_fake_script() -- unfreeze.left hand 
+coroutine.wrap(UWRBM_fake_script)()
+local function EWEPVWY_fake_script() -- unfreeze.left hand 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -946,8 +983,8 @@ local function XCCJ_fake_script() -- unfreeze.left hand
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(XCCJ_fake_script)()
-local function NBNAA_fake_script() -- unfreeze.left lower arm 
+coroutine.wrap(EWEPVWY_fake_script)()
+local function OTGQQDD_fake_script() -- unfreeze.left lower arm 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -959,8 +996,8 @@ local function NBNAA_fake_script() -- unfreeze.left lower arm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(NBNAA_fake_script)()
-local function WRHLB_fake_script() -- unfreeze.left upper arm 
+coroutine.wrap(OTGQQDD_fake_script)()
+local function VGPUR_fake_script() -- unfreeze.left upper arm 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -972,8 +1009,8 @@ local function WRHLB_fake_script() -- unfreeze.left upper arm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(WRHLB_fake_script)()
-local function QPJWSUB_fake_script() -- unfreeze.leftfoot 
+coroutine.wrap(VGPUR_fake_script)()
+local function GKZPP_fake_script() -- unfreeze.leftfoot 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -985,8 +1022,8 @@ local function QPJWSUB_fake_script() -- unfreeze.leftfoot
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QPJWSUB_fake_script)()
-local function KCHIK_fake_script() -- unfreeze.leftlowerleg 
+coroutine.wrap(GKZPP_fake_script)()
+local function VTRQIH_fake_script() -- unfreeze.leftlowerleg 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -998,8 +1035,8 @@ local function KCHIK_fake_script() -- unfreeze.leftlowerleg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(KCHIK_fake_script)()
-local function RANGLG_fake_script() -- unfreeze.leftupperleg 
+coroutine.wrap(VTRQIH_fake_script)()
+local function DZMZIY_fake_script() -- unfreeze.leftupperleg 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -1011,8 +1048,8 @@ local function RANGLG_fake_script() -- unfreeze.leftupperleg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(RANGLG_fake_script)()
-local function XXOY_fake_script() -- unfreeze.lowertorso 
+coroutine.wrap(DZMZIY_fake_script)()
+local function UYPW_fake_script() -- unfreeze.lowertorso 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -1024,8 +1061,8 @@ local function XXOY_fake_script() -- unfreeze.lowertorso
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(XXOY_fake_script)()
-local function IYZJ_fake_script() -- unfreeze.right foot 
+coroutine.wrap(UYPW_fake_script)()
+local function TBIGSEA_fake_script() -- unfreeze.right foot 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -1037,8 +1074,8 @@ local function IYZJ_fake_script() -- unfreeze.right foot
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(IYZJ_fake_script)()
-local function WKLDEBL_fake_script() -- unfreeze.right lower arm 
+coroutine.wrap(TBIGSEA_fake_script)()
+local function EJYL_fake_script() -- unfreeze.right lower arm 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -1050,8 +1087,8 @@ local function WKLDEBL_fake_script() -- unfreeze.right lower arm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(WKLDEBL_fake_script)()
-local function SPSUDU_fake_script() -- unfreeze.right upper 
+coroutine.wrap(EJYL_fake_script)()
+local function VSMY_fake_script() -- unfreeze.right upper 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -1063,8 +1100,8 @@ local function SPSUDU_fake_script() -- unfreeze.right upper
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(SPSUDU_fake_script)()
-local function HBFMHV_fake_script() -- unfreeze.right upperleg 
+coroutine.wrap(VSMY_fake_script)()
+local function TWDSO_fake_script() -- unfreeze.right upperleg 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -1076,8 +1113,8 @@ local function HBFMHV_fake_script() -- unfreeze.right upperleg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(HBFMHV_fake_script)()
-local function OOUI_fake_script() -- unfreeze.root 
+coroutine.wrap(TWDSO_fake_script)()
+local function HJBOKL_fake_script() -- unfreeze.root 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -1089,8 +1126,8 @@ local function OOUI_fake_script() -- unfreeze.root
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(OOUI_fake_script)()
-local function FMIETHD_fake_script() -- unfreeze.uppertorso 
+coroutine.wrap(HJBOKL_fake_script)()
+local function RDCKHM_fake_script() -- unfreeze.uppertorso 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -1102,8 +1139,8 @@ local function FMIETHD_fake_script() -- unfreeze.uppertorso
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(FMIETHD_fake_script)()
-local function YAHV_fake_script() -- unfreeze.anchor right hand 
+coroutine.wrap(RDCKHM_fake_script)()
+local function CVUXXNS_fake_script() -- unfreeze.anchor right hand 
 	local script = Instance.new('Script', unfreeze)
 
 	function Click(mouse)
@@ -1115,8 +1152,8 @@ local function YAHV_fake_script() -- unfreeze.anchor right hand
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YAHV_fake_script)()
-local function GJCJKKZ_fake_script() -- TextLabel.LocalScript 
+coroutine.wrap(CVUXXNS_fake_script)()
+local function PCNTHZA_fake_script() -- TextLabel.LocalScript 
 	local script = Instance.new('LocalScript', TextLabel)
 
 	local dragger = {}; 
@@ -1163,8 +1200,8 @@ local function GJCJKKZ_fake_script() -- TextLabel.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(GJCJKKZ_fake_script)()
-local function YUUZMG_fake_script() -- close.dragger 
+coroutine.wrap(PCNTHZA_fake_script)()
+local function FKXYP_fake_script() -- close.dragger 
 	local script = Instance.new('LocalScript', close)
 
 	local dragger = {}; 
@@ -1211,8 +1248,8 @@ local function YUUZMG_fake_script() -- close.dragger
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(YUUZMG_fake_script)()
-local function FGZO_fake_script() -- close.LocalScript 
+coroutine.wrap(FKXYP_fake_script)()
+local function CQKFXJA_fake_script() -- close.LocalScript 
 	local script = Instance.new('LocalScript', close)
 
 	local back = script.Parent.Parent.TextLabel
@@ -1225,8 +1262,8 @@ local function FGZO_fake_script() -- close.LocalScript
 	}
 	script.Parent.MouseButton1Click:connect(function()
 		window.closed = not window.closed
-		script.Parent.Text = (window.closed and "+" or "-")
-		if script.Parent.Text == "+" then
+		script.Parent.Text = (window.closed and "open" or "close")
+		if script.Parent.Text == "open" then
 			back:TweenSize(UDim2.new(0, 190,0, 0), "Out", "Sine", 0.5)
 			con:TweenSize(UDim2.new(0, 190,0, 0), "Out", "Sine", 0.5)
 			wait(0.1) do
@@ -1242,4 +1279,4 @@ local function FGZO_fake_script() -- close.LocalScript
 	
 	end)
 end
-coroutine.wrap(FGZO_fake_script)()
+coroutine.wrap(CQKFXJA_fake_script)()
