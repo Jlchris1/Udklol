@@ -20,6 +20,8 @@ local hyperloop1 = Instance.new("TextButton")
 local severeanti = Instance.new("TextButton")
 local armanlegui = Instance.new("TextButton")
 local anvilkillall = Instance.new("TextButton")
+local dmgsfxspamall = Instance.new("TextButton")
+local stopspamsfxall = Instance.new("TextButton")
 local toggle = Instance.new("TextButton")
 
 --Properties:
@@ -36,7 +38,8 @@ mainframe.BackgroundColor3 = Color3.fromRGB(0, 85, 255)
 mainframe.BorderColor3 = Color3.fromRGB(0, 0, 0)
 mainframe.BorderSizePixel = 0
 mainframe.Position = UDim2.new(0.647574127, 0, 0.276063085, 0)
-mainframe.Size = UDim2.new(0, 249, 0, 218)
+mainframe.Size = UDim2.new(0, 200, 0, 218)
+mainframe.CanvasPosition = Vector2.new(0, 1800)
 mainframe.CanvasSize = UDim2.new(0, 0, 4, 0)
 
 coolpicktool.Name = "cool pick tool"
@@ -44,8 +47,7 @@ coolpicktool.Parent = mainframe
 coolpicktool.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 coolpicktool.BorderColor3 = Color3.fromRGB(0, 0, 0)
 coolpicktool.BorderSizePixel = 0
-coolpicktool.Position = UDim2.new(0.00161534816, 0, 0, 0)
-coolpicktool.Size = UDim2.new(0, 238, 0, 50)
+coolpicktool.Size = UDim2.new(0, 200, 0, 50)
 coolpicktool.Font = Enum.Font.SourceSansBold
 coolpicktool.Text = "get cool auopick tool (inf range)"
 coolpicktool.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -56,8 +58,8 @@ dmgsoundspammer.Parent = mainframe
 dmgsoundspammer.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 dmgsoundspammer.BorderColor3 = Color3.fromRGB(0, 0, 0)
 dmgsoundspammer.BorderSizePixel = 0
-dmgsoundspammer.Position = UDim2.new(-0.0160642564, 0, 0.304180741, 0)
-dmgsoundspammer.Size = UDim2.new(0, 249, 0, 50)
+dmgsoundspammer.Position = UDim2.new(0, 0, 0.25, 0)
+dmgsoundspammer.Size = UDim2.new(0, 200, 0, 50)
 dmgsoundspammer.Font = Enum.Font.SourceSansBold
 dmgsoundspammer.Text = "spam dmg sounds"
 dmgsoundspammer.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -68,8 +70,8 @@ floatpt2.Parent = mainframe
 floatpt2.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 floatpt2.BorderColor3 = Color3.fromRGB(0, 0, 0)
 floatpt2.BorderSizePixel = 0
-floatpt2.Position = UDim2.new(-0.0522088371, 0, 0.518074274, 0)
-floatpt2.Size = UDim2.new(0, 238, 0, 50)
+floatpt2.Position = UDim2.new(0, 0, 0.349999994, 0)
+floatpt2.Size = UDim2.new(0, 200, 0, 50)
 floatpt2.Font = Enum.Font.SourceSansBold
 floatpt2.Text = "v1 pt 2"
 floatpt2.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -80,8 +82,8 @@ floatpt3.Parent = mainframe
 floatpt3.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 floatpt3.BorderColor3 = Color3.fromRGB(0, 0, 0)
 floatpt3.BorderSizePixel = 0
-floatpt3.Position = UDim2.new(-0.00240071607, 0, 0.201490209, 0)
-floatpt3.Size = UDim2.new(0, 237, 0, 50)
+floatpt3.Position = UDim2.new(0, 0, 0.600000024, 0)
+floatpt3.Size = UDim2.new(0, 200, 0, 50)
 floatpt3.Font = Enum.Font.SourceSansBold
 floatpt3.Text = "v1 pt 3"
 floatpt3.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -92,8 +94,8 @@ chrisgui.Parent = mainframe
 chrisgui.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 chrisgui.BorderColor3 = Color3.fromRGB(0, 0, 0)
 chrisgui.BorderSizePixel = 0
-chrisgui.Position = UDim2.new(-0.0281124506, 0, 0.128267765, 0)
-chrisgui.Size = UDim2.new(0, 238, 0, 50)
+chrisgui.Position = UDim2.new(0, 0, 0.150000006, 0)
+chrisgui.Size = UDim2.new(0, 200, 0, 50)
 chrisgui.Font = Enum.Font.SourceSansBold
 chrisgui.Text = "chris gui"
 chrisgui.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -104,8 +106,8 @@ instantkillv3.Parent = mainframe
 instantkillv3.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 instantkillv3.BorderColor3 = Color3.fromRGB(0, 0, 0)
 instantkillv3.BorderSizePixel = 0
-instantkillv3.Position = UDim2.new(-0.0240963846, 0, 0.462628573, 0)
-instantkillv3.Size = UDim2.new(0, 236, 0, 49)
+instantkillv3.Position = UDim2.new(0, 0, 0.649999976, 0)
+instantkillv3.Size = UDim2.new(0, 200, 0, 49)
 instantkillv3.Font = Enum.Font.SourceSansBold
 instantkillv3.Text = "v3 pt2"
 instantkillv3.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -116,8 +118,8 @@ trappick.Parent = mainframe
 trappick.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 trappick.BorderColor3 = Color3.fromRGB(0, 0, 0)
 trappick.BorderSizePixel = 0
-trappick.Position = UDim2.new(-0.00205999776, 0, 0.355446637, 0)
-trappick.Size = UDim2.new(0, 238, 0, 50)
+trappick.Position = UDim2.new(0, 0, 0.550000012, 0)
+trappick.Size = UDim2.new(0, 200, 0, 50)
 trappick.Font = Enum.Font.SourceSansBold
 trappick.Text = "loop pick/trap (respawnifbroken)"
 trappick.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -128,8 +130,8 @@ turnoffspamsound.Parent = mainframe
 turnoffspamsound.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 turnoffspamsound.BorderColor3 = Color3.fromRGB(0, 0, 0)
 turnoffspamsound.BorderSizePixel = 0
-turnoffspamsound.Position = UDim2.new(-0.0234551486, 0, 0.249512285, 0)
-turnoffspamsound.Size = UDim2.new(0, 239, 0, 52)
+turnoffspamsound.Position = UDim2.new(0, 0, 0.300000012, 0)
+turnoffspamsound.Size = UDim2.new(0, 200, 0, 50)
 turnoffspamsound.Font = Enum.Font.SourceSansBold
 turnoffspamsound.Text = "turn off spam sounds"
 turnoffspamsound.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -140,8 +142,8 @@ v1.Parent = mainframe
 v1.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 v1.BorderColor3 = Color3.fromRGB(0, 0, 0)
 v1.BorderSizePixel = 0
-v1.Position = UDim2.new(0.00401606411, 0, 0.562265933, 0)
-v1.Size = UDim2.new(0, 238, 0, 50)
+v1.Position = UDim2.new(0, 0, 0.400000006, 0)
+v1.Size = UDim2.new(0, 200, 0, 50)
 v1.Font = Enum.Font.SourceSansBold
 v1.Text = "v1 loop"
 v1.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -152,8 +154,8 @@ v3loop.Parent = mainframe
 v3loop.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 v3loop.BorderColor3 = Color3.fromRGB(0, 0, 0)
 v3loop.BorderSizePixel = 0
-v3loop.Position = UDim2.new(-0.0120481923, 0, 0.61705029, 0)
-v3loop.Size = UDim2.new(0, 237, 0, 49)
+v3loop.Position = UDim2.new(-0, 0, 0.449999988, 0)
+v3loop.Size = UDim2.new(0, 200, 0, 50)
 v3loop.Font = Enum.Font.SourceSansBold
 v3loop.Text = "v3"
 v3loop.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -164,8 +166,8 @@ instakillv3.Parent = mainframe
 instakillv3.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 instakillv3.BorderColor3 = Color3.fromRGB(0, 0, 0)
 instakillv3.BorderSizePixel = 0
-instakillv3.Position = UDim2.new(0, 0, 0.415908664, 0)
-instakillv3.Size = UDim2.new(0, 238, 0, 50)
+instakillv3.Position = UDim2.new(0, 0, 0.200000003, 0)
+instakillv3.Size = UDim2.new(0, 200, 0, 50)
 instakillv3.Font = Enum.Font.SourceSansBold
 instakillv3.Text = "insta kill v3"
 instakillv3.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -176,8 +178,8 @@ hyperloop1.Parent = mainframe
 hyperloop1.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 hyperloop1.BorderColor3 = Color3.fromRGB(0, 0, 0)
 hyperloop1.BorderSizePixel = 0
-hyperloop1.Position = UDim2.new(0, 0, 0.676104903, 0)
-hyperloop1.Size = UDim2.new(0, 234, 0, 50)
+hyperloop1.Position = UDim2.new(0, 0, 0.5, 0)
+hyperloop1.Size = UDim2.new(0, 200, 0, 50)
 hyperloop1.Font = Enum.Font.SourceSansBold
 hyperloop1.Text = "hyper loop buttons"
 hyperloop1.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -188,8 +190,8 @@ severeanti.Parent = mainframe
 severeanti.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 severeanti.BorderColor3 = Color3.fromRGB(0, 0, 0)
 severeanti.BorderSizePixel = 0
-severeanti.Position = UDim2.new(-0.0240963846, 0, 0.0485327467, 0)
-severeanti.Size = UDim2.new(0, 248, 0, 50)
+severeanti.Position = UDim2.new(0, 0, 0.0500000007, 0)
+severeanti.Size = UDim2.new(0, 200, 0, 50)
 severeanti.Font = Enum.Font.SourceSansBold
 severeanti.Text = "Launch anti gui"
 severeanti.TextColor3 = Color3.fromRGB(255, 255, 0)
@@ -200,24 +202,48 @@ armanlegui.Parent = mainframe
 armanlegui.BackgroundColor3 = Color3.fromRGB(255, 85, 255)
 armanlegui.BorderColor3 = Color3.fromRGB(0, 0, 0)
 armanlegui.BorderSizePixel = 0
-armanlegui.Position = UDim2.new(0.00401606411, 0, 0.0894772559, 0)
-armanlegui.Size = UDim2.new(0, 232, 0, 50)
-armanlegui.Font = Enum.Font.SourceSans
+armanlegui.Position = UDim2.new(0, 0, 0.100000001, 0)
+armanlegui.Size = UDim2.new(0, 200, 0, 50)
+armanlegui.Font = Enum.Font.SourceSansBold
 armanlegui.Text = "arm angle positions gui"
 armanlegui.TextColor3 = Color3.fromRGB(0, 0, 0)
-armanlegui.TextSize = 14.000
+armanlegui.TextSize = 23.000
 
 anvilkillall.Name = "anvil kill all"
 anvilkillall.Parent = mainframe
 anvilkillall.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 anvilkillall.BorderColor3 = Color3.fromRGB(0, 0, 0)
 anvilkillall.BorderSizePixel = 0
-anvilkillall.Position = UDim2.new(0.00401606411, 0, 0.768873274, 0)
-anvilkillall.Size = UDim2.new(0, 250, 0, 50)
+anvilkillall.Position = UDim2.new(0, 0, 0.699999988, 0)
+anvilkillall.Size = UDim2.new(0, 200, 0, 50)
 anvilkillall.Font = Enum.Font.SourceSansBold
 anvilkillall.Text = "anvil kill all"
 anvilkillall.TextColor3 = Color3.fromRGB(0, 0, 0)
-anvilkillall.TextSize = 50.000
+anvilkillall.TextSize = 38.000
+
+dmgsfxspamall.Name = "dmg sfx spam all"
+dmgsfxspamall.Parent = mainframe
+dmgsfxspamall.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+dmgsfxspamall.BorderColor3 = Color3.fromRGB(0, 0, 0)
+dmgsfxspamall.BorderSizePixel = 0
+dmgsfxspamall.Position = UDim2.new(0, 0, 0.75, 0)
+dmgsfxspamall.Size = UDim2.new(0, 200, 0, 50)
+dmgsfxspamall.Font = Enum.Font.SourceSansBold
+dmgsfxspamall.Text = "dmg spam sound all"
+dmgsfxspamall.TextColor3 = Color3.fromRGB(0, 0, 0)
+dmgsfxspamall.TextSize = 24.000
+
+stopspamsfxall.Name = "stop spam sfx all"
+stopspamsfxall.Parent = mainframe
+stopspamsfxall.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+stopspamsfxall.BorderColor3 = Color3.fromRGB(0, 0, 0)
+stopspamsfxall.BorderSizePixel = 0
+stopspamsfxall.Position = UDim2.new(0, 0, 0.800000012, 0)
+stopspamsfxall.Size = UDim2.new(0, 200, 0, 50)
+stopspamsfxall.Font = Enum.Font.SourceSansBold
+stopspamsfxall.Text = "stop sfx spam all"
+stopspamsfxall.TextColor3 = Color3.fromRGB(0, 0, 0)
+stopspamsfxall.TextSize = 26.000
 
 toggle.Name = "toggle"
 toggle.Parent = maingui
@@ -233,7 +259,7 @@ toggle.TextSize = 30.000
 
 -- Scripts:
 
-local function NTTAF_fake_script() -- coolpicktool.Script 
+local function ARWIV_fake_script() -- coolpicktool.Script 
 	local script = Instance.new('Script', coolpicktool)
 
 	function Click(mouse)
@@ -272,8 +298,8 @@ local function NTTAF_fake_script() -- coolpicktool.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(NTTAF_fake_script)()
-local function IYYMXAP_fake_script() -- dmgsoundspammer.Script 
+coroutine.wrap(ARWIV_fake_script)()
+local function CBQBGN_fake_script() -- dmgsoundspammer.Script 
 	local script = Instance.new('Script', dmgsoundspammer)
 
 	function Click(mouse)
@@ -290,8 +316,8 @@ local function IYYMXAP_fake_script() -- dmgsoundspammer.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(IYYMXAP_fake_script)()
-local function YMUM_fake_script() -- floatpt2.Script 
+coroutine.wrap(CBQBGN_fake_script)()
+local function NGUR_fake_script() -- floatpt2.Script 
 	local script = Instance.new('Script', floatpt2)
 
 	function Click(mouse)
@@ -454,8 +480,8 @@ local function YMUM_fake_script() -- floatpt2.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YMUM_fake_script)()
-local function WFNRNRY_fake_script() -- floatpt3.F-real7 
+coroutine.wrap(NGUR_fake_script)()
+local function AUEE_fake_script() -- floatpt3.F-real7 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -618,8 +644,8 @@ local function WFNRNRY_fake_script() -- floatpt3.F-real7
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(WFNRNRY_fake_script)()
-local function QAQERQ_fake_script() -- floatpt3.F-real5 
+coroutine.wrap(AUEE_fake_script)()
+local function VYGX_fake_script() -- floatpt3.F-real5 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -782,8 +808,8 @@ local function QAQERQ_fake_script() -- floatpt3.F-real5
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QAQERQ_fake_script)()
-local function OVYUX_fake_script() -- floatpt3.F-real6 
+coroutine.wrap(VYGX_fake_script)()
+local function QBOX_fake_script() -- floatpt3.F-real6 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -946,8 +972,8 @@ local function OVYUX_fake_script() -- floatpt3.F-real6
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(OVYUX_fake_script)()
-local function YFAHUDY_fake_script() -- floatpt3.F-real4 
+coroutine.wrap(QBOX_fake_script)()
+local function MXSR_fake_script() -- floatpt3.F-real4 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -1110,8 +1136,8 @@ local function YFAHUDY_fake_script() -- floatpt3.F-real4
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YFAHUDY_fake_script)()
-local function ACAYEDA_fake_script() -- floatpt3.F-real1 
+coroutine.wrap(MXSR_fake_script)()
+local function FJTJY_fake_script() -- floatpt3.F-real1 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -1274,8 +1300,8 @@ local function ACAYEDA_fake_script() -- floatpt3.F-real1
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(ACAYEDA_fake_script)()
-local function OSSV_fake_script() -- floatpt3.F-real2 
+coroutine.wrap(FJTJY_fake_script)()
+local function HWKBWO_fake_script() -- floatpt3.F-real2 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -1438,8 +1464,8 @@ local function OSSV_fake_script() -- floatpt3.F-real2
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(OSSV_fake_script)()
-local function SNOUV_fake_script() -- floatpt3.F-real3 
+coroutine.wrap(HWKBWO_fake_script)()
+local function EVCXN_fake_script() -- floatpt3.F-real3 
 	local script = Instance.new('Script', floatpt3)
 
 	function Click(mouse)
@@ -1602,8 +1628,8 @@ local function SNOUV_fake_script() -- floatpt3.F-real3
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(SNOUV_fake_script)()
-local function GSDFFD_fake_script() -- chrisgui.Script 
+coroutine.wrap(EVCXN_fake_script)()
+local function SWIBZ_fake_script() -- chrisgui.Script 
 	local script = Instance.new('Script', chrisgui)
 
 	function Click(mouse)
@@ -1615,8 +1641,8 @@ local function GSDFFD_fake_script() -- chrisgui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(GSDFFD_fake_script)()
-local function AMONT_fake_script() -- instantkillv3.Script 
+coroutine.wrap(SWIBZ_fake_script)()
+local function DPAUUFX_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -1865,8 +1891,8 @@ local function AMONT_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(AMONT_fake_script)()
-local function TYDQTQ_fake_script() -- instantkillv3.Script 
+coroutine.wrap(DPAUUFX_fake_script)()
+local function TNMVMG_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -2115,8 +2141,8 @@ local function TYDQTQ_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(TYDQTQ_fake_script)()
-local function FIFVJD_fake_script() -- instantkillv3.Script 
+coroutine.wrap(TNMVMG_fake_script)()
+local function LMRDH_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -2365,8 +2391,8 @@ local function FIFVJD_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(FIFVJD_fake_script)()
-local function RVCSEV_fake_script() -- instantkillv3.Script 
+coroutine.wrap(LMRDH_fake_script)()
+local function XMFWF_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -2615,8 +2641,8 @@ local function RVCSEV_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(RVCSEV_fake_script)()
-local function HHJKY_fake_script() -- instantkillv3.Script 
+coroutine.wrap(XMFWF_fake_script)()
+local function NJDYCYR_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -2865,8 +2891,8 @@ local function HHJKY_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(HHJKY_fake_script)()
-local function PRQZL_fake_script() -- instantkillv3.Script 
+coroutine.wrap(NJDYCYR_fake_script)()
+local function NWUAA_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -3115,8 +3141,8 @@ local function PRQZL_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(PRQZL_fake_script)()
-local function HCLNBG_fake_script() -- instantkillv3.Script 
+coroutine.wrap(NWUAA_fake_script)()
+local function IXVID_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -3365,8 +3391,8 @@ local function HCLNBG_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(HCLNBG_fake_script)()
-local function IBZAOP_fake_script() -- instantkillv3.Script 
+coroutine.wrap(IXVID_fake_script)()
+local function COVL_fake_script() -- instantkillv3.Script 
 	local script = Instance.new('Script', instantkillv3)
 
 	function Click(mouse)
@@ -3615,8 +3641,8 @@ local function IBZAOP_fake_script() -- instantkillv3.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(IBZAOP_fake_script)()
-local function NOIUUW_fake_script() -- trappick.Script 
+coroutine.wrap(COVL_fake_script)()
+local function RROMD_fake_script() -- trappick.Script 
 	local script = Instance.new('Script', trappick)
 
 	function Click(mouse)
@@ -3628,8 +3654,8 @@ local function NOIUUW_fake_script() -- trappick.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(NOIUUW_fake_script)()
-local function DOIP_fake_script() -- turnoffspamsound.Script 
+coroutine.wrap(RROMD_fake_script)()
+local function GDXOG_fake_script() -- turnoffspamsound.Script 
 	local script = Instance.new('Script', turnoffspamsound)
 
 	function Click(mouse)
@@ -3642,8 +3668,8 @@ local function DOIP_fake_script() -- turnoffspamsound.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(DOIP_fake_script)()
-local function DNCYC_fake_script() -- v1.Script 
+coroutine.wrap(GDXOG_fake_script)()
+local function YAGVC_fake_script() -- v1.Script 
 	local script = Instance.new('Script', v1)
 
 	function Click(mouse)
@@ -3764,8 +3790,8 @@ local function DNCYC_fake_script() -- v1.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(DNCYC_fake_script)()
-local function YUZGSD_fake_script() -- v3loop.Script 
+coroutine.wrap(YAGVC_fake_script)()
+local function AIGV_fake_script() -- v3loop.Script 
 	local script = Instance.new('Script', v3loop)
 
 	function Click(mouse)
@@ -4014,8 +4040,8 @@ local function YUZGSD_fake_script() -- v3loop.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YUZGSD_fake_script)()
-local function SVTONZ_fake_script() -- instakillv3.torso 
+coroutine.wrap(AIGV_fake_script)()
+local function EFTHJU_fake_script() -- instakillv3.torso 
 	local script = Instance.new('Script', instakillv3)
 
 	function Click(mouse)
@@ -4265,8 +4291,8 @@ local function SVTONZ_fake_script() -- instakillv3.torso
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(SVTONZ_fake_script)()
-local function YOMUR_fake_script() -- instakillv3.rightarm 
+coroutine.wrap(EFTHJU_fake_script)()
+local function KKCJW_fake_script() -- instakillv3.rightarm 
 	local script = Instance.new('Script', instakillv3)
 
 	function Click(mouse)
@@ -4516,8 +4542,8 @@ local function YOMUR_fake_script() -- instakillv3.rightarm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YOMUR_fake_script)()
-local function CMVLAE_fake_script() -- instakillv3.leftarm 
+coroutine.wrap(KKCJW_fake_script)()
+local function OBKTNQW_fake_script() -- instakillv3.leftarm 
 	local script = Instance.new('Script', instakillv3)
 
 	function Click(mouse)
@@ -4767,8 +4793,8 @@ local function CMVLAE_fake_script() -- instakillv3.leftarm
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(CMVLAE_fake_script)()
-local function HFHILSB_fake_script() -- instakillv3.right leg 
+coroutine.wrap(OBKTNQW_fake_script)()
+local function WMBW_fake_script() -- instakillv3.right leg 
 	local script = Instance.new('Script', instakillv3)
 
 	function Click(mouse)
@@ -5018,8 +5044,8 @@ local function HFHILSB_fake_script() -- instakillv3.right leg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(HFHILSB_fake_script)()
-local function XYVFW_fake_script() -- instakillv3.head 
+coroutine.wrap(WMBW_fake_script)()
+local function KTSV_fake_script() -- instakillv3.head 
 	local script = Instance.new('Script', instakillv3)
 
 	function Click(mouse)
@@ -5269,8 +5295,8 @@ local function XYVFW_fake_script() -- instakillv3.head
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(XYVFW_fake_script)()
-local function AZJN_fake_script() -- instakillv3.leftleg 
+coroutine.wrap(KTSV_fake_script)()
+local function DXXQSC_fake_script() -- instakillv3.leftleg 
 	local script = Instance.new('Script', instakillv3)
 
 	function Click(mouse)
@@ -5520,8 +5546,8 @@ local function AZJN_fake_script() -- instakillv3.leftleg
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(AZJN_fake_script)()
-local function JRVD_fake_script() -- hyperloop1.script2 
+coroutine.wrap(DXXQSC_fake_script)()
+local function GGMP_fake_script() -- hyperloop1.script2 
 	local script = Instance.new('Script', hyperloop1)
 
 	function Click(mouse)
@@ -5533,8 +5559,8 @@ local function JRVD_fake_script() -- hyperloop1.script2
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(JRVD_fake_script)()
-local function GMOT_fake_script() -- hyperloop1.script1 
+coroutine.wrap(GGMP_fake_script)()
+local function AGXU_fake_script() -- hyperloop1.script1 
 	local script = Instance.new('Script', hyperloop1)
 
 	function Click(mouse)
@@ -5546,8 +5572,8 @@ local function GMOT_fake_script() -- hyperloop1.script1
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(GMOT_fake_script)()
-local function GUMPJ_fake_script() -- severeanti.Script 
+coroutine.wrap(AGXU_fake_script)()
+local function UDGGZUG_fake_script() -- severeanti.Script 
 	local script = Instance.new('Script', severeanti)
 
 	function Click(mouse)
@@ -5559,8 +5585,8 @@ local function GUMPJ_fake_script() -- severeanti.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(GUMPJ_fake_script)()
-local function EQOVC_fake_script() -- armanlegui.Script 
+coroutine.wrap(UDGGZUG_fake_script)()
+local function HWLSH_fake_script() -- armanlegui.Script 
 	local script = Instance.new('Script', armanlegui)
 
 	function Click(mouse)
@@ -5572,8 +5598,8 @@ local function EQOVC_fake_script() -- armanlegui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(EQOVC_fake_script)()
-local function TNWZWGG_fake_script() -- anvilkillall.Script 
+coroutine.wrap(HWLSH_fake_script)()
+local function XEUXY_fake_script() -- anvilkillall.Script 
 	local script = Instance.new('Script', anvilkillall)
 
 	function Click(mouse)
@@ -5588,38 +5614,36 @@ local function TNWZWGG_fake_script() -- anvilkillall.Script
 		local orbitSpeed = 0 -- Adjust for speed of orbit
 		local orbitHeight = 0 -- Height offset from the player
 		local anvilVelocityMagnitude = 10000 -- Speed of the anvils
-		local creationDelay = 0.5 -- Delay in seconds between anvil creations
+		local creationDelay = 0.9 -- Delay in seconds between anvil creations
+		local voidPosition = Vector3.new(0, -1000, 0) -- Position for the void (you can adjust this)
 	
-		-- Function to get a random player, prioritizing alive players
-		local function getRandomPlayer(excludedPlayer)
-			local validPlayers = {}
-			local deadPlayers = {}
+		-- Function to check if a player is on the whitelist (friends with the local player)
+		local function isPlayerWhitelisted(localPlayer, targetPlayer)
+			return localPlayer:IsFriendsWith(targetPlayer.UserId)
+		end
+	
+		-- Function to get a random non-friend (non-whitelisted) player
+		local function getRandomNonFriendPlayer(localPlayer)
+			local nonFriendPlayers = {}
 	
 			for _, player in pairs(Players:GetPlayers()) do
-				if player ~= excludedPlayer and player.Character then
+				if player ~= localPlayer and player.Character then
 					local humanoid = player.Character:FindFirstChild("Humanoid")
-					if humanoid then
-						if humanoid.Health > 0 then
-							table.insert(validPlayers, player) -- Alive players
-						else
-							table.insert(deadPlayers, player) -- Dead players
-						end
+					if humanoid and humanoid.Health > 0 and not isPlayerWhitelisted(localPlayer, player) then
+						table.insert(nonFriendPlayers, player) -- Only add players who are not friends and are alive
 					end
 				end
 			end
 	
-			-- First try to pick from alive players
-			if #validPlayers > 0 then
-				return validPlayers[math.random(1, #validPlayers)]
-				-- If no alive players, then pick from dead players
-			elseif #deadPlayers > 0 then
-				return deadPlayers[math.random(1, #deadPlayers)]
+			if #nonFriendPlayers > 0 then
+				return nonFriendPlayers[math.random(1, #nonFriendPlayers)]
 			end
-			return nil -- No valid players found
+	
+			return nil -- No non-friend players found
 		end
 	
-		-- Function to make all anvils orbit a random player
-		local function orbitRandomPlayer(excludedPlayer)
+		-- Function to make all anvils orbit a random non-friend player
+		local function orbitRandomNonFriendPlayer(localPlayer)
 			while true do
 				-- Loop through all objects in the workspace
 				for _, object in pairs(Workspace:GetDescendants()) do
@@ -5628,7 +5652,8 @@ local function TNWZWGG_fake_script() -- anvilkillall.Script
 						-- Ensure the anvil's collision is off
 						object.CanCollide = false
 	
-						local randomPlayer = getRandomPlayer(excludedPlayer)
+						-- Select a random non-friend player to target
+						local randomPlayer = getRandomNonFriendPlayer(localPlayer)
 	
 						if randomPlayer and randomPlayer.Character then
 							local humanoidRootPart = randomPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -5655,52 +5680,57 @@ local function TNWZWGG_fake_script() -- anvilkillall.Script
 					end
 				end
 	
-				wait(0.15) -- Wait before the next update (0.2 seconds)
+				wait(0.15) -- Wait before the next update (0.15 seconds)
 			end
 		end
 	
-		-- Function to create anvils and set their lifespan
-		local function createAnvils()
-			for _, player in pairs(Players:GetPlayers()) do
-				if player.Character then
-					local anvil = Instance.new("MeshPart") -- Create a new MeshPart
-					anvil.Name = "Anvil"
-					anvil.Size = Vector3.new(2, 2, 2) -- Adjust size as needed
-					anvil.Anchored = false -- Ensure the anvil can fall
-					anvil.CanCollide = false -- Ensure it interacts with players (collision off)
-					anvil.Position = player.Character.HumanoidRootPart.Position + Vector3.new(0, 0, 0) -- Start above the player
+		-- Function to continuously create anvils at intervals
+		local function createAnvils(localPlayer)
+			while true do
+				for _, player in pairs(Players:GetPlayers()) do
+					if player.Character then
+						local humanoid = player.Character:FindFirstChild("Humanoid")
+						if humanoid then
+							local anvil = Instance.new("MeshPart") -- Create a new MeshPart
+							anvil.Name = "Anvil"
+							anvil.Size = Vector3.new(2, 2, 2) -- Adjust size as needed
+							anvil.Anchored = false -- Ensure the anvil can fall
+							anvil.CanCollide = false -- Ensure it interacts with players (collision off)
+							anvil.Position = player.Character.HumanoidRootPart.Position + Vector3.new(0, 0, 0) -- Start slightly above the player
 	
-					-- Create and set BodyVelocity to the anvil
-					local bodyVelocity = Instance.new("BodyVelocity")
-					bodyVelocity.Velocity = Vector3.new(0, -10, 0) -- Initial downward velocity
-					bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5) -- Ensure it has enough force
-					bodyVelocity.Parent = anvil
+							-- Create and set BodyVelocity to the anvil
+							local bodyVelocity = Instance.new("BodyVelocity")
+							bodyVelocity.Velocity = Vector3.new(0, -10, 0) -- Initial downward velocity
+							bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5) -- Ensure it has enough force
+							bodyVelocity.Parent = anvil
 	
-					anvil.Parent = Workspace
+							anvil.Parent = Workspace
 	
-					-- Make the anvil last longer by adding a lifespan
-					Debris:AddItem(anvil, 2) -- Anvil lasts for 100 seconds
-	
-					wait(creationDelay) -- Wait for a short duration before creating the next anvil
+							-- Make the anvil last longer by adding a lifespan
+							Debris:AddItem(anvil, 2) -- Anvil lasts for 2 seconds
+						end
+					end
 				end
+	
+				wait(creationDelay) -- Wait for the creation delay before generating the next set of anvils
 			end
 		end
 	
 		-- Main function to initialize the script
 		local function initialize()
-			-- Create anvils at the start
-			createAnvils()
-	
-			-- Start the function to make anvils orbit random players
+			-- Create anvils in a loop at the start
 			local localPlayer = Players.LocalPlayer -- Get the local player
-			orbitRandomPlayer(localPlayer)
+			spawn(function() createAnvils(localPlayer) end)
+	
+			-- Start the function to make anvils orbit random non-friend players continuously
+			spawn(function() orbitRandomNonFriendPlayer(localPlayer) end)
 		end
 	
-		-- Connect to the CharacterAdded event
+		-- Connect to the CharacterAdded event to reinitialize on respawn
 		local player = Players.LocalPlayer
 		player.CharacterAdded:Connect(function()
 			-- Wait for the character to be fully loaded before initializing
-			player.CharacterAdded:Wait(0.6)
+			wait(0.6)
 			initialize() -- Reinitialize the script on respawn
 		end)
 	
@@ -5714,8 +5744,75 @@ local function TNWZWGG_fake_script() -- anvilkillall.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(TNWZWGG_fake_script)()
-local function ZBLO_fake_script() -- toggle.LocalScript 
+coroutine.wrap(XEUXY_fake_script)()
+local function LZZFNBX_fake_script() -- dmgsfxspamall.Script 
+	local script = Instance.new('Script', dmgsfxspamall)
+
+	function Click(mouse)
+	
+		_G.toggle = true
+	
+		while _G.toggle do
+			wait()
+			local Players = game:GetService("Players")
+	
+			-- Function to fire Damage event for each player except the local player
+			local function fireDamageEventForAllPlayers()
+				local localPlayer = Players.LocalPlayer  -- Get the LocalPlayer reference
+	
+				for _, player in ipairs(Players:GetPlayers()) do
+					-- Use pcall to handle potential errors
+					pcall(function()
+						-- Skip the LocalPlayer
+						if player == localPlayer then return end
+	
+						-- Check if the player's character exists
+						local character = player.Character or player.CharacterAdded:Wait()
+	
+						-- Check if the Damage event exists in the character
+						local damageEvent = character:FindFirstChild("Damage")
+						if damageEvent then
+							damageEvent:FireServer()  -- Fire the Damage event for this player
+							print("Fired Damage event for " .. player.Name)  -- Debug message
+						else
+							print(player.Name .. " does not have a Damage event.")  -- Debug message
+						end
+					end)
+				end
+			end
+	
+			-- Call the function to fire Damage event for all players
+			fireDamageEventForAllPlayers()
+	
+			-- Optionally, listen for new players joining the game
+			Players.PlayerAdded:Connect(function(player)
+				player.CharacterAdded:Connect(function()
+					fireDamageEventForAllPlayers()  -- Fire the event when a new player joins
+				end)
+			end)
+	
+		end
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(LZZFNBX_fake_script)()
+local function AVWKDE_fake_script() -- stopspamsfxall.Script 
+	local script = Instance.new('Script', stopspamsfxall)
+
+	function Click(mouse)
+	
+		_G.toggle = false
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(AVWKDE_fake_script)()
+local function HFLSM_fake_script() -- toggle.LocalScript 
 	local script = Instance.new('LocalScript', toggle)
 
 	local back = script.Parent.Parent.mainframe
@@ -5745,8 +5842,8 @@ local function ZBLO_fake_script() -- toggle.LocalScript
 	
 	end)
 end
-coroutine.wrap(ZBLO_fake_script)()
-local function TZYYNC_fake_script() -- toggle.LocalScript 
+coroutine.wrap(HFLSM_fake_script)()
+local function KAIOQAH_fake_script() -- toggle.LocalScript 
 	local script = Instance.new('LocalScript', toggle)
 
 	local dragger = {}; 
@@ -5793,4 +5890,4 @@ local function TZYYNC_fake_script() -- toggle.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(TZYYNC_fake_script)()
+coroutine.wrap(KAIOQAH_fake_script)()
