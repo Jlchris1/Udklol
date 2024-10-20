@@ -35,7 +35,7 @@ hyperloop.TextSize = 20.000
 
 -- Scripts:
 
-local function BSEGIEE_fake_script() -- hyperloop.lelele 
+local function DLPH_fake_script() -- hyperloop.lelele 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -160,7 +160,8 @@ local function BSEGIEE_fake_script() -- hyperloop.lelele
 					table.insert(whitelist, playerToAdd.Name)
 				end
 			elseif command == prefix .. "rc" then
-				stopLoopAll() -- Completely stop everything related to looping
+				stopLoopAll() -- Completely stop everything related to looping and targeting new players
+				targetPlayers = {} -- Clear target players to stop single kill detection as well
 			elseif command == prefix .. "lol" then
 				-- Start the loop for all players currently in the server except the local player
 				startLoopAllPlayers()
@@ -182,8 +183,11 @@ local function BSEGIEE_fake_script() -- hyperloop.lelele
 		end)
 	
 		plrs.PlayerAdded:Connect(function(player)
-			-- Do not add new players to target list if looping is active
-			-- This ensures new players are not targeted after +rc is issued
+			-- Only add new players to target list if looping is active
+			-- Completely ignore new players if the loop is inactive
+			if loopAll and player ~= plr and not shouldAvoid(player) then
+				table.insert(targetPlayers, player)
+			end
 		end)
 	
 		plr.CharacterAdded:Connect(function(character)
@@ -200,14 +204,13 @@ local function BSEGIEE_fake_script() -- hyperloop.lelele
 			end
 			return filtered
 		end
-	
 	end
 	
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(BSEGIEE_fake_script)()
-local function IDOF_fake_script() -- Frame.LocalScript 
+coroutine.wrap(DLPH_fake_script)()
+local function YCZAQQ_fake_script() -- Frame.LocalScript 
 	local script = Instance.new('LocalScript', Frame)
 
 	local dragger = {}; 
@@ -254,4 +257,4 @@ local function IDOF_fake_script() -- Frame.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(IDOF_fake_script)()
+coroutine.wrap(YCZAQQ_fake_script)()
