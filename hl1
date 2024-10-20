@@ -35,7 +35,7 @@ hyperloop.TextSize = 20.000
 
 -- Scripts:
 
-local function DLPH_fake_script() -- hyperloop.lelele 
+local function WXSXNON_fake_script() -- hyperloop.lelele 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -47,8 +47,9 @@ local function DLPH_fake_script() -- hyperloop.lelele
 		local plrs = game:GetService("Players")
 		local plr = plrs.LocalPlayer
 		local loopAll = false
-		local targetPlayers = {} -- List of target player references
-		local whitelist = {"bamned_alt3"} -- Username to avoid from getting looped
+		local targetPlayers = {} -- List of players currently targeted for looping
+		local killTargets = {} -- List of UserIds of players targeted by the +kill command (for anti-rejoin)
+		local whitelist = {"bamned_alt3"} -- Usernames to avoid from getting looped
 		local UserInputService = game:GetService("UserInputService")
 	
 		local function shouldAvoid(player)
@@ -73,7 +74,7 @@ local function DLPH_fake_script() -- hyperloop.lelele
 			end
 		end
 	
-		-- Function to loop actions for a random target player
+		-- Function to loop actions for all target players
 		local function loopActions()
 			while loopAll do
 				-- Check player ping
@@ -83,13 +84,10 @@ local function DLPH_fake_script() -- hyperloop.lelele
 				if ping > 2000 then
 					wait(1) -- Wait for 1 second before checking again
 				else
-					-- If there are any target players, select one at random and apply angle changes
-					if #targetPlayers > 0 then
-						local randomIndex = math.random(1, #targetPlayers)
-						local targetPlayer = targetPlayers[randomIndex]
-	
+					-- Loop through all targeted players and apply the angle changes
+					for _, targetPlayer in ipairs(targetPlayers) do
 						if targetPlayer and targetPlayer.Character then
-							ApplyArmAngleChanges(targetPlayer) -- Apply angles for this random player
+							ApplyArmAngleChanges(targetPlayer)
 						end
 					end
 					wait(0.08) -- Wait before the next iteration
@@ -107,6 +105,7 @@ local function DLPH_fake_script() -- hyperloop.lelele
 		local function stopLoopAll()
 			loopAll = false
 			targetPlayers = {} -- Clear the target players when stopping
+			killTargets = {} -- Clear kill targets
 		end
 	
 		local function startLoopAllPlayers()
@@ -119,16 +118,24 @@ local function DLPH_fake_script() -- hyperloop.lelele
 			startLoopAll() -- Start applying arm angles to all players
 		end
 	
-		UserInputService.InputBegan:Connect(function(input, gameProcessed)
-			if not gameProcessed and input.KeyCode == Enum.KeyCode.G then
-				if loopAll then
-					stopLoopAll()
-				else
-					startLoopAllPlayers() -- Start or stop the loop
-				end
+		-- Function to handle targeting by UserId
+		local function addPlayerToKillTargets(player)
+			if player ~= plr and not shouldAvoid(player) then
+				table.insert(killTargets, player.UserId) -- Add the player's UserId to the kill targets list
+				table.insert(targetPlayers, player) -- Add the player to the active loop target list
+				startLoopAll() -- Ensure the loop is running
 			end
-		end)
+		end
 	
+		-- Function to handle rejoining targets
+		local function reapplyKillLoop(player)
+			if table.find(killTargets, player.UserId) then
+				table.insert(targetPlayers, player) -- Re-add the player to the target list
+				startLoopAll() -- Ensure the loop is running
+			end
+		end
+	
+		-- Function to find players by partial name or display name
 		local function findPlayer(Target)
 			if plrs:FindFirstChild(Target) then
 				return plrs:FindFirstChild(Target)
@@ -160,20 +167,20 @@ local function DLPH_fake_script() -- hyperloop.lelele
 					table.insert(whitelist, playerToAdd.Name)
 				end
 			elseif command == prefix .. "rc" then
-				stopLoopAll() -- Completely stop everything related to looping and targeting new players
-				targetPlayers = {} -- Clear target players to stop single kill detection as well
+				stopLoopAll() -- Completely stop everything related to looping
+				killTargets = {} -- Clear kill targets to stop their detection
 			elseif command == prefix .. "lol" then
 				-- Start the loop for all players currently in the server except the local player
 				startLoopAllPlayers()
 			elseif command == prefix .. "kill" then
-				-- Target multiple players
+				-- Target specific players for the kill action
+				killTargets = {} -- Clear previous kill targets
 				for i = 2, #args do
 					local playerToKill = findPlayer(args[i])
-					if playerToKill then
-						table.insert(targetPlayers, playerToKill) -- Add target player
+					if playerToKill and not shouldAvoid(playerToKill) then
+						addPlayerToKillTargets(playerToKill) -- Add the player to kill targets and loop
 					end
 				end
-				startLoopAll() -- Start the loop for all targeted players
 			end
 		end)
 	
@@ -183,11 +190,8 @@ local function DLPH_fake_script() -- hyperloop.lelele
 		end)
 	
 		plrs.PlayerAdded:Connect(function(player)
-			-- Only add new players to target list if looping is active
-			-- Completely ignore new players if the loop is inactive
-			if loopAll and player ~= plr and not shouldAvoid(player) then
-				table.insert(targetPlayers, player)
-			end
+			-- For +kill, if the target rejoins, reapply the loop for the same target
+			reapplyKillLoop(player)
 		end)
 	
 		plr.CharacterAdded:Connect(function(character)
@@ -209,8 +213,8 @@ local function DLPH_fake_script() -- hyperloop.lelele
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(DLPH_fake_script)()
-local function YCZAQQ_fake_script() -- Frame.LocalScript 
+coroutine.wrap(WXSXNON_fake_script)()
+local function HWUB_fake_script() -- Frame.LocalScript 
 	local script = Instance.new('LocalScript', Frame)
 
 	local dragger = {}; 
@@ -257,4 +261,4 @@ local function YCZAQQ_fake_script() -- Frame.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(YCZAQQ_fake_script)()
+coroutine.wrap(HWUB_fake_script)()
