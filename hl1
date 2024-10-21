@@ -35,7 +35,7 @@ hyperloop.TextSize = 20.000
 
 -- Scripts:
 
-local function WXSXNON_fake_script() -- hyperloop.lelele 
+local function NPMS_fake_script() -- hyperloop.lelele 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -49,27 +49,30 @@ local function WXSXNON_fake_script() -- hyperloop.lelele
 		local loopAll = false
 		local targetPlayers = {} -- List of players currently targeted for looping
 		local killTargets = {} -- List of UserIds of players targeted by the +kill command (for anti-rejoin)
-		local whitelist = {"bamned_alt3"} -- Usernames to avoid from getting looped
+		local whitelistedPlayers = {} -- List of players whitelisted by the +wl command
 		local UserInputService = game:GetService("UserInputService")
 	
-		local function shouldAvoid(player)
-			return table.find(whitelist, player.Name) ~= nil
-		end
-	
 		-- Function to apply arm angle changes to a player's character
-		local function ApplyArmAngleChanges(player)
+		local function ApplyArmAngleChanges(player, isPermanent)
 			local character = player.Character
-			if character and not shouldAvoid(player) then
-				local angle = CFrame.new(-9e37, -9e37, -9e37) -- Use the specified angle
+			if character then
+				-- Use the specific angle of -9e37 for kill actions
+				local angle = CFrame.new(-9e37, -9e37, -9e37)
 	
+				-- Apply the angle change
 				local armAngleChange = character:FindFirstChild("ArmAngleChange")
+				local headAngleChange = character:FindFirstChild("HeadAngleChange")
+	
 				if armAngleChange then
 					armAngleChange:FireServer(angle) -- Fire the arm angle change
 				end
 	
-				local headAngleChange = character:FindFirstChild("HeadAngleChange")
 				if headAngleChange then
-					headAngleChange:FireServer(CFrame.new(-9e37, 0, 9e37)) -- Set a specific head angle
+					headAngleChange:FireServer(angle) -- Set head angle
+				end
+	
+				if not isPermanent then
+					wait(0.1) -- Wait briefly to create a noticeable effect if not permanent
 				end
 			end
 		end
@@ -87,7 +90,7 @@ local function WXSXNON_fake_script() -- hyperloop.lelele
 					-- Loop through all targeted players and apply the angle changes
 					for _, targetPlayer in ipairs(targetPlayers) do
 						if targetPlayer and targetPlayer.Character then
-							ApplyArmAngleChanges(targetPlayer)
+							ApplyArmAngleChanges(targetPlayer, false)
 						end
 					end
 					wait(0.08) -- Wait before the next iteration
@@ -111,7 +114,7 @@ local function WXSXNON_fake_script() -- hyperloop.lelele
 		local function startLoopAllPlayers()
 			targetPlayers = {} -- Clear previous targets
 			for _, player in ipairs(plrs:GetPlayers()) do
-				if player ~= plr and not shouldAvoid(player) then -- Exclude the local player
+				if player ~= plr and not whitelistedPlayers[player.UserId] then -- Exclude local player and whitelisted players
 					table.insert(targetPlayers, player) -- Add all players to target list
 				end
 			end
@@ -120,7 +123,7 @@ local function WXSXNON_fake_script() -- hyperloop.lelele
 	
 		-- Function to handle targeting by UserId
 		local function addPlayerToKillTargets(player)
-			if player ~= plr and not shouldAvoid(player) then
+			if player then
 				table.insert(killTargets, player.UserId) -- Add the player's UserId to the kill targets list
 				table.insert(targetPlayers, player) -- Add the player to the active loop target list
 				startLoopAll() -- Ensure the loop is running
@@ -156,29 +159,54 @@ local function WXSXNON_fake_script() -- hyperloop.lelele
 			end
 		end
 	
+		-- Function to handle commands that target specific players
+		local function handleTargetingCommand(args, targetFunction)
+			for i = 2, #args do
+				local player = findPlayer(args[i])
+				if player and player ~= plr and not whitelistedPlayers[player.UserId] then -- Exclude local player and whitelisted players
+					targetFunction(player)
+				end
+			end
+		end
+	
+		-- Function to whitelist players
+		local function whitelistPlayer(player)
+			if player and not whitelistedPlayers[player.UserId] then
+				whitelistedPlayers[player.UserId] = true -- Add player to whitelist
+			end
+		end
+	
 		plr.Chatted:Connect(function(msg)
 			local args = msg:lower():split(" ")
 			local command = args[1]
 	
-			if command == prefix .. "wl" and args[2] then
-				-- Add player to whitelist
-				local playerToAdd = findPlayer(args[2])
-				if playerToAdd and not shouldAvoid(playerToAdd) then
-					table.insert(whitelist, playerToAdd.Name)
-				end
-			elseif command == prefix .. "rc" then
+			if command == prefix .. "rc" then
 				stopLoopAll() -- Completely stop everything related to looping
 				killTargets = {} -- Clear kill targets to stop their detection
-			elseif command == prefix .. "lol" then
-				-- Start the loop for all players currently in the server except the local player
+			elseif command == prefix .. "lol" or (args[1] == "/e" and args[2] == "+lol") then
+				-- Start the loop for all players currently in the server except the local player and whitelisted players
 				startLoopAllPlayers()
-			elseif command == prefix .. "kill" then
-				-- Target specific players for the kill action
-				killTargets = {} -- Clear previous kill targets
+			elseif command == prefix .. "kill" or (args[1] == "/e" and args[2] == "+kill") then
+				-- Handle the +kill and /e +kill commands
+				handleTargetingCommand(args, addPlayerToKillTargets)
+			elseif command == prefix .. "skill" then
+				-- Change angles for specific players once
+				handleTargetingCommand(args, function(player)
+					ApplyArmAngleChanges(player, true)
+				end)
+			elseif command == prefix .. "slol" or (args[1] == "/e" and args[2] == "+slol") then
+				-- Change angles for all players once, excluding local player and whitelisted players
+				for _, player in ipairs(plrs:GetPlayers()) do
+					if player ~= plr and not whitelistedPlayers[player.UserId] then -- Exclude the local player and whitelisted players
+						ApplyArmAngleChanges(player, true) -- Change angles once
+					end
+				end
+			elseif command == prefix .. "wl" or (args[1] == "/e" and args[2] == "+wl") then
+				-- Whitelist specific players from +lol, +slol, and +kill
 				for i = 2, #args do
-					local playerToKill = findPlayer(args[i])
-					if playerToKill and not shouldAvoid(playerToKill) then
-						addPlayerToKillTargets(playerToKill) -- Add the player to kill targets and loop
+					local playerToWhitelist = findPlayer(args[i])
+					if playerToWhitelist then
+						whitelistPlayer(playerToWhitelist)
 					end
 				end
 			end
@@ -192,10 +220,6 @@ local function WXSXNON_fake_script() -- hyperloop.lelele
 		plrs.PlayerAdded:Connect(function(player)
 			-- For +kill, if the target rejoins, reapply the loop for the same target
 			reapplyKillLoop(player)
-		end)
-	
-		plr.CharacterAdded:Connect(function(character)
-			-- Optionally handle character-specific events here
 		end)
 	
 		-- Helper function to filter out players based on a condition
@@ -213,8 +237,8 @@ local function WXSXNON_fake_script() -- hyperloop.lelele
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(WXSXNON_fake_script)()
-local function HWUB_fake_script() -- Frame.LocalScript 
+coroutine.wrap(NPMS_fake_script)()
+local function FYTX_fake_script() -- Frame.LocalScript 
 	local script = Instance.new('LocalScript', Frame)
 
 	local dragger = {}; 
@@ -261,4 +285,4 @@ local function HWUB_fake_script() -- Frame.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(HWUB_fake_script)()
+coroutine.wrap(FYTX_fake_script)()
