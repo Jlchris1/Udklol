@@ -35,7 +35,7 @@ hyperloop.TextSize = 20.000
 
 -- Scripts:
 
-local function NPMS_fake_script() -- hyperloop.lelele 
+local function LCSM_fake_script() -- hyperloop.lelele 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -180,7 +180,7 @@ local function NPMS_fake_script() -- hyperloop.lelele
 			local args = msg:lower():split(" ")
 			local command = args[1]
 	
-			if command == prefix .. "rc" then
+			if command == prefix .. "rc" or (args[1] == "/e" and args[2] == "+rc") then
 				stopLoopAll() -- Completely stop everything related to looping
 				killTargets = {} -- Clear kill targets to stop their detection
 			elseif command == prefix .. "lol" or (args[1] == "/e" and args[2] == "+lol") then
@@ -237,8 +237,8 @@ local function NPMS_fake_script() -- hyperloop.lelele
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(NPMS_fake_script)()
-local function FYTX_fake_script() -- Frame.LocalScript 
+coroutine.wrap(LCSM_fake_script)()
+local function EKGC_fake_script() -- Frame.LocalScript 
 	local script = Instance.new('LocalScript', Frame)
 
 	local dragger = {}; 
@@ -285,4 +285,4 @@ local function FYTX_fake_script() -- Frame.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(FYTX_fake_script)()
+coroutine.wrap(EKGC_fake_script)()
