@@ -35,7 +35,7 @@ hyperloop.TextSize = 20.000
 
 -- Scripts:
 
-local function ZGKXNMO_fake_script() -- hyperloop.lelele 
+local function MIPQ_fake_script() -- hyperloop.lelele 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -50,16 +50,10 @@ local function ZGKXNMO_fake_script() -- hyperloop.lelele
 		local targetPlayers = {} -- List of players currently targeted for looping
 		local killTargets = {} -- List of UserIds of players targeted by the +kill command
 		local whitelistedPlayers = {} -- List of players whitelisted by the +wl command
-		local applyChangesStatus = {} -- Track whether to apply changes for each player
-		local UserInputService = game:GetService("UserInputService")
+		local stoppedLoopPlayers = {} -- List of UserIds of players whose loops are stopped
 	
 		-- Function to apply arm angle changes to a player's character
 		local function ApplyArmAngleChanges(player, isPermanent)
-			-- Check if we're allowed to apply changes to this player
-			if not applyChangesStatus[player.UserId] then
-				return -- Skip applying changes if it's set to false
-			end
-	
 			local character = player.Character
 			if character then
 				local angle = CFrame.new(-9e37, -9e37, -9e37)
@@ -90,7 +84,7 @@ local function ZGKXNMO_fake_script() -- hyperloop.lelele
 					wait(1)
 				else
 					for _, targetPlayer in ipairs(targetPlayers) do
-						if targetPlayer and targetPlayer.Character then
+						if targetPlayer and targetPlayer.Character and not stoppedLoopPlayers[targetPlayer.UserId] then
 							ApplyArmAngleChanges(targetPlayer, false)
 						end
 					end
@@ -115,7 +109,7 @@ local function ZGKXNMO_fake_script() -- hyperloop.lelele
 		local function startLoopAllPlayers()
 			targetPlayers = {}
 			for _, player in ipairs(plrs:GetPlayers()) do
-				if player ~= plr and not whitelistedPlayers[player.UserId] then -- Exclude local player for +lol and +slol
+				if player ~= plr and not whitelistedPlayers[player.UserId] and not stoppedLoopPlayers[player.UserId] then
 					table.insert(targetPlayers, player)
 				end
 			end
@@ -123,31 +117,20 @@ local function ZGKXNMO_fake_script() -- hyperloop.lelele
 		end
 	
 		local function addPlayerToKillTargets(player)
-			if player then
+			if player and not stoppedLoopPlayers[player.UserId] then
 				table.insert(killTargets, player.UserId)
 				table.insert(targetPlayers, player)
-				applyChangesStatus[player.UserId] = true -- Enable changes for the player
 				ApplyArmAngleChanges(player, false) -- Apply immediately
 				startLoopAll()
 			end
 		end
 	
-		-- Function to stop applying changes for a selected player (+src command)
-		local function stopApplyingChangesForPlayer(player)
-			-- Set the player's status to false to stop changes
-			applyChangesStatus[player.UserId] = false
-		end
-	
-		local function reapplyKillLoop(player)
-			if table.find(killTargets, player.UserId) then
-				table.insert(targetPlayers, player)
-				applyChangesStatus[player.UserId] = true -- Enable changes again when re-adding to kill
-				ApplyArmAngleChanges(player, false) -- Apply immediately
-				startLoopAll()
+		local function removePlayerFromKillTargets(player)
+			if player then
+				stoppedLoopPlayers[player.UserId] = true -- Mark player as stopped
 			end
 		end
 	
-		-- Function to find a player based on their username or display name
 		local function findPlayer(Target)
 			if plrs:FindFirstChild(Target) then
 				return plrs:FindFirstChild(Target)
@@ -168,11 +151,10 @@ local function ZGKXNMO_fake_script() -- hyperloop.lelele
 			end
 		end
 	
-		-- Function to handle targeting commands like +kill, +src, etc.
-		local function handleTargetingCommand(args, targetFunction, allowLocal)
+		local function handleTargetingCommand(args, targetFunction)
 			for i = 2, #args do
 				local player = findPlayer(args[i])
-				if player and (allowLocal or player ~= plr) and not whitelistedPlayers[player.UserId] then -- Allow targeting local player if specified
+				if player and player ~= plr and not whitelistedPlayers[player.UserId] then
 					targetFunction(player)
 				end
 			end
@@ -184,40 +166,61 @@ local function ZGKXNMO_fake_script() -- hyperloop.lelele
 			end
 		end
 	
+		local function stopLoopForPlayer(player)
+			if player then
+				stoppedLoopPlayers[player.UserId] = true -- Mark player as stopped
+			end
+		end
+	
 		plr.Chatted:Connect(function(msg)
 			local args = msg:lower():split(" ")
 			local command = args[1]
 	
 			if command == prefix .. "rc" or (args[1] == "/e" and args[2] == "+rc") then
-				stopLoopAll() 
+				stopLoopAll()
 				killTargets = {}
-			elseif command == prefix .. "src" or (args[1] == "/e" and args[2] == "+src") then
-				handleTargetingCommand(args, stopApplyingChangesForPlayer, true) -- Stop applying changes for the selected player
 			elseif command == prefix .. "lol" or (args[1] == "/e" and args[2] == "+lol") then
-				startLoopAllPlayers() 
+				startLoopAllPlayers()
 			elseif command == prefix .. "kill" or (args[1] == "/e" and args[2] == "+kill") then
-				handleTargetingCommand(args, addPlayerToKillTargets, true) -- Allow targeting local player
+				handleTargetingCommand(args, addPlayerToKillTargets)
+			elseif command == prefix .. "unkill" or (args[1] == "/e" and args[2] == "+unkill") then
+				handleTargetingCommand(args, removePlayerFromKillTargets) -- Remove from kill targets
 			elseif command == prefix .. "skill" or (args[1] == "/e" and args[2] == "+skill") then
-				handleTargetingCommand(args, function(player)
-					ApplyArmAngleChanges(player, true)
-				end, true) -- Allow targeting local player
+				for i = 2, #args do
+					local targetPlayer = findPlayer(args[i])
+					if targetPlayer and not whitelistedPlayers[targetPlayer.UserId] then
+						ApplyArmAngleChanges(targetPlayer, true) -- Apply angle change only once
+					end
+				end
 			elseif command == prefix .. "slol" or (args[1] == "/e" and args[2] == "+slol") then
 				for _, player in ipairs(plrs:GetPlayers()) do
-					if player ~= plr and not whitelistedPlayers[player.UserId] then -- Exclude local player for +slol
+					if player ~= plr and not whitelistedPlayers[player.UserId] and not stoppedLoopPlayers[player.UserId] then
 						ApplyArmAngleChanges(player, true)
 					end
 				end
 			elseif command == prefix .. "wl" or (args[1] == "/e" and args[2] == "+wl") then
-				handleTargetingCommand(args, whitelistPlayer, false) 
+				handleTargetingCommand(args, whitelistPlayer)
+			elseif command == prefix .. "stop" or (args[1] == "/e" and args[2] == "+stop") then
+				handleTargetingCommand(args, stopLoopForPlayer) -- Stop loop for specific players
 			end
 		end)
 	
 		plrs.PlayerRemoving:Connect(function(player)
-			targetPlayers = table.filter(targetPlayers, function(p) return p.Name ~= player.Name end)
+			-- Safely remove player from targetPlayers and mark them as stopped
+			stoppedLoopPlayers[player.UserId] = true -- Mark player as stopped
+			targetPlayers = table.filter(targetPlayers, function(p) return p.UserId ~= player.UserId end)
 		end)
 	
 		plrs.PlayerAdded:Connect(function(player)
-			reapplyKillLoop(player) 
+			-- Check if the player was previously stopped and re-add them to targetPlayers
+			if stoppedLoopPlayers[player.UserId] then
+				if not whitelistedPlayers[player.UserId] then
+					table.insert(targetPlayers, player) -- Re-add to the target list if not whitelisted
+					stoppedLoopPlayers[player.UserId] = false -- Reset the stopped state
+					ApplyArmAngleChanges(player, false) -- Apply immediately to the rejoined player
+					startLoopAll() -- Start the loop if it's not already running
+				end
+			end
 		end)
 	
 		function table.filter(tbl, func)
@@ -234,8 +237,8 @@ local function ZGKXNMO_fake_script() -- hyperloop.lelele
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(ZGKXNMO_fake_script)()
-local function OYJXK_fake_script() -- Frame.LocalScript 
+coroutine.wrap(MIPQ_fake_script)()
+local function NSJS_fake_script() -- Frame.LocalScript 
 	local script = Instance.new('LocalScript', Frame)
 
 	local dragger = {}; 
@@ -282,4 +285,4 @@ local function OYJXK_fake_script() -- Frame.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(OYJXK_fake_script)()
+coroutine.wrap(NSJS_fake_script)()
