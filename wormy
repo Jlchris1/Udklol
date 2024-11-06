@@ -1,0 +1,260 @@
+local syn = getgenv().syn
+getgenv().syn = false
+
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()local Window = OrionLib:MakeWindow({Name = "JLhub", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})local Tab = Window:MakeTab({
+    Name = "real op",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "anti bot wormy",
+    Callback = function()
+              local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local WormTouched = ReplicatedStorage:FindFirstChild("WormTouched")
+
+if WormTouched and WormTouched:IsA("RemoteEvent") then
+    -- Hook FireServer to permanently disable WormTouched
+    local mt = getrawmetatable(game)
+    setreadonly(mt, false)
+    
+    local originalFireServer = mt.__namecall
+    mt.__namecall = function(self, ...)
+        -- Check if the WormTouched remote is being fired
+        if self == WormTouched and getnamecallmethod() == "FireServer" then
+            warn("Blocked WormTouched from firing permanently.")
+            return nil  -- Block the event from doing anything
+        end
+        
+        -- Otherwise, proceed as normal
+        return originalFireServer(self, ...)
+    end
+    
+    setreadonly(mt, true)
+end
+      end    
+}) Tab:AddButton({
+    Name = "anti roar",
+    Callback = function()
+              -- Ensure this is placed in a LocalScript
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+-- Wait until the player's character is loaded
+local function waitForCharacter()
+    while not player.Character do
+        player.CharacterAdded:Wait()
+    end
+end
+
+-- Main function to disable PlatformStand and make the character jump
+local function monitorPlatformStand()
+    waitForCharacter()
+
+    -- Get the character and its Humanoid
+    local character = player.Character
+    local humanoid = character:WaitForChild("Humanoid")
+
+    -- Monitor PlatformStand property
+    local platformStandValue = false
+    
+    humanoid:GetPropertyChangedSignal("PlatformStand"):Connect(function()
+        if humanoid.PlatformStand then
+            platformStandValue = true
+            
+            -- Make the character jump
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            wait(0.1) -- Short delay to ensure jump is registered
+
+            -- Disable PlatformStand
+            humanoid.PlatformStand = false
+        else
+            platformStandValue = false
+        end
+    end)
+end
+
+-- Run the monitoring function
+monitorPlatformStand()
+      end    
+}) Tab:AddButton({
+    Name = "dirt kill aura (no need to be worm (need part nearby)",
+    Callback = function()
+              _G.toggle = true
+
+while _G.toggle do
+wait()
+local args = {
+    [1] = "DamageManager.spawnGooEvent"
+}
+
+game:GetService("ReplicatedStorage").RemoteEvent:FireServer(unpack(args))
+
+end
+      end    
+}) Tab:AddButton({
+    Name = "turn off dirt kill aura",
+    Callback = function()
+              _G.toggle = false
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "farm",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "escape",
+    Callback = function()
+              local args = {
+    [1] = "GameController.escaped"
+}
+
+game:GetService("ReplicatedStorage").RemoteEvent:FireServer(unpack(args))
+      end    
+}) Tab:AddButton({
+    Name = "loop escape (autofarm)",
+    Callback = function()
+              _G.toggle = true
+
+while _G.toggle do
+wait()
+local args = {
+    [1] = "GameController.escaped"
+}
+
+game:GetService("ReplicatedStorage").RemoteEvent:FireServer(unpack(args))
+end
+      end    
+}) Tab:AddButton({
+    Name = "turn off auto escape",
+    Callback = function()
+              _G.toggle = false
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "remove annoying shit",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "remove the shit lava",
+    Callback = function()
+              -- Function to recursively delete all LavaConnect instances in the Workspace
+local function deleteLavaConnects(parent)
+    for _, child in ipairs(parent:GetChildren()) do
+        if child:IsA("Model") or child:IsA("Folder") then
+            deleteLavaConnects(child)  -- Recursive call for models and folders
+        elseif child.Name == "LavaConnect" then
+            child:Destroy()  -- Delete the LavaConnect instance
+            print("Deleted:", child.Name)  -- Optional: print confirmation
+        end
+    end
+end
+
+-- Main loop to continuously delete LavaConnect instances
+while true do
+    deleteLavaConnects(workspace)  -- Start from the Workspace
+    wait(0.5)  -- Small delay to prevent excessive looping
+end
+
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "become life support to the noobs",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "collect all pumpkins",
+    Callback = function()
+              -- Get the LocalPlayer
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()  -- Wait for the character to load
+local rootPart = character:WaitForChild("HumanoidRootPart")  -- Get the HumanoidRootPart
+
+-- Function to teleport all Pumpkins to the position (0, 0, 0) relative to the player's HumanoidRootPart
+local function teleportPumpkins()
+    -- Get the Pumpkins from the specified path
+    local pumpkins = workspace.ActiveMap.House:GetChildren()
+
+    for _, pumpkin in ipairs(pumpkins) do
+        -- Check if the child is a Pumpkin
+        if pumpkin.Name == "Pumpkin" then
+            -- Disable collisions
+            pumpkin.CanCollide = false
+            -- Teleport the Pumpkin to (0, 0, 0) offset from the player's HumanoidRootPart
+            pumpkin.Position = rootPart.Position + Vector3.new(0, 0, 0)  -- Adjust to (0, 0, 0) from the root part
+        end
+    end
+end
+
+-- Call the function to teleport Pumpkins
+teleportPumpkins()
+
+      end    
+}) Tab:AddButton({
+    Name = "collect wormy heads",
+    Callback = function()
+              -- Get the LocalPlayer
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()  -- Wait for the character to load
+local rootPart = character:WaitForChild("HumanoidRootPart")  -- Get the HumanoidRootPart
+
+-- Function to teleport all items in ItemSpawns.S to the player's HumanoidRootPart
+local function teleportItems()
+    local itemSpawns = workspace:FindFirstChild("ActiveMap")
+        and workspace.ActiveMap:FindFirstChild("Underground")
+        and workspace.ActiveMap.Underground:FindFirstChild("ItemSpawns")
+        and workspace.ActiveMap.Underground.ItemSpawns:FindFirstChild("S")
+
+    if itemSpawns then
+        -- Teleport each item to the player's HumanoidRootPart
+        for _, item in ipairs(itemSpawns:GetChildren()) do
+            if item:IsA("BasePart") or item:IsA("Model") then
+                -- Disable collisions temporarily
+                item.CanCollide = false
+                
+                -- Teleport the item to the player's HumanoidRootPart position
+                item.Position = rootPart.Position + Vector3.new(0, 0, 0)  -- Adjust to slightly above the root part
+                print("Teleported:", item.Name)  -- Optional: print confirmation
+            end
+        end
+    else
+        print("ItemSpawns.S not found!")
+    end
+end
+
+-- Main loop to continuously teleport items
+while true do
+    teleportItems()
+    wait(0.5)  -- Small delay to prevent excessive looping
+end
+
+      end    
+}) Tab:AddButton({
+    Name = "instant collect boat parts",
+    Callback = function()
+              _G.toggle = true
+
+while _G.toggle do
+wait()
+game:GetService("ReplicatedStorage").CollectEvent:FireServer()
+
+end
+      end    
+}) Tab:AddButton({
+    Name = "speedrun generators",
+    Callback = function()
+              _G.toggle = true
+
+while _G.toggle do
+wait()
+local args = {
+    [1] = "CampgroundMain.addPercentEvent"
+}
+
+game:GetService("ReplicatedStorage").RemoteEvent:FireServer(unpack(args))
+local args = {
+    [1] = "CampgroundMain.addPercentEvent"
+}
+
+game:GetService("ReplicatedStorage").RemoteEvent:FireServer(unpack(args))
+
+end
+      end    
+})
+
+getgenv().syn = syn
