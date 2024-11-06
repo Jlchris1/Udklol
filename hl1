@@ -35,7 +35,7 @@ hyperloop.TextSize = 20.000
 
 -- Scripts:
 
-local function MIPQ_fake_script() -- hyperloop.lelele 
+local function BJVB_fake_script() -- hyperloop.lelele 
 	local script = Instance.new('Script', hyperloop)
 
 	function Click(mouse)
@@ -47,7 +47,6 @@ local function MIPQ_fake_script() -- hyperloop.lelele
 		local plrs = game:GetService("Players")
 		local plr = plrs.LocalPlayer
 		local loopAll = false
-		local targetPlayers = {} -- List of players currently targeted for looping
 		local killTargets = {} -- List of UserIds of players targeted by the +kill command
 		local whitelistedPlayers = {} -- List of players whitelisted by the +wl command
 		local stoppedLoopPlayers = {} -- List of UserIds of players whose loops are stopped
@@ -56,7 +55,7 @@ local function MIPQ_fake_script() -- hyperloop.lelele
 		local function ApplyArmAngleChanges(player, isPermanent)
 			local character = player.Character
 			if character then
-				local angle = CFrame.new(-9e37, -9e37, -9e37)
+				local angle = CFrame.new(-9e37, 9e37, 9e37)
 	
 				local armAngleChange = character:FindFirstChild("ArmAngleChange")
 				local headAngleChange = character:FindFirstChild("HeadAngleChange")
@@ -75,7 +74,7 @@ local function MIPQ_fake_script() -- hyperloop.lelele
 			end
 		end
 	
-		-- Function to loop actions for all target players
+		-- Function to loop actions for all players at once (for +lol command)
 		local function loopActions()
 			while loopAll do
 				local ping = plr:GetNetworkPing()
@@ -83,16 +82,32 @@ local function MIPQ_fake_script() -- hyperloop.lelele
 				if ping > 2000 then
 					wait(1)
 				else
-					for _, targetPlayer in ipairs(targetPlayers) do
-						if targetPlayer and targetPlayer.Character and not stoppedLoopPlayers[targetPlayer.UserId] then
-							ApplyArmAngleChanges(targetPlayer, false)
+					for _, player in ipairs(plrs:GetPlayers()) do
+						if player ~= plr and not whitelistedPlayers[player.UserId] and not stoppedLoopPlayers[player.UserId] then
+							ApplyArmAngleChanges(player, false)
 						end
 					end
-					wait(0.08)
+					wait()
 				end
 			end
 		end
 	
+		-- Function to loop specific players targeted by +kill
+		local function loopKillTargets()
+			while true do
+				for userId, active in pairs(killTargets) do
+					if active then
+						local targetPlayer = plrs:GetPlayerByUserId(userId)
+						if targetPlayer and targetPlayer.Character and not stoppedLoopPlayers[userId] then
+							ApplyArmAngleChanges(targetPlayer, false)
+						end
+					end
+				end
+				wait()
+			end
+		end
+	
+		-- Start and stop loop for all players (+lol)
 		local function startLoopAll()
 			if not loopAll then
 				loopAll = true
@@ -102,35 +117,24 @@ local function MIPQ_fake_script() -- hyperloop.lelele
 	
 		local function stopLoopAll()
 			loopAll = false
-			targetPlayers = {}
-			killTargets = {}
 		end
 	
-		local function startLoopAllPlayers()
-			targetPlayers = {}
-			for _, player in ipairs(plrs:GetPlayers()) do
-				if player ~= plr and not whitelistedPlayers[player.UserId] and not stoppedLoopPlayers[player.UserId] then
-					table.insert(targetPlayers, player)
-				end
-			end
-			startLoopAll()
-		end
-	
+		-- +kill target functionality (loop specific players by UserId)
 		local function addPlayerToKillTargets(player)
 			if player and not stoppedLoopPlayers[player.UserId] then
-				table.insert(killTargets, player.UserId)
-				table.insert(targetPlayers, player)
+				killTargets[player.UserId] = true -- Mark player as a kill target
 				ApplyArmAngleChanges(player, false) -- Apply immediately
-				startLoopAll()
 			end
 		end
 	
 		local function removePlayerFromKillTargets(player)
 			if player then
+				killTargets[player.UserId] = nil -- Remove player from kill targets
 				stoppedLoopPlayers[player.UserId] = true -- Mark player as stopped
 			end
 		end
 	
+		-- Utility function to find player
 		local function findPlayer(Target)
 			if plrs:FindFirstChild(Target) then
 				return plrs:FindFirstChild(Target)
@@ -151,6 +155,7 @@ local function MIPQ_fake_script() -- hyperloop.lelele
 			end
 		end
 	
+		-- Generalized targeting handler
 		local function handleTargetingCommand(args, targetFunction)
 			for i = 2, #args do
 				local player = findPlayer(args[i])
@@ -160,85 +165,83 @@ local function MIPQ_fake_script() -- hyperloop.lelele
 			end
 		end
 	
+		-- Command to whitelist players
 		local function whitelistPlayer(player)
 			if player and not whitelistedPlayers[player.UserId] then
 				whitelistedPlayers[player.UserId] = true
 			end
 		end
 	
+		-- Command to stop loop for specific players
 		local function stopLoopForPlayer(player)
 			if player then
 				stoppedLoopPlayers[player.UserId] = true -- Mark player as stopped
 			end
 		end
 	
+		-- Command handling logic
 		plr.Chatted:Connect(function(msg)
 			local args = msg:lower():split(" ")
 			local command = args[1]
 	
 			if command == prefix .. "rc" or (args[1] == "/e" and args[2] == "+rc") then
+				-- +rc: Stops all loops and prevents new player checks
 				stopLoopAll()
-				killTargets = {}
 			elseif command == prefix .. "lol" or (args[1] == "/e" and args[2] == "+lol") then
-				startLoopAllPlayers()
+				-- +lol: Loops all players in the server who aren’t whitelisted
+				startLoopAll()
 			elseif command == prefix .. "kill" or (args[1] == "/e" and args[2] == "+kill") then
+				-- +kill: Targets specified players for continuous looping until stopped or player leaves
 				handleTargetingCommand(args, addPlayerToKillTargets)
 			elseif command == prefix .. "unkill" or (args[1] == "/e" and args[2] == "+unkill") then
-				handleTargetingCommand(args, removePlayerFromKillTargets) -- Remove from kill targets
+				-- +unkill: Removes players from kill targets and stops their loop
+				handleTargetingCommand(args, removePlayerFromKillTargets)
 			elseif command == prefix .. "skill" or (args[1] == "/e" and args[2] == "+skill") then
+				-- +skill: Applies a single arm angle change to specific players
 				for i = 2, #args do
 					local targetPlayer = findPlayer(args[i])
 					if targetPlayer and not whitelistedPlayers[targetPlayer.UserId] then
-						ApplyArmAngleChanges(targetPlayer, true) -- Apply angle change only once
+						ApplyArmAngleChanges(targetPlayer, true)
 					end
 				end
 			elseif command == prefix .. "slol" or (args[1] == "/e" and args[2] == "+slol") then
+				-- +slol: Applies a single arm angle change to all players in the server except whitelisted
 				for _, player in ipairs(plrs:GetPlayers()) do
 					if player ~= plr and not whitelistedPlayers[player.UserId] and not stoppedLoopPlayers[player.UserId] then
 						ApplyArmAngleChanges(player, true)
 					end
 				end
 			elseif command == prefix .. "wl" or (args[1] == "/e" and args[2] == "+wl") then
+				-- +wl: Whitelists specified players from any loop actions
 				handleTargetingCommand(args, whitelistPlayer)
 			elseif command == prefix .. "stop" or (args[1] == "/e" and args[2] == "+stop") then
-				handleTargetingCommand(args, stopLoopForPlayer) -- Stop loop for specific players
+				-- +stop: Stops loop actions on specific players
+				handleTargetingCommand(args, stopLoopForPlayer)
 			end
 		end)
 	
-		plrs.PlayerRemoving:Connect(function(player)
-			-- Safely remove player from targetPlayers and mark them as stopped
-			stoppedLoopPlayers[player.UserId] = true -- Mark player as stopped
-			targetPlayers = table.filter(targetPlayers, function(p) return p.UserId ~= player.UserId end)
-		end)
-	
+		-- Detect player rejoining and check if they were in kill targets
 		plrs.PlayerAdded:Connect(function(player)
-			-- Check if the player was previously stopped and re-add them to targetPlayers
-			if stoppedLoopPlayers[player.UserId] then
-				if not whitelistedPlayers[player.UserId] then
-					table.insert(targetPlayers, player) -- Re-add to the target list if not whitelisted
-					stoppedLoopPlayers[player.UserId] = false -- Reset the stopped state
-					ApplyArmAngleChanges(player, false) -- Apply immediately to the rejoined player
-					startLoopAll() -- Start the loop if it's not already running
-				end
+			if killTargets[player.UserId] then
+				stoppedLoopPlayers[player.UserId] = false -- Reset the stopped state
+				ApplyArmAngleChanges(player, false) -- Apply immediately to the rejoined player
 			end
 		end)
 	
-		function table.filter(tbl, func)
-			local filtered = {}
-			for _, value in ipairs(tbl) do
-				if func(value) then
-					table.insert(filtered, value)
-				end
-			end
-			return filtered
-		end
+		-- Remove player from kill targets when they leave
+		plrs.PlayerRemoving:Connect(function(player)
+			stoppedLoopPlayers[player.UserId] = true -- Mark player as stopped
+		end)
+	
+		-- Start loop for specific kill targets
+		spawn(loopKillTargets)
 	end
 	
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(MIPQ_fake_script)()
-local function NSJS_fake_script() -- Frame.LocalScript 
+coroutine.wrap(BJVB_fake_script)()
+local function ROSKRS_fake_script() -- Frame.LocalScript 
 	local script = Instance.new('LocalScript', Frame)
 
 	local dragger = {}; 
@@ -285,4 +288,4 @@ local function NSJS_fake_script() -- Frame.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(NSJS_fake_script)()
+coroutine.wrap(ROSKRS_fake_script)()
