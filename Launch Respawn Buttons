@@ -1,0 +1,184 @@
+local player = game:GetService("Players").LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+
+-- GUI setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = playerGui
+screenGui.ResetOnSpawn = false
+
+-- Create "Antis" button
+local antisButton = Instance.new("TextButton")
+antisButton.Size = UDim2.new(0, 100, 0, 30)
+antisButton.Position = UDim2.new(1, -110, 0.5, -105)
+antisButton.Text = "Antis"
+antisButton.TextSize = 16
+antisButton.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
+antisButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+antisButton.Parent = screenGui
+
+-- Create a frame for Anti options
+local antiFrame = Instance.new("Frame")
+antiFrame.Size = UDim2.new(0, 150, 0, 100)
+antiFrame.Position = UDim2.new(1, -170, 0.5, -155)
+antiFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+antiFrame.Visible = false
+antiFrame.Parent = screenGui
+
+-- Toggle frame visibility on Antis button click
+antisButton.MouseButton1Click:Connect(function()
+    antiFrame.Visible = not antiFrame.Visible
+end)
+
+-- Create "Anti Void" button
+local antiVoidButton = Instance.new("TextButton")
+antiVoidButton.Size = UDim2.new(0, 140, 0, 30)
+antiVoidButton.Position = UDim2.new(0, 5, 0, 5)
+antiVoidButton.Text = "Anti Void"
+antiVoidButton.TextSize = 14
+antiVoidButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+antiVoidButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+antiVoidButton.Parent = antiFrame
+
+-- Create "God Mode" button
+local godModeButton = Instance.new("TextButton")
+godModeButton.Size = UDim2.new(0, 140, 0, 30)
+godModeButton.Position = UDim2.new(0, 5, 0, 40)
+godModeButton.Text = "God Mode"
+godModeButton.TextSize = 14
+godModeButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+godModeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+godModeButton.Parent = antiFrame
+
+-- Variable to store God Mode state and humanoid reference
+local godModeEnabled = false
+local currentHumanoid
+
+-- Function to apply jump velocity for God Mode
+local function applyJumpVelocity()
+    if godModeEnabled then
+        local character = player.Character
+        if character then
+            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+            if humanoidRootPart then
+                humanoidRootPart.Velocity = Vector3.new(0, 80, 0)  -- Apply positive Y velocity for jump effect
+            end
+        end
+    end
+end
+
+-- God Mode functionality
+godModeButton.MouseButton1Click:Connect(function()
+    local character = player.Character or player.CharacterAdded:Wait()
+    local oldHumanoid = character:FindFirstChildOfClass("Humanoid")
+
+    if oldHumanoid then
+        -- Enable God Mode
+        godModeEnabled = true
+        currentHumanoid = oldHumanoid
+
+        -- Disable collisions and clone the humanoid
+        local newHumanoid = oldHumanoid:Clone()
+        newHumanoid.Parent = character
+        workspace.CurrentCamera.CameraSubject = newHumanoid  -- Set camera to focus on the new humanoid
+
+        -- Remove the old humanoid after a short delay
+        task.wait(0.2)
+        oldHumanoid:Destroy()
+    end
+end)
+
+-- Listen for jump input (both PC and mobile)
+UserInputService.JumpRequest:Connect(function()
+    if godModeEnabled then
+        applyJumpVelocity()
+    end
+end)
+
+-- Refresh and Respawn buttons
+-- Create "Refresh" button
+local refreshButton = Instance.new("TextButton")
+refreshButton.Size = UDim2.new(0, 100, 0, 30)
+refreshButton.Position = UDim2.new(1, -110, 0.5, -45) 
+refreshButton.Text = "Refresh"
+refreshButton.TextSize = 16
+refreshButton.Parent = screenGui
+
+-- Create "Respawn" button
+local respawnButton = Instance.new("TextButton")
+respawnButton.Size = UDim2.new(0, 100, 0, 30)
+respawnButton.Position = UDim2.new(1, -110, 0.5, 15)
+respawnButton.Text = "Respawn"
+respawnButton.TextSize = 16
+respawnButton.Parent = screenGui
+
+-- Function to reset the character
+local function resetCharacter(spawnPosition)
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    local humanoid = character:WaitForChild("Humanoid")
+
+    -- Set humanoid health to 0 to respawn
+    humanoid.Health = 0
+
+    -- Wait for the character to respawn
+    local newCharacter = player.CharacterAdded:Wait()
+
+    -- After respawning, teleport to spawnPosition if provided
+    local newHumanoidRootPart = newCharacter:WaitForChild("HumanoidRootPart")
+    if spawnPosition then
+        newHumanoidRootPart.CFrame = CFrame.new(spawnPosition)
+    end
+
+    -- Restore health
+    local newHumanoid = newCharacter:WaitForChild("Humanoid")
+    newHumanoid.Health = newHumanoid.MaxHealth
+end
+
+-- Refresh Button Functionality
+local spawnPosition
+refreshButton.MouseButton1Click:Connect(function()
+    -- Save spawn position and reset
+    spawnPosition = player.Character.HumanoidRootPart.Position
+    resetCharacter(spawnPosition)
+    spawnPosition = nil  -- Reset spawn position after respawn
+end)
+
+-- Respawn Button Functionality
+respawnButton.MouseButton1Click:Connect(function()
+    resetCharacter()  -- Respawn character without changing spawn position
+end)
+
+-- Create "Jump" button
+local jumpButton = Instance.new("TextButton")
+jumpButton.Size = UDim2.new(0, 100, 0, 30)
+jumpButton.Position = UDim2.new(1, -110, 0.5, 65)  -- Below refresh and respawn buttons
+jumpButton.Text = "Jump"
+jumpButton.TextSize = 16
+jumpButton.Parent = screenGui
+
+-- Jump Button Functionality
+jumpButton.MouseButton1Click:Connect(function()
+    local character = player.Character
+    if character then
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        if humanoidRootPart then
+            humanoidRootPart.Velocity = Vector3.new(0, 80, 0)  -- Apply jump velocity
+        end
+    end
+end)
+
+-- Ensure camera keeps focusing on the humanoid
+local function updateCameraFocus()
+    local character = player.Character
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            workspace.CurrentCamera.CameraSubject = humanoid  -- Continuously set camera focus to the humanoid
+        end
+    end
+end
+
+-- Update camera focus on humanoid at regular intervals
+game:GetService("RunService").Heartbeat:Connect(updateCameraFocus)
