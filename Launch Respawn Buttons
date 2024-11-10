@@ -16,7 +16,7 @@ antisButton.Text = "Antis"
 antisButton.TextSize = 16
 antisButton.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
 antisButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-antisButton.Parent = screenGui
+antisButton.Parent = RespawnButtons
 
 -- Create a frame for Anti options
 local antiFrame = Instance.new("Frame")
@@ -24,7 +24,7 @@ antiFrame.Size = UDim2.new(0, 150, 0, 100)
 antiFrame.Position = UDim2.new(1, -170, 0.5, -155)
 antiFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 antiFrame.Visible = false
-antiFrame.Parent = screenGui
+antiFrame.Parent = RespawnButtons
 
 -- Toggle frame visibility on Antis button click
 antisButton.MouseButton1Click:Connect(function()
