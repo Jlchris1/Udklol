@@ -4,7 +4,7 @@ local workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 
 -- GUI setup
-local screenGui = Instance.new("ScreenGui")
+local screenGui = Instance.new("RespawnButtons")
 screenGui.Parent = playerGui
 screenGui.ResetOnSpawn = false
 
