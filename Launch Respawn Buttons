@@ -4,7 +4,7 @@ local workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 
 -- GUI setup
-local screenGui = Instance.new("RespawnButtons")
+local screenGui = Instance.new("ScreenGui")
 screenGui.Parent = playerGui
 screenGui.ResetOnSpawn = false
 
@@ -16,7 +16,7 @@ antisButton.Text = "Antis"
 antisButton.TextSize = 16
 antisButton.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
 antisButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-antisButton.Parent = RespawnButtons
+antisButton.Parent = screenGui
 
 -- Create a frame for Anti options
 local antiFrame = Instance.new("Frame")
@@ -24,7 +24,7 @@ antiFrame.Size = UDim2.new(0, 150, 0, 100)
 antiFrame.Position = UDim2.new(1, -170, 0.5, -155)
 antiFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 antiFrame.Visible = false
-antiFrame.Parent = RespawnButtons
+antiFrame.Parent = screenGui
 
 -- Toggle frame visibility on Antis button click
 antisButton.MouseButton1Click:Connect(function()
