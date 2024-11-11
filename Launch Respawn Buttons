@@ -3,52 +3,63 @@ local playerGui = player:WaitForChild("PlayerGui")
 local workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 
--- GUI setup
+-- GUI setup for your ScreenGui with high ZIndex values
 local screenGui = Instance.new("ScreenGui")
 screenGui.Parent = playerGui
 screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling  -- Ensures proper layering within GUI
+screenGui.DisplayOrder = 1000  -- Ensure the screen GUI is on top of others
 
--- Create "Antis" button
+-- Small toggle button on the left side of the screen (15x15 pixels)
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 15, 0, 15)  -- Updated size to 15x15
+toggleButton.Position = UDim2.new(0, 5, 0.5, 0)  -- Positioned on the left side
+toggleButton.Text = ""
+toggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+toggleButton.BorderSizePixel = 0
+toggleButton.ZIndex = 10000000000  -- Set high ZIndex to be above other GUIs
+toggleButton.Parent = screenGui
+
+-- Frame to hold the Antis buttons (Anti Void, God Mode, etc.)
+local antiFrame = Instance.new("Frame")
+antiFrame.Size = UDim2.new(0, 150, 0, 100)
+antiFrame.Position = UDim2.new(1, -320, 0.5, -155)  -- Positioned to the left of Antis button
+antiFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+antiFrame.Visible = false  -- Initially hidden
+antiFrame.ZIndex = 10000000000  -- Ensure it's above other GUIs
+antiFrame.Parent = screenGui
+
+-- Create "Antis" button (still visible outside the frame)
 local antisButton = Instance.new("TextButton")
 antisButton.Size = UDim2.new(0, 100, 0, 30)
-antisButton.Position = UDim2.new(1, -110, 0.5, -105)
+antisButton.Position = UDim2.new(1, -110, 0.5, -105)  -- Positioned as per your original request
 antisButton.Text = "Antis"
 antisButton.TextSize = 16
 antisButton.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
 antisButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+antisButton.ZIndex = 10000000000  -- Ensure it's on top of other GUIs
 antisButton.Parent = screenGui
 
--- Create a frame for Anti options
-local antiFrame = Instance.new("Frame")
-antiFrame.Size = UDim2.new(0, 150, 0, 100)
-antiFrame.Position = UDim2.new(1, -170, 0.5, -155)
-antiFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-antiFrame.Visible = false
-antiFrame.Parent = screenGui
-
--- Toggle frame visibility on Antis button click
-antisButton.MouseButton1Click:Connect(function()
-    antiFrame.Visible = not antiFrame.Visible
-end)
-
--- Create "Anti Void" button
+-- Create "Anti Void" button inside the frame
 local antiVoidButton = Instance.new("TextButton")
 antiVoidButton.Size = UDim2.new(0, 140, 0, 30)
-antiVoidButton.Position = UDim2.new(0, 5, 0, 5)
+antiVoidButton.Position = UDim2.new(0, 5, 0, 5)  -- Inside the frame
 antiVoidButton.Text = "Anti Void"
 antiVoidButton.TextSize = 14
 antiVoidButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
 antiVoidButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+antiVoidButton.ZIndex = 10000000000  -- Ensure it's above other GUIs
 antiVoidButton.Parent = antiFrame
 
--- Create "God Mode" button
+-- Create "God Mode" button inside the frame
 local godModeButton = Instance.new("TextButton")
 godModeButton.Size = UDim2.new(0, 140, 0, 30)
-godModeButton.Position = UDim2.new(0, 5, 0, 40)
+godModeButton.Position = UDim2.new(0, 5, 0, 40)  -- Inside the frame
 godModeButton.Text = "God Mode"
 godModeButton.TextSize = 14
 godModeButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
 godModeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+godModeButton.ZIndex = 10000000000  -- Ensure it's above other GUIs
 godModeButton.Parent = antiFrame
 
 -- Variable to store God Mode state and humanoid reference
@@ -62,28 +73,36 @@ local function applyJumpVelocity()
         if character then
             local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
             if humanoidRootPart then
-                humanoidRootPart.Velocity = Vector3.new(0, 80, 0)  -- Apply positive Y velocity for jump effect
+                humanoidRootPart.Velocity = Vector3.new(0, 80, 0)
             end
         end
     end
 end
 
+-- Ensure camera keeps focusing on the humanoid
+local function updateCameraFocus()
+    local character = player.Character
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            workspace.CurrentCamera.CameraSubject = humanoid -- Continuously set camera focus to the humanoid
+        end
+    end
+end
+
+-- Update camera focus on humanoid at regular intervals
+game:GetService("RunService").Heartbeat:Connect(updateCameraFocus)
+
 -- God Mode functionality
 godModeButton.MouseButton1Click:Connect(function()
     local character = player.Character or player.CharacterAdded:Wait()
     local oldHumanoid = character:FindFirstChildOfClass("Humanoid")
-
     if oldHumanoid then
-        -- Enable God Mode
         godModeEnabled = true
         currentHumanoid = oldHumanoid
-
-        -- Disable collisions and clone the humanoid
         local newHumanoid = oldHumanoid:Clone()
         newHumanoid.Parent = character
-        workspace.CurrentCamera.CameraSubject = newHumanoid  -- Set camera to focus on the new humanoid
-
-        -- Remove the old humanoid after a short delay
+        workspace.CurrentCamera.CameraSubject = newHumanoid  -- Make the camera follow the new humanoid
         task.wait(0.2)
         oldHumanoid:Destroy()
     end
@@ -97,20 +116,24 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 -- Refresh and Respawn buttons
+local spawnPosition
+
 -- Create "Refresh" button
 local refreshButton = Instance.new("TextButton")
 refreshButton.Size = UDim2.new(0, 100, 0, 30)
-refreshButton.Position = UDim2.new(1, -110, 0.5, -45) 
+refreshButton.Position = UDim2.new(1, -110, 0.5, -45)  -- Restoring original position
 refreshButton.Text = "Refresh"
 refreshButton.TextSize = 16
+refreshButton.ZIndex = 10000000000
 refreshButton.Parent = screenGui
 
 -- Create "Respawn" button
 local respawnButton = Instance.new("TextButton")
 respawnButton.Size = UDim2.new(0, 100, 0, 30)
-respawnButton.Position = UDim2.new(1, -110, 0.5, 15)
+respawnButton.Position = UDim2.new(1, -110, 0.5, 15)  -- Restoring original position
 respawnButton.Text = "Respawn"
 respawnButton.TextSize = 16
+respawnButton.ZIndex = 10000000000
 respawnButton.Parent = screenGui
 
 -- Function to reset the character
@@ -118,44 +141,35 @@ local function resetCharacter(spawnPosition)
     local character = player.Character or player.CharacterAdded:Wait()
     local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
     local humanoid = character:WaitForChild("Humanoid")
-
-    -- Set humanoid health to 0 to respawn
     humanoid.Health = 0
-
-    -- Wait for the character to respawn
     local newCharacter = player.CharacterAdded:Wait()
-
-    -- After respawning, teleport to spawnPosition if provided
     local newHumanoidRootPart = newCharacter:WaitForChild("HumanoidRootPart")
     if spawnPosition then
         newHumanoidRootPart.CFrame = CFrame.new(spawnPosition)
     end
-
-    -- Restore health
     local newHumanoid = newCharacter:WaitForChild("Humanoid")
     newHumanoid.Health = newHumanoid.MaxHealth
 end
 
 -- Refresh Button Functionality
-local spawnPosition
 refreshButton.MouseButton1Click:Connect(function()
-    -- Save spawn position and reset
     spawnPosition = player.Character.HumanoidRootPart.Position
     resetCharacter(spawnPosition)
-    spawnPosition = nil  -- Reset spawn position after respawn
+    spawnPosition = nil
 end)
 
 -- Respawn Button Functionality
 respawnButton.MouseButton1Click:Connect(function()
-    resetCharacter()  -- Respawn character without changing spawn position
+    resetCharacter()
 end)
 
 -- Create "Jump" button
 local jumpButton = Instance.new("TextButton")
 jumpButton.Size = UDim2.new(0, 100, 0, 30)
-jumpButton.Position = UDim2.new(1, -110, 0.5, 65)  -- Below refresh and respawn buttons
+jumpButton.Position = UDim2.new(1, -110, 0.5, 65)  -- Restoring original position
 jumpButton.Text = "Jump"
 jumpButton.TextSize = 16
+jumpButton.ZIndex = 10000000000
 jumpButton.Parent = screenGui
 
 -- Jump Button Functionality
@@ -164,21 +178,23 @@ jumpButton.MouseButton1Click:Connect(function()
     if character then
         local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
         if humanoidRootPart then
-            humanoidRootPart.Velocity = Vector3.new(0, 80, 0)  -- Apply jump velocity
+            humanoidRootPart.Velocity = Vector3.new(0, 80, 0)
         end
     end
 end)
 
--- Ensure camera keeps focusing on the humanoid
-local function updateCameraFocus()
-    local character = player.Character
-    if character then
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            workspace.CurrentCamera.CameraSubject = humanoid  -- Continuously set camera focus to the humanoid
-        end
-    end
-end
+-- Hide/Show all buttons except the toggle button
+local buttonsHidden = false  -- Track visibility state
+toggleButton.MouseButton1Click:Connect(function()
+    buttonsHidden = not buttonsHidden  -- Toggle the state
+    local allButtons = { antisButton, refreshButton, respawnButton, jumpButton, antiVoidButton, godModeButton }
 
--- Update camera focus on humanoid at regular intervals
-game:GetService("RunService").Heartbeat:Connect(updateCameraFocus)
+    for _, button in ipairs(allButtons) do
+        button.Visible = not buttonsHidden
+    end
+end)
+
+-- Toggle Anti Frame visibility on "Antis" button click
+antisButton.MouseButton1Click:Connect(function()
+    antiFrame.Visible = not antiFrame.Visible  -- Toggle the visibility of the Anti Frame
+end)
