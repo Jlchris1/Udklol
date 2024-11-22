@@ -1,0 +1,199 @@
+-- Services
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local replicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Create ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PlayerListGUI"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+screenGui.Parent = playerGui
+
+-- Main Frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 250, 0, 300)
+mainFrame.Position = UDim2.new(0.5, -125, 0.5, -150)
+mainFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+mainFrame.BackgroundTransparency = 0.5
+mainFrame.Visible = false
+mainFrame.Parent = screenGui
+
+-- Title Label (Position changed to Y = -20)
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, 0, 0, 30)
+titleLabel.Position = UDim2.new(0, 0, 0, -20)  -- Position Y changed to -20
+titleLabel.Text = "Player List"
+titleLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.TextScaled = true
+titleLabel.Parent = mainFrame
+
+-- ScrollingFrame for Player List
+local playerListFrame = Instance.new("ScrollingFrame")
+playerListFrame.Size = UDim2.new(1, -20, 1, -60)
+playerListFrame.Position = UDim2.new(0, 10, 0, 40)
+playerListFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+playerListFrame.BackgroundTransparency = 0.4
+playerListFrame.ScrollBarThickness = 10
+playerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+playerListFrame.Parent = mainFrame
+
+-- UIListLayout for the player list
+local listLayout = Instance.new("UIListLayout")
+listLayout.FillDirection = Enum.FillDirection.Vertical
+listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+listLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0, 5)
+listLayout.Parent = playerListFrame
+
+-- Search Box (Moved higher to avoid overlap with the top name)
+local searchBox = Instance.new("TextBox")
+searchBox.Size = UDim2.new(1, -20, 0, 30)
+searchBox.Position = UDim2.new(0, 10, 0, 10)  -- Adjusted position
+searchBox.PlaceholderText = "Search..."
+searchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+searchBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+searchBox.TextTransparency = 0.8
+searchBox.TextScaled = true
+searchBox.Parent = mainFrame
+
+-- Reset Button
+local resetButton = Instance.new("TextButton")
+resetButton.Size = UDim2.new(0, 100, 0, 30)
+resetButton.Position = UDim2.new(0, 250, 0.065, -40)
+resetButton.Text = "Reset List"
+resetButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+resetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+resetButton.Parent = mainFrame
+
+-- Toggle Button for showing/hiding the main frame (Position changed to 0, 0, 0, 45)
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 100, 0, 30)
+toggleButton.Position = UDim2.new(0, 0, 0, 45)  -- Position changed to 0, 0, 0, 45
+toggleButton.Text = "Toggle GUI"
+toggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Parent = screenGui
+
+-- Function to create player entry in the list
+local function createPlayerEntry(targetPlayer)
+    -- Ensure the BoolValues are created for the player if not already done
+    local selectedValue = targetPlayer:FindFirstChild("Selected") or Instance.new("BoolValue")
+    selectedValue.Name = "Selected"
+    selectedValue.Parent = targetPlayer
+
+    local whitelistedValue = targetPlayer:FindFirstChild("Whitelisted") or Instance.new("BoolValue")
+    whitelistedValue.Name = "Whitelisted"
+    whitelistedValue.Parent = targetPlayer
+
+    local playerFrame = Instance.new("Frame")
+    playerFrame.Size = UDim2.new(1, -10, 0, 50)
+    playerFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    playerFrame.BackgroundTransparency = 0.4
+    playerFrame.Parent = playerListFrame
+
+    -- Player name label
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(0.7, 0, 1, 0)
+    nameLabel.Position = UDim2.new(0, 10, 0, 0)
+    nameLabel.Text = targetPlayer.DisplayName .. " (" .. targetPlayer.Name .. ")"
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Parent = playerFrame
+
+    -- Selection Button
+    local selectButton = Instance.new("TextButton")
+    selectButton.Size = UDim2.new(0.15, 0, 0.8, 0)
+    selectButton.Position = UDim2.new(0.75, 0, 0.1, 0)
+    selectButton.Text = "Select"
+    selectButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)  -- Start grey
+    selectButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    selectButton.Parent = playerFrame
+
+    -- Whitelist Button
+    local whitelistButton = Instance.new("TextButton")
+    whitelistButton.Size = UDim2.new(0.15, 0, 0.8, 0)
+    whitelistButton.Position = UDim2.new(0.9, 0, 0.1, 0)
+    whitelistButton.Text = "WL"
+    whitelistButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)  -- Start grey
+    whitelistButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    whitelistButton.Parent = playerFrame
+
+    -- Button functions for Select
+    selectButton.MouseButton1Click:Connect(function()
+        -- Toggle selected state and change color
+        selectedValue.Value = not selectedValue.Value
+        selectButton.BackgroundColor3 = selectedValue.Value and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(100, 100, 100)
+    end)
+
+    -- Button functions for Whitelist
+    whitelistButton.MouseButton1Click:Connect(function()
+        -- Toggle whitelisted state and change color
+        whitelistedValue.Value = not whitelistedValue.Value
+        whitelistButton.BackgroundColor3 = whitelistedValue.Value and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(100, 100, 100)
+    end)
+
+    -- Set the initial state of the buttons based on the saved state
+    if selectedValue.Value then
+        selectButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    end
+    if whitelistedValue.Value then
+        whitelistButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    end
+end
+
+-- Function to update player list based on search filter
+local function updatePlayerList(filter)
+    -- Clear existing entries
+    for _, child in pairs(playerListFrame:GetChildren()) do
+        if child:IsA("Frame") and not table.find(Players:GetPlayers(), child.TextLabel.Text) then
+            child:Destroy()  -- Remove only the player who left
+        end
+    end
+    
+    -- Add new player entries
+    for _, targetPlayer in ipairs(Players:GetPlayers()) do
+        if targetPlayer ~= player then
+            local displayNameLower = targetPlayer.DisplayName:lower()
+            local nameLower = targetPlayer.Name:lower()
+            if not filter or displayNameLower:find(filter) or nameLower:find(filter) then
+                createPlayerEntry(targetPlayer)
+            end
+        end
+    end
+
+    -- Adjust the canvas size based on the number of entries
+    local totalHeight = #Players:GetPlayers() * (50 + 5)  -- 50 is entry height, 5 is padding
+    playerListFrame.CanvasSize = UDim2.new(0, 0, 0, totalHeight)
+end
+
+-- Toggle the player list visibility
+toggleButton.MouseButton1Click:Connect(function()
+    mainFrame.Visible = not mainFrame.Visible
+end)
+
+-- Update player list initially
+updatePlayerList()
+
+-- Search functionality
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    updatePlayerList(searchBox.Text:lower())
+end)
+
+-- Reset Button functionality
+resetButton.MouseButton1Click:Connect(function()
+    searchBox.Text = ""
+    updatePlayerList()
+end)
+
+-- Update player list on player join or leave
+Players.PlayerAdded:Connect(function(player)
+    updatePlayerList(searchBox.Text:lower())  -- Update when a new player joins
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    updatePlayerList(searchBox.Text:lower())  -- Update when a player leaves
+end)
