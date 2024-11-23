@@ -5,21 +5,21 @@
 
 local guilauncher = Instance.new("ScreenGui")
 local Frame = Instance.new("Frame")
-local bps = Instance.new("TextButton")
-local sdn = Instance.new("TextButton")
-local sas = Instance.new("TextButton")
 local destroyui = Instance.new("TextButton")
 local explorer = Instance.new("TextButton")
-local positionfinder = Instance.new("TextButton")
-local remotespy = Instance.new("TextButton")
 local fireallremotes = Instance.new("TextButton")
-local refreshscript = Instance.new("TextButton")
-local wormygui = Instance.new("TextButton")
-local elementalgrounds = Instance.new("TextButton")
-local unanchoredgui = Instance.new("TextButton")
 local flinggui = Instance.new("TextButton")
-local respawnbuttons = Instance.new("TextButton")
+local positionfinder = Instance.new("TextButton")
+local refreshscript = Instance.new("TextButton")
+local remotespy = Instance.new("TextButton")
+local sas = Instance.new("TextButton")
+local sdn = Instance.new("TextButton")
+local wormygui = Instance.new("TextButton")
+local bps = Instance.new("TextButton")
 local chatbypass = Instance.new("TextButton")
+local unanchoredgui = Instance.new("TextButton")
+local respawnbuttons = Instance.new("TextButton")
+local elementalgrounds = Instance.new("TextButton")
 
 --Properties:
 
@@ -31,43 +31,8 @@ Frame.Parent = guilauncher
 Frame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 Frame.BorderColor3 = Color3.fromRGB(0, 0, 0)
 Frame.BorderSizePixel = 0
-Frame.Position = UDim2.new(0.213611841, 0, 0.169153631, 0)
+Frame.Position = UDim2.new(0.214959562, 0, 0.171503946, 0)
 Frame.Size = UDim2.new(0, 776, 0, 272)
-
-bps.Name = "bps"
-bps.Parent = Frame
-bps.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-bps.BorderColor3 = Color3.fromRGB(0, 0, 0)
-bps.BorderSizePixel = 0
-bps.Size = UDim2.new(0, 138, 0, 38)
-bps.Font = Enum.Font.SourceSansBold
-bps.Text = "bully people simulator"
-bps.TextColor3 = Color3.fromRGB(255, 0, 0)
-bps.TextSize = 15.000
-
-sdn.Name = "sdn"
-sdn.Parent = Frame
-sdn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-sdn.BorderColor3 = Color3.fromRGB(0, 0, 0)
-sdn.BorderSizePixel = 0
-sdn.Position = UDim2.new(0.185595363, 0, 0, 0)
-sdn.Size = UDim2.new(0, 137, 0, 38)
-sdn.Font = Enum.Font.SourceSansBold
-sdn.Text = "survival disaster natural"
-sdn.TextColor3 = Color3.fromRGB(255, 0, 0)
-sdn.TextSize = 15.000
-
-sas.Name = "sas"
-sas.Parent = Frame
-sas.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-sas.BorderColor3 = Color3.fromRGB(0, 0, 0)
-sas.BorderSizePixel = 0
-sas.Position = UDim2.new(0.371229827, 0, 0, 0)
-sas.Size = UDim2.new(0, 138, 0, 38)
-sas.Font = Enum.Font.SourceSansBold
-sas.Text = "scp 173 and scp 096 rp"
-sas.TextColor3 = Color3.fromRGB(255, 0, 0)
-sas.TextSize = 16.000
 
 destroyui.Name = "destroy ui"
 destroyui.Parent = Frame
@@ -93,30 +58,6 @@ explorer.Text = "dex explorer"
 explorer.TextColor3 = Color3.fromRGB(255, 0, 0)
 explorer.TextSize = 28.000
 
-positionfinder.Name = "position finder"
-positionfinder.Parent = Frame
-positionfinder.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-positionfinder.BorderColor3 = Color3.fromRGB(0, 0, 0)
-positionfinder.BorderSizePixel = 0
-positionfinder.Position = UDim2.new(0.185159579, 0, 0.160223454, 0)
-positionfinder.Size = UDim2.new(0, 138, 0, 36)
-positionfinder.Font = Enum.Font.SourceSansBold
-positionfinder.Text = "position finder"
-positionfinder.TextColor3 = Color3.fromRGB(255, 0, 0)
-positionfinder.TextSize = 24.000
-
-remotespy.Name = "remote spy"
-remotespy.Parent = Frame
-remotespy.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-remotespy.BorderColor3 = Color3.fromRGB(0, 0, 0)
-remotespy.BorderSizePixel = 0
-remotespy.Position = UDim2.new(0.370130241, 0, 0.160223454, 0)
-remotespy.Size = UDim2.new(0, 138, 0, 36)
-remotespy.Font = Enum.Font.SourceSansBold
-remotespy.Text = "remote spy"
-remotespy.TextColor3 = Color3.fromRGB(255, 0, 0)
-remotespy.TextSize = 32.000
-
 fireallremotes.Name = "fire all remotes"
 fireallremotes.Parent = Frame
 fireallremotes.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -128,56 +69,6 @@ fireallremotes.Font = Enum.Font.SourceSansBold
 fireallremotes.Text = "fire all remotes v1"
 fireallremotes.TextColor3 = Color3.fromRGB(255, 0, 0)
 fireallremotes.TextSize = 20.000
-
-refreshscript.Name = "refresh script"
-refreshscript.Parent = Frame
-refreshscript.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-refreshscript.BorderColor3 = Color3.fromRGB(0, 0, 0)
-refreshscript.BorderSizePixel = 0
-refreshscript.Position = UDim2.new(0.558034301, 0, 0.161764711, 0)
-refreshscript.Size = UDim2.new(0, 138, 0, 36)
-refreshscript.Font = Enum.Font.SourceSansBold
-refreshscript.Text = ".re script/cmd: .re"
-refreshscript.TextColor3 = Color3.fromRGB(255, 0, 0)
-refreshscript.TextSize = 20.000
-
-wormygui.Name = "wormy gui"
-wormygui.Parent = Frame
-wormygui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-wormygui.BorderColor3 = Color3.fromRGB(0, 0, 0)
-wormygui.BorderSizePixel = 0
-wormygui.Position = UDim2.new(0.747273028, 0, 0, 0)
-wormygui.Size = UDim2.new(0, 138, 0, 38)
-wormygui.Font = Enum.Font.SourceSansBold
-wormygui.Text = "wormy gui"
-wormygui.TextColor3 = Color3.fromRGB(255, 0, 0)
-wormygui.TextSize = 32.000
-
-elementalgrounds.Name = "elemental grounds"
-elementalgrounds.Parent = Frame
-elementalgrounds.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-elementalgrounds.BorderColor3 = Color3.fromRGB(0, 0, 0)
-elementalgrounds.BorderSizePixel = 0
-elementalgrounds.Position = UDim2.new(0.747272909, 0, 0.161764711, 0)
-elementalgrounds.Size = UDim2.new(0, 140, 0, 36)
-elementalgrounds.Font = Enum.Font.SourceSansBold
-elementalgrounds.Text = "elemental grounds"
-elementalgrounds.TextColor3 = Color3.fromRGB(255, 0, 0)
-elementalgrounds.TextSize = 19.000
-elementalgrounds.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
-
-unanchoredgui.Name = "unanchored gui"
-unanchoredgui.Parent = Frame
-unanchoredgui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-unanchoredgui.BorderColor3 = Color3.fromRGB(0, 0, 0)
-unanchoredgui.BorderSizePixel = 0
-unanchoredgui.Position = UDim2.new(0, 0, 0.323529422, 0)
-unanchoredgui.Size = UDim2.new(0, 138, 0, 36)
-unanchoredgui.Font = Enum.Font.SourceSansBold
-unanchoredgui.Text = "unanchored gui"
-unanchoredgui.TextColor3 = Color3.fromRGB(255, 0, 0)
-unanchoredgui.TextSize = 20.000
-unanchoredgui.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 
 flinggui.Name = "fling gui"
 flinggui.Parent = Frame
@@ -192,18 +83,88 @@ flinggui.TextColor3 = Color3.fromRGB(255, 0, 0)
 flinggui.TextSize = 20.000
 flinggui.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 
-respawnbuttons.Name = "respawn buttons"
-respawnbuttons.Parent = Frame
-respawnbuttons.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-respawnbuttons.BorderColor3 = Color3.fromRGB(0, 0, 0)
-respawnbuttons.BorderSizePixel = 0
-respawnbuttons.Position = UDim2.new(0.369845361, 0, 0.323529422, 0)
-respawnbuttons.Size = UDim2.new(0, 138, 0, 36)
-respawnbuttons.Font = Enum.Font.SourceSansBold
-respawnbuttons.Text = "respawn buttons"
-respawnbuttons.TextColor3 = Color3.fromRGB(255, 0, 0)
-respawnbuttons.TextSize = 20.000
-respawnbuttons.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+positionfinder.Name = "position finder"
+positionfinder.Parent = Frame
+positionfinder.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+positionfinder.BorderColor3 = Color3.fromRGB(0, 0, 0)
+positionfinder.BorderSizePixel = 0
+positionfinder.Position = UDim2.new(0.185159579, 0, 0.160223454, 0)
+positionfinder.Size = UDim2.new(0, 138, 0, 36)
+positionfinder.Font = Enum.Font.SourceSansBold
+positionfinder.Text = "position finder"
+positionfinder.TextColor3 = Color3.fromRGB(255, 0, 0)
+positionfinder.TextSize = 24.000
+
+refreshscript.Name = "refresh script"
+refreshscript.Parent = Frame
+refreshscript.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+refreshscript.BorderColor3 = Color3.fromRGB(0, 0, 0)
+refreshscript.BorderSizePixel = 0
+refreshscript.Position = UDim2.new(0.558034301, 0, 0.161764711, 0)
+refreshscript.Size = UDim2.new(0, 138, 0, 36)
+refreshscript.Font = Enum.Font.SourceSansBold
+refreshscript.Text = ".re script/cmd: .re"
+refreshscript.TextColor3 = Color3.fromRGB(255, 0, 0)
+refreshscript.TextSize = 20.000
+
+remotespy.Name = "remote spy"
+remotespy.Parent = Frame
+remotespy.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+remotespy.BorderColor3 = Color3.fromRGB(0, 0, 0)
+remotespy.BorderSizePixel = 0
+remotespy.Position = UDim2.new(0.370130241, 0, 0.160223454, 0)
+remotespy.Size = UDim2.new(0, 138, 0, 36)
+remotespy.Font = Enum.Font.SourceSansBold
+remotespy.Text = "remote spy"
+remotespy.TextColor3 = Color3.fromRGB(255, 0, 0)
+remotespy.TextSize = 32.000
+
+sas.Name = "sas"
+sas.Parent = Frame
+sas.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+sas.BorderColor3 = Color3.fromRGB(0, 0, 0)
+sas.BorderSizePixel = 0
+sas.Position = UDim2.new(0.371229827, 0, 0, 0)
+sas.Size = UDim2.new(0, 138, 0, 38)
+sas.Font = Enum.Font.SourceSansBold
+sas.Text = "scp 173 and scp 096 rp"
+sas.TextColor3 = Color3.fromRGB(255, 0, 0)
+sas.TextSize = 16.000
+
+sdn.Name = "sdn"
+sdn.Parent = Frame
+sdn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+sdn.BorderColor3 = Color3.fromRGB(0, 0, 0)
+sdn.BorderSizePixel = 0
+sdn.Position = UDim2.new(0.185595363, 0, 0, 0)
+sdn.Size = UDim2.new(0, 137, 0, 38)
+sdn.Font = Enum.Font.SourceSansBold
+sdn.Text = "survival disaster natural"
+sdn.TextColor3 = Color3.fromRGB(255, 0, 0)
+sdn.TextSize = 15.000
+
+wormygui.Name = "wormy gui"
+wormygui.Parent = Frame
+wormygui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+wormygui.BorderColor3 = Color3.fromRGB(0, 0, 0)
+wormygui.BorderSizePixel = 0
+wormygui.Position = UDim2.new(0.747273028, 0, 0, 0)
+wormygui.Size = UDim2.new(0, 138, 0, 38)
+wormygui.Font = Enum.Font.SourceSansBold
+wormygui.Text = "wormy gui"
+wormygui.TextColor3 = Color3.fromRGB(255, 0, 0)
+wormygui.TextSize = 32.000
+
+bps.Name = "bps"
+bps.Parent = Frame
+bps.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+bps.BorderColor3 = Color3.fromRGB(0, 0, 0)
+bps.BorderSizePixel = 0
+bps.Size = UDim2.new(0, 138, 0, 38)
+bps.Font = Enum.Font.SourceSansBold
+bps.Text = "bully people simulator"
+bps.TextColor3 = Color3.fromRGB(255, 0, 0)
+bps.TextSize = 15.000
 
 chatbypass.Name = "chat bypass"
 chatbypass.Parent = Frame
@@ -218,35 +179,244 @@ chatbypass.TextColor3 = Color3.fromRGB(255, 0, 0)
 chatbypass.TextSize = 20.000
 chatbypass.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 
+unanchoredgui.Name = "unanchored gui"
+unanchoredgui.Parent = Frame
+unanchoredgui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+unanchoredgui.BorderColor3 = Color3.fromRGB(0, 0, 0)
+unanchoredgui.BorderSizePixel = 0
+unanchoredgui.Position = UDim2.new(0, 0, 0.323529422, 0)
+unanchoredgui.Size = UDim2.new(0, 138, 0, 36)
+unanchoredgui.Font = Enum.Font.SourceSansBold
+unanchoredgui.Text = "unanchored gui"
+unanchoredgui.TextColor3 = Color3.fromRGB(255, 0, 0)
+unanchoredgui.TextSize = 20.000
+unanchoredgui.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+
+respawnbuttons.Name = "respawn buttons"
+respawnbuttons.Parent = Frame
+respawnbuttons.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+respawnbuttons.BorderColor3 = Color3.fromRGB(0, 0, 0)
+respawnbuttons.BorderSizePixel = 0
+respawnbuttons.Position = UDim2.new(0.369845361, 0, 0.323529422, 0)
+respawnbuttons.Size = UDim2.new(0, 138, 0, 36)
+respawnbuttons.Font = Enum.Font.SourceSansBold
+respawnbuttons.Text = "respawn buttons"
+respawnbuttons.TextColor3 = Color3.fromRGB(255, 0, 0)
+respawnbuttons.TextSize = 20.000
+respawnbuttons.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+
+elementalgrounds.Name = "elemental grounds"
+elementalgrounds.Parent = Frame
+elementalgrounds.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+elementalgrounds.BorderColor3 = Color3.fromRGB(0, 0, 0)
+elementalgrounds.BorderSizePixel = 0
+elementalgrounds.Position = UDim2.new(0.747272909, 0, 0.161764711, 0)
+elementalgrounds.Size = UDim2.new(0, 140, 0, 36)
+elementalgrounds.Font = Enum.Font.SourceSansBold
+elementalgrounds.Text = "elemental grounds"
+elementalgrounds.TextColor3 = Color3.fromRGB(255, 0, 0)
+elementalgrounds.TextSize = 19.000
+elementalgrounds.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+
 -- Scripts:
 
-local function QOTVAT_fake_script() -- bps.Script 
-	local script = Instance.new('Script', bps)
+local function BXRHCL_fake_script() -- destroyui.Script 
+	local script = Instance.new('Script', destroyui)
 
 	function Click(mouse)
 	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/maingui"))()
+		game.Players.LocalPlayer.PlayerGui.guilauncher:Destroy()
 	
 	end
 	
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QOTVAT_fake_script)()
-local function QFTJREO_fake_script() -- sdn.Script 
-	local script = Instance.new('Script', sdn)
+coroutine.wrap(BXRHCL_fake_script)()
+local function KBGXY_fake_script() -- explorer.expl 
+	local script = Instance.new('Script', explorer)
 
 	function Click(mouse)
 	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/sdn"))()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/DEX-Explorer/main/Mobile.lua"))()
 	
 	end
 	
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QFTJREO_fake_script)()
-local function EFQCKI_fake_script() -- sas.Script 
+coroutine.wrap(KBGXY_fake_script)()
+local function LRUAAU_fake_script() -- fireallremotes.Script 
+	local script = Instance.new('Script', fireallremotes)
+
+	function Click(mouse)
+	
+		local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	
+		-- Function to recursively search and handle RemoteEvents and RemoteFunctions
+		local function findAndFireRemotesInContainer(container)
+			for _, obj in pairs(container:GetDescendants()) do
+				-- Detect if the object is a RemoteEvent or RemoteFunction
+				if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+					-- Get the full path of the remote to distinguish it even if it shares the same name
+					local fullPath = obj:GetFullName()
+	
+					-- Log the RemoteEvent or RemoteFunction
+					print("Found remote: " .. obj.Name .. " at path: " .. fullPath)
+	
+					-- If it's a RemoteEvent, we fire it
+					if obj:IsA("RemoteEvent") then
+						obj:FireServer() -- Fire the RemoteEvent
+						print("Fired RemoteEvent: " .. obj.Name)
+					elseif obj:IsA("RemoteFunction") then
+						-- Fire the RemoteFunction by invoking it with default arguments (you can customize this)
+						local success, result = pcall(function()
+							return obj:InvokeServer() -- Optionally pass arguments here
+						end)
+	
+						if success then
+							print("Successfully invoked RemoteFunction: " .. obj.Name .. " | Result: " .. tostring(result))
+						else
+							print("Failed to invoke RemoteFunction: " .. obj.Name .. " | Error: " .. result)
+						end
+					end
+				elseif obj:IsA("Folder") or obj:IsA("Model") then
+					-- If the object is a folder or a container-like object, recursively check its descendants
+					print("Searching inside folder/model: " .. obj.Name)
+					findAndFireRemotesInContainer(obj)
+				end
+			end
+		end
+	
+		-- Function to start searching for all remotes in ReplicatedStorage
+		local function fireAllRemotes()
+			-- Search through ReplicatedStorage and fire remotes
+			print("Starting remote search in ReplicatedStorage...")
+			findAndFireRemotesInContainer(ReplicatedStorage)
+		end
+	
+		-- Call the function to fire all remotes
+		fireAllRemotes()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(LRUAAU_fake_script)()
+local function UNUA_fake_script() -- flinggui.Script 
+	local script = Instance.new('Script', flinggui)
+
+	function Click(mouse)
+	
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/flingguiv2"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(UNUA_fake_script)()
+local function TYJP_fake_script() -- positionfinder.pos 
+	local script = Instance.new('Script', positionfinder)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://pastefy.app/fE00IA44/raw"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(TYJP_fake_script)()
+local function VWXDJ_fake_script() -- refreshscript.Script 
+	local script = Instance.new('Script', refreshscript)
+
+	function Click(mouse)
+	
+		-- Variables
+		local Players = game:GetService("Players")
+	
+		-- Function to handle player chatting
+		local function onChatted(player, message)
+			local character = player.Character
+	
+			if message:lower() == ".re" then
+				if character and character:FindFirstChild("Humanoid") then
+					-- Save the location where the player is resetting
+					local respawnLocation = character.HumanoidRootPart.Position
+	
+					-- Set health to 0 to trigger respawn
+					character.Humanoid.Health = 0
+	
+					-- Wait for the player to respawn
+					local newCharacter = player.CharacterAdded:Wait()
+	
+					-- Teleport to the saved respawn location immediately
+					local humanoidRootPart = newCharacter:WaitForChild("HumanoidRootPart")
+					humanoidRootPart.CFrame = CFrame.new(respawnLocation)
+	
+					-- Restore health to max
+					local humanoid = newCharacter:WaitForChild("Humanoid")
+					humanoid.Health = humanoid.MaxHealth
+				end
+			end
+		end
+	
+		-- Function to connect the chat event to the player's new character
+		local function setupChatEvent(player)
+			player.Chatted:Connect(function(message)
+				onChatted(player, message)
+			end)
+		end
+	
+		-- Function to connect the PlayerAdded event for new players
+		local function onPlayerAdded(player)
+			-- Setup chat event for the new player
+			setupChatEvent(player)
+	
+			-- Also connect to their CharacterAdded event to setup for respawns
+			player.CharacterAdded:Connect(function(character)
+				-- Re-setup the chat event for the new character
+				setupChatEvent(player)
+			end)
+	
+			-- Check if the player already has a character and setup the chat event if they do
+			if player.Character then
+				setupChatEvent(player)
+			end
+		end
+	
+		-- Connect to existing players
+		for _, player in pairs(Players:GetPlayers()) do
+			onPlayerAdded(player)
+		end
+	
+		-- Connect the PlayerAdded event for new players
+		Players.PlayerAdded:Connect(onPlayerAdded)
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(VWXDJ_fake_script)()
+local function YHEV_fake_script() -- remotespy.rem 
+	local script = Instance.new('Script', remotespy)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/RS/main/SimpleSpyMobile"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(YHEV_fake_script)()
+local function OEWR_fake_script() -- sas.Script 
 	local script = Instance.new('Script', sas)
 
 	function Click(mouse)
@@ -336,190 +506,21 @@ local function EFQCKI_fake_script() -- sas.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(EFQCKI_fake_script)()
-local function FZTJG_fake_script() -- destroyui.Script 
-	local script = Instance.new('Script', destroyui)
+coroutine.wrap(OEWR_fake_script)()
+local function WMYIUJR_fake_script() -- sdn.Script 
+	local script = Instance.new('Script', sdn)
 
 	function Click(mouse)
 	
-		game.Players.LocalPlayer.PlayerGui.guilauncher:Destroy()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/sdn"))()
 	
 	end
 	
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(FZTJG_fake_script)()
-local function RUFCV_fake_script() -- explorer.expl 
-	local script = Instance.new('Script', explorer)
-
-	function Click(mouse)
-	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/DEX-Explorer/main/Mobile.lua"))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(RUFCV_fake_script)()
-local function XFTR_fake_script() -- positionfinder.pos 
-	local script = Instance.new('Script', positionfinder)
-
-	function Click(mouse)
-	
-		loadstring(game:HttpGet("https://pastefy.app/fE00IA44/raw"))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(XFTR_fake_script)()
-local function WHEAWH_fake_script() -- remotespy.rem 
-	local script = Instance.new('Script', remotespy)
-
-	function Click(mouse)
-	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/RS/main/SimpleSpyMobile"))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(WHEAWH_fake_script)()
-local function HFRAKD_fake_script() -- fireallremotes.Script 
-	local script = Instance.new('Script', fireallremotes)
-
-	function Click(mouse)
-	
-		local ReplicatedStorage = game:GetService("ReplicatedStorage")
-	
-		-- Function to recursively search and handle RemoteEvents and RemoteFunctions
-		local function findAndFireRemotesInContainer(container)
-			for _, obj in pairs(container:GetDescendants()) do
-				-- Detect if the object is a RemoteEvent or RemoteFunction
-				if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-					-- Get the full path of the remote to distinguish it even if it shares the same name
-					local fullPath = obj:GetFullName()
-	
-					-- Log the RemoteEvent or RemoteFunction
-					print("Found remote: " .. obj.Name .. " at path: " .. fullPath)
-	
-					-- If it's a RemoteEvent, we fire it
-					if obj:IsA("RemoteEvent") then
-						obj:FireServer() -- Fire the RemoteEvent
-						print("Fired RemoteEvent: " .. obj.Name)
-					elseif obj:IsA("RemoteFunction") then
-						-- Fire the RemoteFunction by invoking it with default arguments (you can customize this)
-						local success, result = pcall(function()
-							return obj:InvokeServer() -- Optionally pass arguments here
-						end)
-	
-						if success then
-							print("Successfully invoked RemoteFunction: " .. obj.Name .. " | Result: " .. tostring(result))
-						else
-							print("Failed to invoke RemoteFunction: " .. obj.Name .. " | Error: " .. result)
-						end
-					end
-				elseif obj:IsA("Folder") or obj:IsA("Model") then
-					-- If the object is a folder or a container-like object, recursively check its descendants
-					print("Searching inside folder/model: " .. obj.Name)
-					findAndFireRemotesInContainer(obj)
-				end
-			end
-		end
-	
-		-- Function to start searching for all remotes in ReplicatedStorage
-		local function fireAllRemotes()
-			-- Search through ReplicatedStorage and fire remotes
-			print("Starting remote search in ReplicatedStorage...")
-			findAndFireRemotesInContainer(ReplicatedStorage)
-		end
-	
-		-- Call the function to fire all remotes
-		fireAllRemotes()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(HFRAKD_fake_script)()
-local function CLXXCT_fake_script() -- refreshscript.Script 
-	local script = Instance.new('Script', refreshscript)
-
-	function Click(mouse)
-	
-		-- Variables
-		local Players = game:GetService("Players")
-	
-		-- Function to handle player chatting
-		local function onChatted(player, message)
-			local character = player.Character
-	
-			if message:lower() == ".re" then
-				if character and character:FindFirstChild("Humanoid") then
-					-- Save the location where the player is resetting
-					local respawnLocation = character.HumanoidRootPart.Position
-	
-					-- Set health to 0 to trigger respawn
-					character.Humanoid.Health = 0
-	
-					-- Wait for the player to respawn
-					local newCharacter = player.CharacterAdded:Wait()
-	
-					-- Teleport to the saved respawn location immediately
-					local humanoidRootPart = newCharacter:WaitForChild("HumanoidRootPart")
-					humanoidRootPart.CFrame = CFrame.new(respawnLocation)
-	
-					-- Restore health to max
-					local humanoid = newCharacter:WaitForChild("Humanoid")
-					humanoid.Health = humanoid.MaxHealth
-				end
-			end
-		end
-	
-		-- Function to connect the chat event to the player's new character
-		local function setupChatEvent(player)
-			player.Chatted:Connect(function(message)
-				onChatted(player, message)
-			end)
-		end
-	
-		-- Function to connect the PlayerAdded event for new players
-		local function onPlayerAdded(player)
-			-- Setup chat event for the new player
-			setupChatEvent(player)
-	
-			-- Also connect to their CharacterAdded event to setup for respawns
-			player.CharacterAdded:Connect(function(character)
-				-- Re-setup the chat event for the new character
-				setupChatEvent(player)
-			end)
-	
-			-- Check if the player already has a character and setup the chat event if they do
-			if player.Character then
-				setupChatEvent(player)
-			end
-		end
-	
-		-- Connect to existing players
-		for _, player in pairs(Players:GetPlayers()) do
-			onPlayerAdded(player)
-		end
-	
-		-- Connect the PlayerAdded event for new players
-		Players.PlayerAdded:Connect(onPlayerAdded)
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(CLXXCT_fake_script)()
-local function INAVXL_fake_script() -- wormygui.Script 
+coroutine.wrap(WMYIUJR_fake_script)()
+local function TQSLFK_fake_script() -- wormygui.Script 
 	local script = Instance.new('Script', wormygui)
 
 	function Click(mouse)
@@ -532,22 +533,34 @@ local function INAVXL_fake_script() -- wormygui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(INAVXL_fake_script)()
-local function VTKVZ_fake_script() -- elementalgrounds.Script 
-	local script = Instance.new('Script', elementalgrounds)
+coroutine.wrap(TQSLFK_fake_script)()
+local function SBMZ_fake_script() -- bps.Script 
+	local script = Instance.new('Script', bps)
 
 	function Click(mouse)
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/elementalgroundsv1"))()
 	
-	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/maingui"))()
 	
 	end
 	
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(VTKVZ_fake_script)()
-local function OFGHRQ_fake_script() -- unanchoredgui.Script 
+coroutine.wrap(SBMZ_fake_script)()
+local function HOTW_fake_script() -- chatbypass.Script 
+	local script = Instance.new('Script', chatbypass)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/AlgariBot/lua/refs/heads/Lua-Script-Executor/LocalNeverPatchedBypass.txt"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HOTW_fake_script)()
+local function QXCATXE_fake_script() -- unanchoredgui.Script 
 	local script = Instance.new('Script', unanchoredgui)
 
 	function Click(mouse)
@@ -560,44 +573,30 @@ local function OFGHRQ_fake_script() -- unanchoredgui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(OFGHRQ_fake_script)()
-local function UNMJWIP_fake_script() -- flinggui.Script 
-	local script = Instance.new('Script', flinggui)
-
-	function Click(mouse)
-	
-	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/flingguiv2"))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(UNMJWIP_fake_script)()
-local function DVKWU_fake_script() -- respawnbuttons.Script 
+coroutine.wrap(QXCATXE_fake_script)()
+local function EORJSE_fake_script() -- respawnbuttons.Script 
 	local script = Instance.new('Script', respawnbuttons)
 
 	function Click(mouse)
 	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Launch%20Respawn%20Buttons"))()script here
-	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Launch%20Respawn%20Buttons"))()
 	end
 	
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(DVKWU_fake_script)()
-local function WVEEH_fake_script() -- chatbypass.Script 
-	local script = Instance.new('Script', chatbypass)
+coroutine.wrap(EORJSE_fake_script)()
+local function QERPMU_fake_script() -- elementalgrounds.Script 
+	local script = Instance.new('Script', elementalgrounds)
 
 	function Click(mouse)
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/elementalgroundsv1"))()
 	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/AlgariBot/lua/refs/heads/Lua-Script-Executor/LocalNeverPatchedBypass.txt"))()
+	
 	
 	end
 	
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(WVEEH_fake_script)()
+coroutine.wrap(QERPMU_fake_script)()
