@@ -15,6 +15,11 @@ local remotespy = Instance.new("TextButton")
 local fireallremotes = Instance.new("TextButton")
 local refreshscript = Instance.new("TextButton")
 local wormygui = Instance.new("TextButton")
+local elementalgrounds = Instance.new("TextButton")
+local unanchoredgui = Instance.new("TextButton")
+local flinggui = Instance.new("TextButton")
+local respawnbuttons = Instance.new("TextButton")
+local chatbypass = Instance.new("TextButton")
 
 --Properties:
 
@@ -34,7 +39,7 @@ bps.Parent = Frame
 bps.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 bps.BorderColor3 = Color3.fromRGB(0, 0, 0)
 bps.BorderSizePixel = 0
-bps.Size = UDim2.new(0, 138, 0, 50)
+bps.Size = UDim2.new(0, 138, 0, 38)
 bps.Font = Enum.Font.SourceSansBold
 bps.Text = "bully people simulator"
 bps.TextColor3 = Color3.fromRGB(255, 0, 0)
@@ -45,8 +50,8 @@ sdn.Parent = Frame
 sdn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 sdn.BorderColor3 = Color3.fromRGB(0, 0, 0)
 sdn.BorderSizePixel = 0
-sdn.Position = UDim2.new(0.185595408, 0, 0, 0)
-sdn.Size = UDim2.new(0, 138, 0, 50)
+sdn.Position = UDim2.new(0.185595363, 0, 0, 0)
+sdn.Size = UDim2.new(0, 137, 0, 38)
 sdn.Font = Enum.Font.SourceSansBold
 sdn.Text = "survival disaster natural"
 sdn.TextColor3 = Color3.fromRGB(255, 0, 0)
@@ -58,7 +63,7 @@ sas.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 sas.BorderColor3 = Color3.fromRGB(0, 0, 0)
 sas.BorderSizePixel = 0
 sas.Position = UDim2.new(0.371229827, 0, 0, 0)
-sas.Size = UDim2.new(0, 138, 0, 50)
+sas.Size = UDim2.new(0, 138, 0, 38)
 sas.Font = Enum.Font.SourceSansBold
 sas.Text = "scp 173 and scp 096 rp"
 sas.TextColor3 = Color3.fromRGB(255, 0, 0)
@@ -81,8 +86,8 @@ explorer.Parent = Frame
 explorer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 explorer.BorderColor3 = Color3.fromRGB(0, 0, 0)
 explorer.BorderSizePixel = 0
-explorer.Position = UDim2.new(0, 0, 0.215370521, 0)
-explorer.Size = UDim2.new(0, 138, 0, 50)
+explorer.Position = UDim2.new(0, 0, 0.160223454, 0)
+explorer.Size = UDim2.new(0, 138, 0, 36)
 explorer.Font = Enum.Font.SourceSansBold
 explorer.Text = "dex explorer"
 explorer.TextColor3 = Color3.fromRGB(255, 0, 0)
@@ -93,8 +98,8 @@ positionfinder.Parent = Frame
 positionfinder.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 positionfinder.BorderColor3 = Color3.fromRGB(0, 0, 0)
 positionfinder.BorderSizePixel = 0
-positionfinder.Position = UDim2.new(0.185159579, 0, 0.215370521, 0)
-positionfinder.Size = UDim2.new(0, 138, 0, 50)
+positionfinder.Position = UDim2.new(0.185159579, 0, 0.160223454, 0)
+positionfinder.Size = UDim2.new(0, 138, 0, 36)
 positionfinder.Font = Enum.Font.SourceSansBold
 positionfinder.Text = "position finder"
 positionfinder.TextColor3 = Color3.fromRGB(255, 0, 0)
@@ -105,8 +110,8 @@ remotespy.Parent = Frame
 remotespy.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 remotespy.BorderColor3 = Color3.fromRGB(0, 0, 0)
 remotespy.BorderSizePixel = 0
-remotespy.Position = UDim2.new(0.371418893, 0, 0.211694047, 0)
-remotespy.Size = UDim2.new(0, 138, 0, 50)
+remotespy.Position = UDim2.new(0.370130241, 0, 0.160223454, 0)
+remotespy.Size = UDim2.new(0, 138, 0, 36)
 remotespy.Font = Enum.Font.SourceSansBold
 remotespy.Text = "remote spy"
 remotespy.TextColor3 = Color3.fromRGB(255, 0, 0)
@@ -118,7 +123,7 @@ fireallremotes.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 fireallremotes.BorderColor3 = Color3.fromRGB(0, 0, 0)
 fireallremotes.BorderSizePixel = 0
 fireallremotes.Position = UDim2.new(0.558034301, 0, 0, 0)
-fireallremotes.Size = UDim2.new(0, 138, 0, 50)
+fireallremotes.Size = UDim2.new(0, 138, 0, 38)
 fireallremotes.Font = Enum.Font.SourceSansBold
 fireallremotes.Text = "fire all remotes v1"
 fireallremotes.TextColor3 = Color3.fromRGB(255, 0, 0)
@@ -129,8 +134,8 @@ refreshscript.Parent = Frame
 refreshscript.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 refreshscript.BorderColor3 = Color3.fromRGB(0, 0, 0)
 refreshscript.BorderSizePixel = 0
-refreshscript.Position = UDim2.new(0.558034301, 0, 0.20955883, 0)
-refreshscript.Size = UDim2.new(0, 138, 0, 50)
+refreshscript.Position = UDim2.new(0.558034301, 0, 0.161764711, 0)
+refreshscript.Size = UDim2.new(0, 138, 0, 36)
 refreshscript.Font = Enum.Font.SourceSansBold
 refreshscript.Text = ".re script/cmd: .re"
 refreshscript.TextColor3 = Color3.fromRGB(255, 0, 0)
@@ -142,15 +147,80 @@ wormygui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 wormygui.BorderColor3 = Color3.fromRGB(0, 0, 0)
 wormygui.BorderSizePixel = 0
 wormygui.Position = UDim2.new(0.747273028, 0, 0, 0)
-wormygui.Size = UDim2.new(0, 138, 0, 50)
+wormygui.Size = UDim2.new(0, 138, 0, 38)
 wormygui.Font = Enum.Font.SourceSansBold
 wormygui.Text = "wormy gui"
 wormygui.TextColor3 = Color3.fromRGB(255, 0, 0)
 wormygui.TextSize = 32.000
 
+elementalgrounds.Name = "elemental grounds"
+elementalgrounds.Parent = Frame
+elementalgrounds.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+elementalgrounds.BorderColor3 = Color3.fromRGB(0, 0, 0)
+elementalgrounds.BorderSizePixel = 0
+elementalgrounds.Position = UDim2.new(0.747272909, 0, 0.161764711, 0)
+elementalgrounds.Size = UDim2.new(0, 140, 0, 36)
+elementalgrounds.Font = Enum.Font.SourceSansBold
+elementalgrounds.Text = "elemental grounds"
+elementalgrounds.TextColor3 = Color3.fromRGB(255, 0, 0)
+elementalgrounds.TextSize = 19.000
+elementalgrounds.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+
+unanchoredgui.Name = "unanchored gui"
+unanchoredgui.Parent = Frame
+unanchoredgui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+unanchoredgui.BorderColor3 = Color3.fromRGB(0, 0, 0)
+unanchoredgui.BorderSizePixel = 0
+unanchoredgui.Position = UDim2.new(0, 0, 0.323529422, 0)
+unanchoredgui.Size = UDim2.new(0, 138, 0, 36)
+unanchoredgui.Font = Enum.Font.SourceSansBold
+unanchoredgui.Text = "unanchored gui"
+unanchoredgui.TextColor3 = Color3.fromRGB(255, 0, 0)
+unanchoredgui.TextSize = 20.000
+unanchoredgui.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+
+flinggui.Name = "fling gui"
+flinggui.Parent = Frame
+flinggui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+flinggui.BorderColor3 = Color3.fromRGB(0, 0, 0)
+flinggui.BorderSizePixel = 0
+flinggui.Position = UDim2.new(0.185567006, 0, 0.323529422, 0)
+flinggui.Size = UDim2.new(0, 138, 0, 36)
+flinggui.Font = Enum.Font.SourceSansBold
+flinggui.Text = "fling gui"
+flinggui.TextColor3 = Color3.fromRGB(255, 0, 0)
+flinggui.TextSize = 20.000
+flinggui.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+
+respawnbuttons.Name = "respawn buttons"
+respawnbuttons.Parent = Frame
+respawnbuttons.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+respawnbuttons.BorderColor3 = Color3.fromRGB(0, 0, 0)
+respawnbuttons.BorderSizePixel = 0
+respawnbuttons.Position = UDim2.new(0.369845361, 0, 0.323529422, 0)
+respawnbuttons.Size = UDim2.new(0, 138, 0, 36)
+respawnbuttons.Font = Enum.Font.SourceSansBold
+respawnbuttons.Text = "respawn buttons"
+respawnbuttons.TextColor3 = Color3.fromRGB(255, 0, 0)
+respawnbuttons.TextSize = 20.000
+respawnbuttons.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+
+chatbypass.Name = "chat bypass"
+chatbypass.Parent = Frame
+chatbypass.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+chatbypass.BorderColor3 = Color3.fromRGB(0, 0, 0)
+chatbypass.BorderSizePixel = 0
+chatbypass.Position = UDim2.new(0.557989717, 0, 0.323529422, 0)
+chatbypass.Size = UDim2.new(0, 138, 0, 36)
+chatbypass.Font = Enum.Font.SourceSansBold
+chatbypass.Text = "chat bypass"
+chatbypass.TextColor3 = Color3.fromRGB(255, 0, 0)
+chatbypass.TextSize = 20.000
+chatbypass.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+
 -- Scripts:
 
-local function WCZWG_fake_script() -- bps.Script 
+local function TAXHO_fake_script() -- bps.Script 
 	local script = Instance.new('Script', bps)
 
 	function Click(mouse)
@@ -162,8 +232,8 @@ local function WCZWG_fake_script() -- bps.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(WCZWG_fake_script)()
-local function VJMWKYL_fake_script() -- sdn.Script 
+coroutine.wrap(TAXHO_fake_script)()
+local function NAOWKE_fake_script() -- sdn.Script 
 	local script = Instance.new('Script', sdn)
 
 	function Click(mouse)
@@ -175,8 +245,8 @@ local function VJMWKYL_fake_script() -- sdn.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(VJMWKYL_fake_script)()
-local function GIJSLDV_fake_script() -- sas.Script 
+coroutine.wrap(NAOWKE_fake_script)()
+local function TFUE_fake_script() -- sas.Script 
 	local script = Instance.new('Script', sas)
 
 	function Click(mouse)
@@ -266,8 +336,8 @@ local function GIJSLDV_fake_script() -- sas.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(GIJSLDV_fake_script)()
-local function OZPBR_fake_script() -- destroyui.Script 
+coroutine.wrap(TFUE_fake_script)()
+local function BYXG_fake_script() -- destroyui.Script 
 	local script = Instance.new('Script', destroyui)
 
 	function Click(mouse)
@@ -279,8 +349,8 @@ local function OZPBR_fake_script() -- destroyui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(OZPBR_fake_script)()
-local function VNKX_fake_script() -- explorer.expl 
+coroutine.wrap(BYXG_fake_script)()
+local function JGXLC_fake_script() -- explorer.expl 
 	local script = Instance.new('Script', explorer)
 
 	function Click(mouse)
@@ -292,8 +362,8 @@ local function VNKX_fake_script() -- explorer.expl
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(VNKX_fake_script)()
-local function PWNLDV_fake_script() -- positionfinder.pos 
+coroutine.wrap(JGXLC_fake_script)()
+local function MGDKX_fake_script() -- positionfinder.pos 
 	local script = Instance.new('Script', positionfinder)
 
 	function Click(mouse)
@@ -305,8 +375,8 @@ local function PWNLDV_fake_script() -- positionfinder.pos
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(PWNLDV_fake_script)()
-local function EXYQ_fake_script() -- remotespy.rem 
+coroutine.wrap(MGDKX_fake_script)()
+local function ZLQZGK_fake_script() -- remotespy.rem 
 	local script = Instance.new('Script', remotespy)
 
 	function Click(mouse)
@@ -318,8 +388,8 @@ local function EXYQ_fake_script() -- remotespy.rem
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(EXYQ_fake_script)()
-local function LKXCE_fake_script() -- fireallremotes.Script 
+coroutine.wrap(ZLQZGK_fake_script)()
+local function ANWVKA_fake_script() -- fireallremotes.Script 
 	local script = Instance.new('Script', fireallremotes)
 
 	function Click(mouse)
@@ -376,8 +446,8 @@ local function LKXCE_fake_script() -- fireallremotes.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(LKXCE_fake_script)()
-local function WUYT_fake_script() -- refreshscript.Script 
+coroutine.wrap(ANWVKA_fake_script)()
+local function TZXLZF_fake_script() -- refreshscript.Script 
 	local script = Instance.new('Script', refreshscript)
 
 	function Click(mouse)
@@ -448,8 +518,8 @@ local function WUYT_fake_script() -- refreshscript.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(WUYT_fake_script)()
-local function PWMWG_fake_script() -- wormygui.Script 
+coroutine.wrap(TZXLZF_fake_script)()
+local function GKPFLUG_fake_script() -- wormygui.Script 
 	local script = Instance.new('Script', wormygui)
 
 	function Click(mouse)
@@ -462,4 +532,72 @@ local function PWMWG_fake_script() -- wormygui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(PWMWG_fake_script)()
+coroutine.wrap(GKPFLUG_fake_script)()
+local function QKZOFVH_fake_script() -- elementalgrounds.Script 
+	local script = Instance.new('Script', elementalgrounds)
+
+	function Click(mouse)
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/elementalgroundsv1"))()
+	
+	
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(QKZOFVH_fake_script)()
+local function HJGBXWF_fake_script() -- unanchoredgui.Script 
+	local script = Instance.new('Script', unanchoredgui)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/opunanchoredgui"))()
+	
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HJGBXWF_fake_script)()
+local function ZYJKV_fake_script() -- flinggui.Script 
+	local script = Instance.new('Script', flinggui)
+
+	function Click(mouse)
+	
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/flingguiv2"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(ZYJKV_fake_script)()
+local function GVGGGNY_fake_script() -- respawnbuttons.Script 
+	local script = Instance.new('Script', respawnbuttons)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Launch%20Respawn%20Buttons"))()script here
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(GVGGGNY_fake_script)()
+local function MRZMGFO_fake_script() -- chatbypass.Script 
+	local script = Instance.new('Script', chatbypass)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/AlgariBot/lua/refs/heads/Lua-Script-Executor/LocalNeverPatchedBypass.txt"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(MRZMGFO_fake_script)()
