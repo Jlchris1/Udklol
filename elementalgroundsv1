@@ -1,0 +1,135 @@
+local syn = getgenv().syn
+getgenv().syn = false
+
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()local Window = OrionLib:MakeWindow({Name = "JLhub", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})local Tab = Window:MakeTab({
+    Name = "main",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "turn off loops",
+    Callback = function()
+              _G.toggle = false
+      end    
+}) Tab:AddButton({
+    Name = "instant spawn",
+    Callback = function()
+              _G.toggle = true
+
+
+while _G.toggle do
+wait()
+local args = {
+    [1] = 1
+}
+
+game:GetService("ReplicatedStorage").ClientRemotes.SpawnHandler:FireServer(unpack(args))
+end
+      end    
+}) Tab:AddButton({
+    Name = "gang zone tree",
+    Callback = function()
+              _G.toggle = true
+
+
+while _G.toggle do
+wait()
+local args = {
+    [1] = "Ancestor Tree"
+}
+
+game:GetService("ReplicatedStorage").ClientRemotes.GangZoneCapture:InvokeServer(unpack(args))
+end
+      end    
+}) Tab:AddButton({
+    Name = "gang point igord",
+    Callback = function()
+              _G.toggle = true
+
+
+while _G.toggle do
+wait()
+local args = {
+    [1] = "Mountain Igord"
+}
+
+game:GetService("ReplicatedStorage").ClientRemotes.GangZoneCapture:InvokeServer(unpack(args))
+end
+      end    
+}) Tab:AddButton({
+    Name = "gang point arena",
+    Callback = function()
+              _G.toggle = true
+
+
+while _G.toggle do
+wait()
+local args = {
+    [1] = "Arena"
+}
+
+game:GetService("ReplicatedStorage").ClientRemotes.GangZoneCapture:InvokeServer(unpack(args))
+end
+      end    
+}) Tab:AddButton({
+    Name = "gang point arold",
+    Callback = function()
+_G.toggle = true
+
+
+while _G.toggle do
+wait()
+
+local args = {
+    [1] = "Mountain Arold"
+}
+
+game:GetService("ReplicatedStorage").ClientRemotes.GangZoneCapture:InvokeServer(unpack(args))
+end
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "crystal farm",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "auto collect scrolls and crystals",
+    Callback = function()
+              local active = false
+
+while true do
+    local foundClickDetector = false
+
+    -- Iterate through all descendants in the workspace
+    for _, instance in ipairs(workspace:GetDescendants()) do
+        -- Check if the instance is a ClickDetector itself
+        if instance:IsA("ClickDetector") then
+            -- Fire the ClickDetector
+            fireclickdetector(instance)
+            foundClickDetector = true
+        end
+    end
+
+    -- Update the active flag based on whether any ClickDetector was found
+    if foundClickDetector then
+        active = true
+    else
+        if active then
+            active = false
+            print("No ClickDetector found. Stopping.")
+        end
+        wait(1) -- Delay before checking again when inactive
+    end
+
+    -- If active, add a slight delay to control the firing rate
+    if active then
+        wait(0.1) -- Adjust this delay for desired firing speed
+    end
+end
+      end    
+}) Tab:AddButton({
+    Name = "not recommended when multiple are using it",
+    Callback = function()
+              print("button pressed")
+      end    
+})
+
+getgenv().syn = syn
