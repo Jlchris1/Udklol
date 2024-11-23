@@ -1,0 +1,331 @@
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+
+local blackHoleActive = false
+local toggleState = false -- Tracks the state of the toggle
+local targetPlayer = nil
+local pickupRadius = math.huge
+local switchDelay = 0 -- Default delay in seconds for switching targets (starting at 0)
+local processedParts = {} -- Table to store parts already processed
+
+local localPlayer = Players.LocalPlayer
+local targetPosition = Vector3.new(0, 0, 0)
+
+-- Function to setup player and create a folder for attachments
+local function setupPlayer()
+    local Folder = Instance.new("Folder", Workspace)
+    local Part = Instance.new("Part", Folder)
+    local Attachment1 = Instance.new("Attachment", Part)
+    Part.Anchored = true
+    Part.CanCollide = false
+    Part.Transparency = 1
+
+    return Attachment1
+end
+
+local Attachment1 = setupPlayer()
+
+-- Function to apply force to unanchored parts
+local function ForcePart(v)
+    -- Ensure the part is unanchored, not already processed, and not inside the local player's character
+    if v:IsA("BasePart") 
+        and not v.Anchored 
+        and not v.Parent:FindFirstChild("Humanoid") 
+        and not v.Parent:FindFirstChild("Head") 
+        and v.Name ~= "Handle" 
+        and not v:IsDescendantOf(localPlayer.Character) then
+        
+        -- Prevent re-processing the same part
+        if processedParts[v] then return end
+        processedParts[v] = true
+
+        -- Clean up any previous forces or constraints
+        for _, x in next, v:GetChildren() do
+            if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro") or x:IsA("BodyPosition") or x:IsA("BodyThrust") or x:IsA("BodyVelocity") or x:IsA("RocketPropulsion") then
+                x:Destroy()
+            end
+        end
+        if v:FindFirstChild("Attachment") then
+            v:FindFirstChild("Attachment"):Destroy()
+        end
+        if v:FindFirstChild("AlignPosition") then
+            v:FindFirstChild("AlignPosition"):Destroy()
+        end
+        if v:FindFirstChild("Torque") then
+            v:FindFirstChild("Torque"):Destroy()
+        end
+        v.CanCollide = false
+
+        -- Create new attachment and force components
+        local Torque = Instance.new("Torque", v)
+        Torque.Torque = Vector3.new(1000000, 1000000, 1000000)
+        local AlignPosition = Instance.new("AlignPosition", v)
+        local Attachment2 = Instance.new("Attachment", v)
+        Torque.Attachment0 = Attachment2
+        AlignPosition.MaxForce = math.huge
+        AlignPosition.MaxVelocity = math.huge
+        AlignPosition.Responsiveness = 500
+        AlignPosition.Attachment0 = Attachment2
+        AlignPosition.Attachment1 = Attachment1
+    end
+end
+
+-- Function to remove forces and reset processed parts
+local function clearProcessedParts()
+    for part, _ in pairs(processedParts) do
+        -- Remove forces and reset the part to its original state
+        if part and part.Parent then
+            for _, x in next, part:GetChildren() do
+                if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro") or x:IsA("BodyPosition") or x:IsA("BodyThrust") or x:IsA("BodyVelocity") or x:IsA("RocketPropulsion") then
+                    x:Destroy()
+                end
+            end
+            if part:FindFirstChild("Attachment") then
+                part:FindFirstChild("Attachment"):Destroy()
+            end
+            if part:FindFirstChild("AlignPosition") then
+                part:FindFirstChild("AlignPosition"):Destroy()
+            end
+            if part:FindFirstChild("Torque") then
+                part:FindFirstChild("Torque"):Destroy()
+            end
+            part.CanCollide = true -- Restore collision
+        end
+    end
+
+    -- Clear the processedParts table
+    processedParts = {}
+end
+
+-- Function to process all unanchored parts in the workspace
+local function processWorkspaceParts()
+    for _, v in next, Workspace:GetDescendants() do
+        ForcePart(v)
+    end
+
+    -- Continuously monitor new parts added to the workspace
+    Workspace.DescendantAdded:Connect(function(v)
+        if blackHoleActive then
+            ForcePart(v)
+        end
+    end)
+end
+
+-- Function to get a random player (excluding the local player and whitelisted players)
+local function getRandomPlayer()
+    local players = Players:GetPlayers()
+    local validPlayers = {}
+    for _, player in pairs(players) do
+        -- Exclude the local player and whitelisted players
+        if player ~= localPlayer and (not player:FindFirstChild("Whitelisted") or not player:FindFirstChild("Whitelisted").Value) then
+            table.insert(validPlayers, player)
+        end
+    end
+    if #validPlayers > 0 then
+        return validPlayers[math.random(1, #validPlayers)]
+    end
+    return nil
+end
+
+-- Function to get selected players (players with a "Selected" BoolValue set to true)
+local function getSelectedPlayers()
+    local players = Players:GetPlayers()
+    local selectedPlayers = {}
+    for _, player in pairs(players) do
+        if player ~= localPlayer and player:FindFirstChild("Selected") and player.Selected.Value then
+            table.insert(selectedPlayers, player)
+        end
+    end
+    return selectedPlayers
+end
+
+-- Function to toggle the black hole effect (for unanchored target all)
+local function toggleBlackHole()
+    blackHoleActive = toggleState -- Ensure blackHoleActive is synced with toggleState
+
+    if blackHoleActive then
+        -- Create a new attachment and destroy the old one for an instant start
+        local newAttachment = Instance.new("Attachment", localPlayer.Character.HumanoidRootPart)
+        newAttachment.Parent = localPlayer.Character.HumanoidRootPart
+        Attachment1:Destroy() -- Destroy the old attachment immediately
+        Attachment1 = newAttachment -- Update the reference to the new attachment
+        
+        processWorkspaceParts() -- Process parts and monitor new ones
+
+        -- Start target switching loop
+        spawn(function()
+            while blackHoleActive do
+                targetPlayer = getRandomPlayer()
+                if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local targetPosition = targetPlayer.Character.HumanoidRootPart.Position
+                    Attachment1.WorldCFrame = CFrame.new(targetPosition)
+                end
+                wait(switchDelay) -- Delay between target switches
+            end
+        end)
+
+    else
+        clearProcessedParts() -- Disable all effects when the black hole is deactivated
+    end
+end
+
+-- Function to toggle the target selected system (for unanchored target selected)
+local function toggleTargetSelected()
+    blackHoleActive = toggleState -- Sync blackHoleActive with toggle state
+
+    if blackHoleActive then
+        -- Create a new attachment and destroy the old one for an instant start
+        local newAttachment = Instance.new("Attachment", localPlayer.Character.HumanoidRootPart)
+        newAttachment.Parent = localPlayer.Character.HumanoidRootPart
+        Attachment1:Destroy() -- Destroy the old attachment immediately
+        Attachment1 = newAttachment -- Update the reference to the new attachment
+        
+        processWorkspaceParts() -- Process parts and monitor new ones
+
+        -- Start target switching loop for selected players
+        spawn(function()
+            while blackHoleActive do
+                local selectedPlayers = getSelectedPlayers()
+                if #selectedPlayers > 0 then
+                    targetPlayer = selectedPlayers[math.random(1, #selectedPlayers)]
+                else
+                    -- If no players are selected, keep parts at the toggled spot
+                    targetPlayer = nil
+                end
+
+                if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local targetPosition = targetPlayer.Character.HumanoidRootPart.Position
+                    Attachment1.WorldCFrame = CFrame.new(targetPosition)
+                end
+
+                wait(switchDelay) -- Delay between target switches
+            end
+        end)
+
+    else
+        clearProcessedParts() -- Disable all effects when the black hole is deactivated
+    end
+end
+
+-- Handle player respawn (reset targeting system for selected players)
+local function onCharacterAdded(character)
+    -- Reset targeting and reapply the effects when the character respawns
+    if blackHoleActive then
+        -- Wait for humanoidRootPart to load and then reinitialize attachments and force
+        local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        local newAttachment = Instance.new("Attachment", humanoidRootPart)
+        newAttachment.Parent = humanoidRootPart
+        Attachment1:Destroy() -- Destroy the old attachment immediately
+        Attachment1 = newAttachment -- Update the reference to the new attachment
+        
+        processedParts = {} -- Clear processed parts
+        processWorkspaceParts() -- Reprocess all parts in the workspace
+    end
+end
+
+-- Reapply targeting effects even if player dies
+localPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+-- GUI library setup
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/miroeramaa/TurtleLib/main/TurtleUiLib.lua"))()
+local window = library:Window("made by ÆS productions")
+
+-- Toggle for Unanchored Target All Players
+window:Toggle("Unanchored Target All", false, function(Value)
+    toggleState = Value -- Update toggle state
+    blackHoleActive = Value -- Sync blackHoleActive with toggle state
+    toggleBlackHole() -- Call the toggle function to apply changes
+end)
+
+-- Toggle for Unanchored Target Selected Players
+window:Toggle("Target Selected Players", false, function(Value)
+    toggleState = Value -- Update toggle state
+    blackHoleActive = Value -- Sync blackHoleActive with toggle state
+    toggleTargetSelected() -- Call the target selected function to apply changes
+end)
+
+-- Add a button to fire the loadstring you provided
+window:Button("Load Player List Script", function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Playerlistv6"))()
+end)
+
+-- Button to trigger some action
+window:Button("telekinesis/fix target", function()
+  loadstring(game:HttpGet(('https://raw.githubusercontent.com/SAZXHUB/Control-update/main/README.md'),true))()
+end)
+
+-- Create a new button for the tool
+window:Button("Give Loop Check Tool", function()
+    -- Create the tool
+    local tool = Instance.new("Tool")
+    tool.Name = "LoopCheckTool"
+    tool.RequiresHandle = false -- No handle needed
+
+    -- Create the ScreenGui for "Loop Check"
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "LoopCheckGui"
+
+    local textLabel = Instance.new("TextLabel", screenGui)
+    textLabel.Size = UDim2.new(0.3, 0, 0.1, 0)
+    textLabel.Position = UDim2.new(0.35, 0, 0.05, 0)
+    textLabel.BackgroundColor3 = Color3.new(0, 0, 0)
+    textLabel.TextColor3 = Color3.new(1, 1, 1)
+    textLabel.Text = "Loop Check"
+    textLabel.Font = Enum.Font.SourceSansBold
+    textLabel.TextScaled = true
+    textLabel.Visible = false -- Initially hidden
+
+    -- Parent the ScreenGui to the local player's PlayerGui when the tool is equipped
+    tool.Equipped:Connect(function()
+        screenGui.Parent = localPlayer.PlayerGui
+        textLabel.Visible = true -- Show the "Loop Check" label
+        
+        -- Start processing parts
+        blackHoleActive = true
+        processWorkspaceParts()
+        
+        -- Target all players except the local player
+        spawn(function()
+            while blackHoleActive and tool.Parent == localPlayer.Backpack do
+                local randomTarget = getRandomPlayer()
+                if randomTarget and randomTarget.Character and randomTarget.Character:FindFirstChild("HumanoidRootPart") then
+                    local targetPosition = randomTarget.Character.HumanoidRootPart.Position
+                    Attachment1.WorldCFrame = CFrame.new(targetPosition)
+                end
+                wait(switchDelay) -- Delay between target switches
+            end
+        end)
+    end)
+
+    -- Hide the GUI and stop targeting when the tool is unequipped
+    tool.Unequipped:Connect(function()
+        textLabel.Visible = false -- Hide the "Loop Check" label
+        blackHoleActive = false
+        clearProcessedParts() -- Reset forces and processed parts
+    end)
+
+    -- Add the tool to the player's backpack
+    tool.Parent = localPlayer.Backpack
+end)
+
+-- Create a new toggle for continuous loop checks
+local loopCheckActive = false  -- Tracks the state of the loop check toggle
+
+window:Toggle("Continuous Loop Check", false, function(Value)
+    loopCheckActive = Value  -- Update the toggle state
+
+    if loopCheckActive then
+        spawn(function()
+            while loopCheckActive do
+                if blackHoleActive then
+                    if toggleState then  -- Check if "Unanchored Target All" is active
+                        processWorkspaceParts()  -- Process parts using target all logic
+                    else  -- Fallback to "Target Selected" logic if active
+                        toggleTargetSelected()  -- Call the target selected function
+                    end
+                end
+                wait(0.5)  -- Delay between each check (adjustable for performance)
+            end
+        end)
+    end
+end)
