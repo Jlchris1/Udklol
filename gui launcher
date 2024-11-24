@@ -20,6 +20,7 @@ local chatbypass = Instance.new("TextButton")
 local unanchoredgui = Instance.new("TextButton")
 local respawnbuttons = Instance.new("TextButton")
 local elementalgrounds = Instance.new("TextButton")
+local adonisbypass = Instance.new("TextButton")
 
 --Properties:
 
@@ -218,9 +219,21 @@ elementalgrounds.TextColor3 = Color3.fromRGB(255, 0, 0)
 elementalgrounds.TextSize = 19.000
 elementalgrounds.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 
+adonisbypass.Name = "adonisbypass"
+adonisbypass.Parent = Frame
+adonisbypass.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+adonisbypass.BorderColor3 = Color3.fromRGB(0, 0, 0)
+adonisbypass.BorderSizePixel = 0
+adonisbypass.Position = UDim2.new(0.546781778, 0, 0.779267728, 0)
+adonisbypass.Size = UDim2.new(0, 200, 0, 50)
+adonisbypass.Font = Enum.Font.SourceSansBold
+adonisbypass.Text = "adonis anti cheat bypass "
+adonisbypass.TextColor3 = Color3.fromRGB(255, 0, 0)
+adonisbypass.TextSize = 16.000
+
 -- Scripts:
 
-local function BXRHCL_fake_script() -- destroyui.Script 
+local function FGSFU_fake_script() -- destroyui.Script 
 	local script = Instance.new('Script', destroyui)
 
 	function Click(mouse)
@@ -232,21 +245,24 @@ local function BXRHCL_fake_script() -- destroyui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(BXRHCL_fake_script)()
-local function KBGXY_fake_script() -- explorer.expl 
+coroutine.wrap(FGSFU_fake_script)()
+local function APJCU_fake_script() -- explorer.expl 
 	local script = Instance.new('Script', explorer)
 
 	function Click(mouse)
 	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/DEX-Explorer/main/Mobile.lua"))()
+		--[[
+		WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+	]]
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/realredz/DEX-Explorer/refs/heads/main/Mobile.lua"))()
 	
 	end
 	
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(KBGXY_fake_script)()
-local function LRUAAU_fake_script() -- fireallremotes.Script 
+coroutine.wrap(APJCU_fake_script)()
+local function YZDUA_fake_script() -- fireallremotes.Script 
 	local script = Instance.new('Script', fireallremotes)
 
 	function Click(mouse)
@@ -303,8 +319,8 @@ local function LRUAAU_fake_script() -- fireallremotes.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(LRUAAU_fake_script)()
-local function UNUA_fake_script() -- flinggui.Script 
+coroutine.wrap(YZDUA_fake_script)()
+local function QYCQBS_fake_script() -- flinggui.Script 
 	local script = Instance.new('Script', flinggui)
 
 	function Click(mouse)
@@ -317,8 +333,8 @@ local function UNUA_fake_script() -- flinggui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(UNUA_fake_script)()
-local function TYJP_fake_script() -- positionfinder.pos 
+coroutine.wrap(QYCQBS_fake_script)()
+local function DAUM_fake_script() -- positionfinder.pos 
 	local script = Instance.new('Script', positionfinder)
 
 	function Click(mouse)
@@ -330,8 +346,8 @@ local function TYJP_fake_script() -- positionfinder.pos
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(TYJP_fake_script)()
-local function VWXDJ_fake_script() -- refreshscript.Script 
+coroutine.wrap(DAUM_fake_script)()
+local function EVDZJF_fake_script() -- refreshscript.Script 
 	local script = Instance.new('Script', refreshscript)
 
 	function Click(mouse)
@@ -402,21 +418,24 @@ local function VWXDJ_fake_script() -- refreshscript.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(VWXDJ_fake_script)()
-local function YHEV_fake_script() -- remotespy.rem 
+coroutine.wrap(EVDZJF_fake_script)()
+local function NKKBR_fake_script() -- remotespy.rem 
 	local script = Instance.new('Script', remotespy)
 
 	function Click(mouse)
 	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/RS/main/SimpleSpyMobile"))()
+		--[[
+		WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+	]]
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/realredz/SimpleSpy/refs/heads/main/Mobile.lua"))()
 	
 	end
 	
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YHEV_fake_script)()
-local function OEWR_fake_script() -- sas.Script 
+coroutine.wrap(NKKBR_fake_script)()
+local function CCSBB_fake_script() -- sas.Script 
 	local script = Instance.new('Script', sas)
 
 	function Click(mouse)
@@ -506,8 +525,8 @@ local function OEWR_fake_script() -- sas.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(OEWR_fake_script)()
-local function WMYIUJR_fake_script() -- sdn.Script 
+coroutine.wrap(CCSBB_fake_script)()
+local function AAEFBS_fake_script() -- sdn.Script 
 	local script = Instance.new('Script', sdn)
 
 	function Click(mouse)
@@ -519,8 +538,8 @@ local function WMYIUJR_fake_script() -- sdn.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(WMYIUJR_fake_script)()
-local function TQSLFK_fake_script() -- wormygui.Script 
+coroutine.wrap(AAEFBS_fake_script)()
+local function RILUOO_fake_script() -- wormygui.Script 
 	local script = Instance.new('Script', wormygui)
 
 	function Click(mouse)
@@ -533,8 +552,8 @@ local function TQSLFK_fake_script() -- wormygui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(TQSLFK_fake_script)()
-local function SBMZ_fake_script() -- bps.Script 
+coroutine.wrap(RILUOO_fake_script)()
+local function JMXUK_fake_script() -- bps.Script 
 	local script = Instance.new('Script', bps)
 
 	function Click(mouse)
@@ -546,8 +565,8 @@ local function SBMZ_fake_script() -- bps.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(SBMZ_fake_script)()
-local function HOTW_fake_script() -- chatbypass.Script 
+coroutine.wrap(JMXUK_fake_script)()
+local function MGKY_fake_script() -- chatbypass.Script 
 	local script = Instance.new('Script', chatbypass)
 
 	function Click(mouse)
@@ -559,8 +578,8 @@ local function HOTW_fake_script() -- chatbypass.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(HOTW_fake_script)()
-local function QXCATXE_fake_script() -- unanchoredgui.Script 
+coroutine.wrap(MGKY_fake_script)()
+local function ZKBEJWA_fake_script() -- unanchoredgui.Script 
 	local script = Instance.new('Script', unanchoredgui)
 
 	function Click(mouse)
@@ -573,8 +592,8 @@ local function QXCATXE_fake_script() -- unanchoredgui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QXCATXE_fake_script)()
-local function EORJSE_fake_script() -- respawnbuttons.Script 
+coroutine.wrap(ZKBEJWA_fake_script)()
+local function BKXDCRE_fake_script() -- respawnbuttons.Script 
 	local script = Instance.new('Script', respawnbuttons)
 
 	function Click(mouse)
@@ -585,8 +604,8 @@ local function EORJSE_fake_script() -- respawnbuttons.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(EORJSE_fake_script)()
-local function QERPMU_fake_script() -- elementalgrounds.Script 
+coroutine.wrap(BKXDCRE_fake_script)()
+local function MHNHTXT_fake_script() -- elementalgrounds.Script 
 	local script = Instance.new('Script', elementalgrounds)
 
 	function Click(mouse)
@@ -599,4 +618,17 @@ local function QERPMU_fake_script() -- elementalgrounds.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QERPMU_fake_script)()
+coroutine.wrap(MHNHTXT_fake_script)()
+local function HESQUXT_fake_script() -- adonisbypass.Script 
+	local script = Instance.new('Script', adonisbypass)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua",true))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(HESQUXT_fake_script)()
