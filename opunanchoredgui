@@ -5,7 +5,7 @@ local blackHoleActive = false
 local toggleState = false -- Tracks the state of the toggle
 local targetPlayer = nil
 local pickupRadius = math.huge
-local switchDelay = 0 -- Default delay in seconds for switching targets (starting at 0)
+local switchDelay = 0.13 -- Default delay in seconds for switching targets (starting at 0)
 local processedParts = {} -- Table to store parts already processed
 
 local localPlayer = Players.LocalPlayer
