@@ -21,6 +21,8 @@ local unanchoredgui = Instance.new("TextButton")
 local respawnbuttons = Instance.new("TextButton")
 local elementalgrounds = Instance.new("TextButton")
 local adonisbypass = Instance.new("TextButton")
+local TAUgui = Instance.new("TextButton")
+local elementalgroundsgui = Instance.new("TextButton")
 
 --Properties:
 
@@ -231,9 +233,35 @@ adonisbypass.Text = "adonis anti cheat bypass "
 adonisbypass.TextColor3 = Color3.fromRGB(255, 0, 0)
 adonisbypass.TextSize = 16.000
 
+TAUgui.Name = "TAUgui"
+TAUgui.Parent = Frame
+TAUgui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+TAUgui.BorderColor3 = Color3.fromRGB(0, 0, 0)
+TAUgui.BorderSizePixel = 0
+TAUgui.Position = UDim2.new(0.748711348, 0, 0.323529422, 0)
+TAUgui.Size = UDim2.new(0, 138, 0, 36)
+TAUgui.Font = Enum.Font.SourceSansBold
+TAUgui.Text = "TAU gui"
+TAUgui.TextColor3 = Color3.fromRGB(255, 0, 0)
+TAUgui.TextSize = 20.000
+TAUgui.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+
+elementalgroundsgui.Name = "elemental grounds gui"
+elementalgroundsgui.Parent = Frame
+elementalgroundsgui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+elementalgroundsgui.BorderColor3 = Color3.fromRGB(0, 0, 0)
+elementalgroundsgui.BorderSizePixel = 0
+elementalgroundsgui.Position = UDim2.new(0, 0, 0.481617659, 0)
+elementalgroundsgui.Size = UDim2.new(0, 138, 0, 36)
+elementalgroundsgui.Font = Enum.Font.SourceSansBold
+elementalgroundsgui.Text = "elemental grounds gui"
+elementalgroundsgui.TextColor3 = Color3.fromRGB(255, 0, 0)
+elementalgroundsgui.TextSize = 16.000
+elementalgroundsgui.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+
 -- Scripts:
 
-local function FGSFU_fake_script() -- destroyui.Script 
+local function PDSMSFL_fake_script() -- destroyui.Script 
 	local script = Instance.new('Script', destroyui)
 
 	function Click(mouse)
@@ -245,8 +273,8 @@ local function FGSFU_fake_script() -- destroyui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(FGSFU_fake_script)()
-local function APJCU_fake_script() -- explorer.expl 
+coroutine.wrap(PDSMSFL_fake_script)()
+local function KQKE_fake_script() -- explorer.expl 
 	local script = Instance.new('Script', explorer)
 
 	function Click(mouse)
@@ -261,8 +289,8 @@ local function APJCU_fake_script() -- explorer.expl
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(APJCU_fake_script)()
-local function YZDUA_fake_script() -- fireallremotes.Script 
+coroutine.wrap(KQKE_fake_script)()
+local function AGEYLIA_fake_script() -- fireallremotes.Script 
 	local script = Instance.new('Script', fireallremotes)
 
 	function Click(mouse)
@@ -319,8 +347,8 @@ local function YZDUA_fake_script() -- fireallremotes.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(YZDUA_fake_script)()
-local function QYCQBS_fake_script() -- flinggui.Script 
+coroutine.wrap(AGEYLIA_fake_script)()
+local function FXEXB_fake_script() -- flinggui.Script 
 	local script = Instance.new('Script', flinggui)
 
 	function Click(mouse)
@@ -333,8 +361,8 @@ local function QYCQBS_fake_script() -- flinggui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QYCQBS_fake_script)()
-local function DAUM_fake_script() -- positionfinder.pos 
+coroutine.wrap(FXEXB_fake_script)()
+local function DZYJLX_fake_script() -- positionfinder.pos 
 	local script = Instance.new('Script', positionfinder)
 
 	function Click(mouse)
@@ -346,8 +374,8 @@ local function DAUM_fake_script() -- positionfinder.pos
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(DAUM_fake_script)()
-local function EVDZJF_fake_script() -- refreshscript.Script 
+coroutine.wrap(DZYJLX_fake_script)()
+local function HBLQP_fake_script() -- refreshscript.Script 
 	local script = Instance.new('Script', refreshscript)
 
 	function Click(mouse)
@@ -418,8 +446,8 @@ local function EVDZJF_fake_script() -- refreshscript.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(EVDZJF_fake_script)()
-local function NKKBR_fake_script() -- remotespy.rem 
+coroutine.wrap(HBLQP_fake_script)()
+local function SRIA_fake_script() -- remotespy.rem 
 	local script = Instance.new('Script', remotespy)
 
 	function Click(mouse)
@@ -434,8 +462,8 @@ local function NKKBR_fake_script() -- remotespy.rem
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(NKKBR_fake_script)()
-local function CCSBB_fake_script() -- sas.Script 
+coroutine.wrap(SRIA_fake_script)()
+local function XEOFAXC_fake_script() -- sas.Script 
 	local script = Instance.new('Script', sas)
 
 	function Click(mouse)
@@ -525,8 +553,8 @@ local function CCSBB_fake_script() -- sas.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(CCSBB_fake_script)()
-local function AAEFBS_fake_script() -- sdn.Script 
+coroutine.wrap(XEOFAXC_fake_script)()
+local function ZVKC_fake_script() -- sdn.Script 
 	local script = Instance.new('Script', sdn)
 
 	function Click(mouse)
@@ -538,8 +566,8 @@ local function AAEFBS_fake_script() -- sdn.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(AAEFBS_fake_script)()
-local function RILUOO_fake_script() -- wormygui.Script 
+coroutine.wrap(ZVKC_fake_script)()
+local function KWFSJS_fake_script() -- wormygui.Script 
 	local script = Instance.new('Script', wormygui)
 
 	function Click(mouse)
@@ -552,8 +580,8 @@ local function RILUOO_fake_script() -- wormygui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(RILUOO_fake_script)()
-local function JMXUK_fake_script() -- bps.Script 
+coroutine.wrap(KWFSJS_fake_script)()
+local function XJDR_fake_script() -- bps.Script 
 	local script = Instance.new('Script', bps)
 
 	function Click(mouse)
@@ -565,8 +593,8 @@ local function JMXUK_fake_script() -- bps.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(JMXUK_fake_script)()
-local function MGKY_fake_script() -- chatbypass.Script 
+coroutine.wrap(XJDR_fake_script)()
+local function AIMMNJ_fake_script() -- chatbypass.Script 
 	local script = Instance.new('Script', chatbypass)
 
 	function Click(mouse)
@@ -578,8 +606,8 @@ local function MGKY_fake_script() -- chatbypass.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(MGKY_fake_script)()
-local function ZKBEJWA_fake_script() -- unanchoredgui.Script 
+coroutine.wrap(AIMMNJ_fake_script)()
+local function HURSO_fake_script() -- unanchoredgui.Script 
 	local script = Instance.new('Script', unanchoredgui)
 
 	function Click(mouse)
@@ -592,8 +620,8 @@ local function ZKBEJWA_fake_script() -- unanchoredgui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(ZKBEJWA_fake_script)()
-local function BKXDCRE_fake_script() -- respawnbuttons.Script 
+coroutine.wrap(HURSO_fake_script)()
+local function NWXLGBG_fake_script() -- respawnbuttons.Script 
 	local script = Instance.new('Script', respawnbuttons)
 
 	function Click(mouse)
@@ -604,8 +632,8 @@ local function BKXDCRE_fake_script() -- respawnbuttons.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(BKXDCRE_fake_script)()
-local function MHNHTXT_fake_script() -- elementalgrounds.Script 
+coroutine.wrap(NWXLGBG_fake_script)()
+local function NBIJPL_fake_script() -- elementalgrounds.Script 
 	local script = Instance.new('Script', elementalgrounds)
 
 	function Click(mouse)
@@ -618,8 +646,8 @@ local function MHNHTXT_fake_script() -- elementalgrounds.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(MHNHTXT_fake_script)()
-local function HESQUXT_fake_script() -- adonisbypass.Script 
+coroutine.wrap(NBIJPL_fake_script)()
+local function TRJA_fake_script() -- adonisbypass.Script 
 	local script = Instance.new('Script', adonisbypass)
 
 	function Click(mouse)
@@ -631,4 +659,126 @@ local function HESQUXT_fake_script() -- adonisbypass.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(HESQUXT_fake_script)()
+coroutine.wrap(TRJA_fake_script)()
+local function RRVWZPI_fake_script() -- TAUgui.Script 
+	local script = Instance.new('Script', TAUgui)
+
+	function Click(mouse)
+	
+		local syn = getgenv().syn
+		getgenv().syn = false
+	
+		local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()local Window = OrionLib:MakeWindow({Name = "", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})local Tab = Window:MakeTab({
+			Name = "pro shit",
+			Icon = "rbxassetid://4483345998",
+			PremiumOnly = false
+		}) Tab:AddButton({
+			Name = "anti break bones",
+			Callback = function()
+				game:GetService("Players").LocalPlayer.BonesEnabled:destroy()
+			end    
+		}) Tab:AddButton({
+			Name = "GOD MODE REWORKED TRUE INF HP",
+			Callback = function()
+				_G.toggle = true
+	
+				while _G.toggle do
+					wait()
+					local args = {
+						[1] = {
+							["A"] = 0/0,
+							["B"] = false,
+							["C"] = game:GetService("Players").LocalPlayer.Character:FindFirstChild("Space Sandwich"),
+							["reason"] = "UseItem"
+						}
+					}
+	
+					game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
+	
+				end
+			end    
+		}) Tab:AddButton({
+			Name = "turn off auto god mode and any other loops",
+			Callback = function()
+				_G.toggle = false
+			end    
+		}) Tab:AddButton({
+			Name = "tp to bunker",
+			Callback = function()
+				local teleport_table = {
+					location1 = Vector3.new(75489.671875, 31957.552734375, -141.92681884765625), -- your desired position
+					location2 = Vector3.new()  -- your desired position
+				}
+	
+				local tween_s = game:GetService('TweenService')
+				local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+	
+				local lp = game.Players.LocalPlayer
+	
+				function bypass_teleport(v)
+					if lp.Character and 
+						lp.Character:FindFirstChild('HumanoidRootPart') then
+						local cf = CFrame.new(v)
+						local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+						a:Play()
+						-- a.Completed:Wait()
+						-- print('Teleporting Done!')
+					end
+				end
+	
+				bypass_teleport(teleport_table.location1)
+			end    
+		}) Tab:AddButton({
+			Name = "loop tp into bunker",
+			Callback = function()
+				_G.toggle = true
+	
+				while _G.toggle do
+					wait(1)
+					local teleport_table = {
+						location1 = Vector3.new(75489.671875, 31957.552734375, -141.92681884765625), -- your desired position
+						location2 = Vector3.new()  -- your desired position
+					}
+	
+					local tween_s = game:GetService('TweenService')
+					local tweeninfo = TweenInfo.new(0,Enum.EasingStyle.Linear)
+	
+					local lp = game.Players.LocalPlayer
+	
+					function bypass_teleport(v)
+						if lp.Character and 
+							lp.Character:FindFirstChild('HumanoidRootPart') then
+							local cf = CFrame.new(v)
+							local a = tween_s:Create(lp.Character.HumanoidRootPart,tweeninfo,{CFrame=cf})
+							a:Play()
+							-- a.Completed:Wait()
+							-- print('Teleporting Done!')
+						end
+					end
+	
+					bypass_teleport(teleport_table.location1)
+				end
+			end    
+		})
+	
+		getgenv().syn = syn
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(RRVWZPI_fake_script)()
+local function PYORI_fake_script() -- elementalgroundsgui.Script 
+	local script = Instance.new('Script', elementalgroundsgui)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/elementalgroundsv1"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(PYORI_fake_script)()
