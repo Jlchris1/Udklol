@@ -19,7 +19,6 @@ local bps = Instance.new("TextButton")
 local chatbypass = Instance.new("TextButton")
 local unanchoredgui = Instance.new("TextButton")
 local respawnbuttons = Instance.new("TextButton")
-local elementalgrounds = Instance.new("TextButton")
 local adonisbypass = Instance.new("TextButton")
 local TAUgui = Instance.new("TextButton")
 local elementalgroundsgui = Instance.new("TextButton")
@@ -34,7 +33,7 @@ Frame.Parent = guilauncher
 Frame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 Frame.BorderColor3 = Color3.fromRGB(0, 0, 0)
 Frame.BorderSizePixel = 0
-Frame.Position = UDim2.new(0.214959562, 0, 0.171503946, 0)
+Frame.Position = UDim2.new(0.112533696, 0, 0.108839042, 0)
 Frame.Size = UDim2.new(0, 776, 0, 272)
 
 destroyui.Name = "destroy ui"
@@ -208,19 +207,6 @@ respawnbuttons.TextColor3 = Color3.fromRGB(255, 0, 0)
 respawnbuttons.TextSize = 20.000
 respawnbuttons.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 
-elementalgrounds.Name = "elemental grounds"
-elementalgrounds.Parent = Frame
-elementalgrounds.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-elementalgrounds.BorderColor3 = Color3.fromRGB(0, 0, 0)
-elementalgrounds.BorderSizePixel = 0
-elementalgrounds.Position = UDim2.new(0.747272909, 0, 0.161764711, 0)
-elementalgrounds.Size = UDim2.new(0, 140, 0, 36)
-elementalgrounds.Font = Enum.Font.SourceSansBold
-elementalgrounds.Text = "elemental grounds"
-elementalgrounds.TextColor3 = Color3.fromRGB(255, 0, 0)
-elementalgrounds.TextSize = 19.000
-elementalgrounds.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
-
 adonisbypass.Name = "adonisbypass"
 adonisbypass.Parent = Frame
 adonisbypass.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -251,7 +237,7 @@ elementalgroundsgui.Parent = Frame
 elementalgroundsgui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 elementalgroundsgui.BorderColor3 = Color3.fromRGB(0, 0, 0)
 elementalgroundsgui.BorderSizePixel = 0
-elementalgroundsgui.Position = UDim2.new(0, 0, 0.481617659, 0)
+elementalgroundsgui.Position = UDim2.new(0.748711348, 0, 0.161764711, 0)
 elementalgroundsgui.Size = UDim2.new(0, 138, 0, 36)
 elementalgroundsgui.Font = Enum.Font.SourceSansBold
 elementalgroundsgui.Text = "elemental grounds gui"
@@ -261,7 +247,7 @@ elementalgroundsgui.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 
 -- Scripts:
 
-local function PDSMSFL_fake_script() -- destroyui.Script 
+local function PVFMFSN_fake_script() -- destroyui.Script 
 	local script = Instance.new('Script', destroyui)
 
 	function Click(mouse)
@@ -273,8 +259,8 @@ local function PDSMSFL_fake_script() -- destroyui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(PDSMSFL_fake_script)()
-local function KQKE_fake_script() -- explorer.expl 
+coroutine.wrap(PVFMFSN_fake_script)()
+local function KQZGYN_fake_script() -- explorer.expl 
 	local script = Instance.new('Script', explorer)
 
 	function Click(mouse)
@@ -289,8 +275,8 @@ local function KQKE_fake_script() -- explorer.expl
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(KQKE_fake_script)()
-local function AGEYLIA_fake_script() -- fireallremotes.Script 
+coroutine.wrap(KQZGYN_fake_script)()
+local function BGWR_fake_script() -- fireallremotes.Script 
 	local script = Instance.new('Script', fireallremotes)
 
 	function Click(mouse)
@@ -347,8 +333,8 @@ local function AGEYLIA_fake_script() -- fireallremotes.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(AGEYLIA_fake_script)()
-local function FXEXB_fake_script() -- flinggui.Script 
+coroutine.wrap(BGWR_fake_script)()
+local function KNRCMB_fake_script() -- flinggui.Script 
 	local script = Instance.new('Script', flinggui)
 
 	function Click(mouse)
@@ -361,8 +347,8 @@ local function FXEXB_fake_script() -- flinggui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(FXEXB_fake_script)()
-local function DZYJLX_fake_script() -- positionfinder.pos 
+coroutine.wrap(KNRCMB_fake_script)()
+local function HFFJ_fake_script() -- positionfinder.pos 
 	local script = Instance.new('Script', positionfinder)
 
 	function Click(mouse)
@@ -374,8 +360,8 @@ local function DZYJLX_fake_script() -- positionfinder.pos
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(DZYJLX_fake_script)()
-local function HBLQP_fake_script() -- refreshscript.Script 
+coroutine.wrap(HFFJ_fake_script)()
+local function QFFC_fake_script() -- refreshscript.Script 
 	local script = Instance.new('Script', refreshscript)
 
 	function Click(mouse)
@@ -446,8 +432,8 @@ local function HBLQP_fake_script() -- refreshscript.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(HBLQP_fake_script)()
-local function SRIA_fake_script() -- remotespy.rem 
+coroutine.wrap(QFFC_fake_script)()
+local function OYWDZZ_fake_script() -- remotespy.rem 
 	local script = Instance.new('Script', remotespy)
 
 	function Click(mouse)
@@ -462,8 +448,8 @@ local function SRIA_fake_script() -- remotespy.rem
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(SRIA_fake_script)()
-local function XEOFAXC_fake_script() -- sas.Script 
+coroutine.wrap(OYWDZZ_fake_script)()
+local function MVIFZP_fake_script() -- sas.Script 
 	local script = Instance.new('Script', sas)
 
 	function Click(mouse)
@@ -553,8 +539,8 @@ local function XEOFAXC_fake_script() -- sas.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(XEOFAXC_fake_script)()
-local function ZVKC_fake_script() -- sdn.Script 
+coroutine.wrap(MVIFZP_fake_script)()
+local function SSJOIMG_fake_script() -- sdn.Script 
 	local script = Instance.new('Script', sdn)
 
 	function Click(mouse)
@@ -566,8 +552,8 @@ local function ZVKC_fake_script() -- sdn.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(ZVKC_fake_script)()
-local function KWFSJS_fake_script() -- wormygui.Script 
+coroutine.wrap(SSJOIMG_fake_script)()
+local function LUSZM_fake_script() -- wormygui.Script 
 	local script = Instance.new('Script', wormygui)
 
 	function Click(mouse)
@@ -580,8 +566,8 @@ local function KWFSJS_fake_script() -- wormygui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(KWFSJS_fake_script)()
-local function XJDR_fake_script() -- bps.Script 
+coroutine.wrap(LUSZM_fake_script)()
+local function HHHV_fake_script() -- bps.Script 
 	local script = Instance.new('Script', bps)
 
 	function Click(mouse)
@@ -593,8 +579,8 @@ local function XJDR_fake_script() -- bps.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(XJDR_fake_script)()
-local function AIMMNJ_fake_script() -- chatbypass.Script 
+coroutine.wrap(HHHV_fake_script)()
+local function NEBIQ_fake_script() -- chatbypass.Script 
 	local script = Instance.new('Script', chatbypass)
 
 	function Click(mouse)
@@ -606,8 +592,8 @@ local function AIMMNJ_fake_script() -- chatbypass.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(AIMMNJ_fake_script)()
-local function HURSO_fake_script() -- unanchoredgui.Script 
+coroutine.wrap(NEBIQ_fake_script)()
+local function EHUJ_fake_script() -- unanchoredgui.Script 
 	local script = Instance.new('Script', unanchoredgui)
 
 	function Click(mouse)
@@ -620,8 +606,8 @@ local function HURSO_fake_script() -- unanchoredgui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(HURSO_fake_script)()
-local function NWXLGBG_fake_script() -- respawnbuttons.Script 
+coroutine.wrap(EHUJ_fake_script)()
+local function HXYJA_fake_script() -- respawnbuttons.Script 
 	local script = Instance.new('Script', respawnbuttons)
 
 	function Click(mouse)
@@ -632,22 +618,8 @@ local function NWXLGBG_fake_script() -- respawnbuttons.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(NWXLGBG_fake_script)()
-local function NBIJPL_fake_script() -- elementalgrounds.Script 
-	local script = Instance.new('Script', elementalgrounds)
-
-	function Click(mouse)
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/elementalgroundsv1"))()
-	
-	
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(NBIJPL_fake_script)()
-local function TRJA_fake_script() -- adonisbypass.Script 
+coroutine.wrap(HXYJA_fake_script)()
+local function BFSFY_fake_script() -- adonisbypass.Script 
 	local script = Instance.new('Script', adonisbypass)
 
 	function Click(mouse)
@@ -659,8 +631,8 @@ local function TRJA_fake_script() -- adonisbypass.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(TRJA_fake_script)()
-local function RRVWZPI_fake_script() -- TAUgui.Script 
+coroutine.wrap(BFSFY_fake_script)()
+local function MKIX_fake_script() -- TAUgui.Script 
 	local script = Instance.new('Script', TAUgui)
 
 	function Click(mouse)
@@ -768,8 +740,8 @@ local function RRVWZPI_fake_script() -- TAUgui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(RRVWZPI_fake_script)()
-local function PYORI_fake_script() -- elementalgroundsgui.Script 
+coroutine.wrap(MKIX_fake_script)()
+local function TGYNACK_fake_script() -- elementalgroundsgui.Script 
 	local script = Instance.new('Script', elementalgroundsgui)
 
 	function Click(mouse)
@@ -781,4 +753,4 @@ local function PYORI_fake_script() -- elementalgroundsgui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(PYORI_fake_script)()
+coroutine.wrap(TGYNACK_fake_script)()
