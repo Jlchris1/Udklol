@@ -30,15 +30,6 @@ rvButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 rvButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red (disabled by default)
 rvButton.Parent = screenGui
 
--- Create the TextLabel to display number of targets found for AF1
-local targetsFoundLabel = Instance.new("TextLabel")
-targetsFoundLabel.Size = UDim2.new(0, 100, 0, 30) -- 100x30 pixels
-targetsFoundLabel.Position = UDim2.new(0, 50, 0, 10) -- Position to the right of AF1
-targetsFoundLabel.Text = "Targets Found: 0"
-targetsFoundLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-targetsFoundLabel.BackgroundTransparency = 1 -- Make background transparent
-targetsFoundLabel.Parent = screenGui
-
 -- AF1 active state
 local af1Active = false
 local tpActive = false  -- TP active state for the teleportation toggle
@@ -100,7 +91,6 @@ local function teleportBehindModels(character)
                 if #targetModels > 0 then
                     -- Update the targets found count and the label
                     targetsFoundCount = #targetModels
-                    targetsFoundLabel.Text = "Targets Found: " .. targetsFoundCount
 
                     for _, targetModel in pairs(targetModels) do
                         teleportToModel(targetModel)
@@ -139,7 +129,7 @@ local function startTeleportLoop(character)
     end
 end
 
--- Button click handler for AF1 toggle
+-- Button click handler for AF1 toggle (same as TP toggle)
 af1Button.MouseButton1Click:Connect(function()
     af1Active = not af1Active
 
@@ -155,7 +145,7 @@ af1Button.MouseButton1Click:Connect(function()
     end
 end)
 
--- Button click handler for TP toggle
+-- Button click handler for TP toggle (same as AF1 toggle)
 tpButton.MouseButton1Click:Connect(function()
     tpActive = not tpActive
 
@@ -191,21 +181,20 @@ end)
 
 -- Continuously check if the character is destroyed or refreshed
 game.Players.LocalPlayer.CharacterAdded:Connect(function(character)
-    -- Stop teleportation and targeting when the character respawns
+    -- Stop AF1 when the character respawns
     af1Active = false
     af1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
-    tpActive = false
-    tpButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
 
-    -- Wait for the new character to load
-    character:WaitForChild("HumanoidRootPart") -- Wait for the new character to load
-    wait(0.5) -- Wait for 0.5 seconds before restarting TP
+    -- Wait for 0.5 seconds and then reactivate AF1 toggle
+    wait(0.5)
+    af1Active = true
+    af1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green (active)
+    -- Restart AF1 behavior (teleport behind models)
+    teleportBehindModels(character)
 
-    -- Re-enable TP and teleport after respawn
-    tpActive = true -- Reactivate TP
-    tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green for TP
-
-    -- Automatically restart teleportation for the new character
+    -- Reactivate TP after respawn
+    tpActive = true
+    tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green (active)
     startTeleportLoop(character)
 end)
 
