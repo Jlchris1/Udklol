@@ -12,10 +12,19 @@ af1Button.TextColor3 = Color3.fromRGB(255, 255, 255)
 af1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red (disabled by default)
 af1Button.Parent = screenGui
 
+-- Create the AutoEnableAF1 toggle button
+local autoAF1Button = Instance.new("TextButton")
+autoAF1Button.Size = UDim2.new(0, 30, 0, 30) -- 30x30 pixels
+autoAF1Button.Position = UDim2.new(0, 10, 0, 50) -- Position below AF1 button
+autoAF1Button.Text = "Auto AF1"
+autoAF1Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoAF1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red (disabled by default)
+autoAF1Button.Parent = screenGui
+
 -- Create the TP button (Teleport toggle)
 local tpButton = Instance.new("TextButton")
 tpButton.Size = UDim2.new(0, 30, 0, 30) -- 30x30 pixels
-tpButton.Position = UDim2.new(0, 10, 0, 50) -- Position below AF1
+tpButton.Position = UDim2.new(0, 10, 0, 90) -- Position below Auto AF1
 tpButton.Text = "TP"
 tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 tpButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red (disabled by default)
@@ -24,7 +33,7 @@ tpButton.Parent = screenGui
 -- Create the RV button (Reset Velocity)
 local rvButton = Instance.new("TextButton")
 rvButton.Size = UDim2.new(0, 30, 0, 30) -- 30x30 pixels
-rvButton.Position = UDim2.new(0, 10, 0, 90) -- Position below TP
+rvButton.Position = UDim2.new(0, 10, 0, 130) -- Position below TP
 rvButton.Text = "RV"
 rvButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 rvButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red (disabled by default)
@@ -41,6 +50,7 @@ targetsFoundLabel.Parent = screenGui
 
 -- AF1 active state
 local af1Active = false
+local autoAF1Active = false -- Track if Auto AF1 is toggled on
 local tpActive = false  -- TP active state for the teleportation toggle
 local rvActive = false
 local targetsFoundCount = 0 -- Keep track of the number of targets found
@@ -155,36 +165,54 @@ af1Button.MouseButton1Click:Connect(function()
     end
 end)
 
+-- Button click handler for Auto AF1 toggle
+autoAF1Button.MouseButton1Click:Connect(function()
+    autoAF1Active = not autoAF1Active
+
+    if autoAF1Active then
+        -- Enable Auto AF1
+        autoAF1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
+        -- Automatically enable AF1 every second
+        while autoAF1Active do
+            af1Active = true
+            af1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
+            -- Start teleporting behind all models with the new accessories
+            local character = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
+            teleportBehindModels(character)
+            wait(1) -- Loop every 1 second while auto AF1 is enabled
+        end
+    else
+        -- Disable Auto AF1
+        autoAF1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
+    end
+end)
+
 -- Button click handler for TP toggle
 tpButton.MouseButton1Click:Connect(function()
     tpActive = not tpActive
 
     if tpActive then
-        -- Set the button to green when active
         tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
-        -- Start teleporting every 15 seconds
+        -- Start teleporting the player every 15 seconds
         local character = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
         startTeleportLoop(character)
     else
-        -- Set the button back to red when inactive
         tpButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
     end
 end)
 
--- Button click handler for RV toggle
+-- Button click handler for RV (Reset Velocity)
 rvButton.MouseButton1Click:Connect(function()
     rvActive = not rvActive
 
     if rvActive then
-        -- Set the button to green when active
         rvButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
         -- Start resetting velocity every 0.1 seconds
         while rvActive do
             resetVelocity()
-            wait(0.1) -- Reset velocity every 0.1 seconds
+            wait(0.1)
         end
     else
-        -- Set the button back to red when inactive
         rvButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
     end
 end)
@@ -192,27 +220,15 @@ end)
 -- Parent the ScreenGui to the player's PlayerGui to display it
 screenGui.Parent = game.Players.LocalPlayer.PlayerGui
 
--- Reset TP and AF1 on respawn
+-- Reset TP, AF1, and Auto AF1 on respawn
 game.Players.LocalPlayer.CharacterAdded:Connect(function(character)
-    -- Turn off AF1 and TP upon respawn
+    -- Turn off AF1 and Auto AF1 upon respawn
     af1Active = false
+    autoAF1Active = false
     af1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
+    autoAF1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
     tpActive = false
+    rvActive = false
     tpButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
-
-    -- Wait for the new character to load
-    character:WaitForChild("HumanoidRootPart") -- Wait for the new character
-    wait(0.5) -- Wait before re-enabling TP
-
-    -- Reactivate TP
-    tpActive = true
-    tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green for TP
-    -- Restart teleport loop
-    startTeleportLoop(character)
-
-    -- Reactivate AF1 toggle if it was on before respawn
-    if af1Active then
-        af1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
-        teleportBehindModels(character)
-    end
+    rvButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
 end)
