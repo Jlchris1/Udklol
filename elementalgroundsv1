@@ -130,6 +130,82 @@ end
     Callback = function()
               print("button pressed")
       end    
+}) local Tab = Window:MakeTab({
+    Name = "auto farm quest",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "launch auto farm buttons (read info first)",
+    Callback = function()
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/af"))()
+      end    
+}) Tab:AddButton({
+    Name = "auto take quest",
+    Callback = function()
+              _G.toggle = true
+
+while _G.toggle do
+wait(0.3)
+for i,v in next, workspace:GetDescendants() do if v.IsA(v,'ProximityPrompt') then fireproximityprompt(v) end end
+end
+      end    
+}) Tab:AddButton({
+    Name = "click this before using auto quest taker",
+    Callback = function()
+              -- Remove specified objects from workspace
+local objectsToRemove = {
+    workspace:FindFirstChild("Teleporters"),
+    workspace:FindFirstChild("Daily Spin"),
+    workspace:FindFirstChild("InteractiveGUI"),
+    workspace:FindFirstChild("NPCs"):FindFirstChild("Mark"),
+    workspace:FindFirstChild("NPCs"):FindFirstChild("Synced Soul")
+}
+
+-- Iterate through the list of objects and destroy them if they exist
+for _, object in ipairs(objectsToRemove) do
+    if object then
+        object:Destroy()
+        print("Removed: " .. object:GetFullName())
+    else
+        print("Object not found!")
+    end
+end
+
+      end    
+}) local Tab = Window:MakeTab({
+    Name = "auto farm info",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "your abilitys wont be automaticly used neither will quests",
+    Callback = function()
+              print("button pressed")
+      end    
+}) Tab:AddButton({
+    Name = "you need an auto clicker for those otherwise it no work",
+    Callback = function()
+              print("button pressed")
+      end    
+}) Tab:AddButton({
+    Name = "activate all buttons to farm the quests at its best",
+    Callback = function()
+              print("button pressed")
+      end    
+}) Tab:AddButton({
+    Name = "this is v1 autofarm its brand New and the first one",
+    Callback = function()
+              print("button pressed")
+      end    
+}) Tab:AddButton({
+    Name = "so enjoy v1 and expect v2 soon",
+    Callback = function()
+              print("button pressed")
+      end    
+}) Tab:AddButton({
+    Name = "meet the best auto farm in E.G",
+    Callback = function()
+              print("button pressed")
+      end    
 })
 
 getgenv().syn = syn
