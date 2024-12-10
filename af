@@ -49,10 +49,10 @@ targetsFoundLabel.BackgroundTransparency = 1 -- Make background transparent
 targetsFoundLabel.Parent = screenGui
 
 -- AF1 active state
-local af1Active = false
-local autoAF1Active = false -- Track if Auto AF1 is toggled on
-local tpActive = false  -- TP active state for the teleportation toggle
-local rvActive = false
+local af1Active = true -- Start AF1 as active by default
+local autoAF1Active = true -- Start Auto AF1 as active by default
+local tpActive = true  -- TP active state by default
+local rvActive = true -- RV active state by default
 local targetsFoundCount = 0 -- Keep track of the number of targets found
 
 -- Location to teleport to when progress is 3/3
@@ -220,15 +220,22 @@ end)
 -- Parent the ScreenGui to the player's PlayerGui to display it
 screenGui.Parent = game.Players.LocalPlayer.PlayerGui
 
--- Reset TP, AF1, and Auto AF1 on respawn
+-- Auto-enable features after respawn
 game.Players.LocalPlayer.CharacterAdded:Connect(function(character)
-    -- Turn off AF1 and Auto AF1 upon respawn
-    af1Active = false
-    autoAF1Active = false
-    af1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
-    autoAF1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
-    tpActive = false
-    rvActive = false
-    tpButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
-    rvButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
+    -- Re-enable features automatically on respawn
+    af1Active = true
+    autoAF1Active = true
+    tpActive = true
+    rvActive = true
+
+    af1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
+    autoAF1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
+    tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
+    rvButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
+
+    -- Start teleporting, AF1, and RV as needed
+    local character = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
+    teleportBehindModels(character)
+    startTeleportLoop(character)
+    resetVelocity()
 end)
