@@ -51,7 +51,7 @@ targetsFoundLabel.Parent = screenGui
 -- AF1 active state
 local af1Active = true -- Start AF1 as active by default
 local autoAF1Active = true -- Start Auto AF1 as active by default
-local tpActive = true  -- TP active state by default
+local tpActive = false  -- TP active state initially off
 local rvActive = true -- RV active state by default
 local targetsFoundCount = 0 -- Keep track of the number of targets found
 
@@ -59,72 +59,19 @@ local targetsFoundCount = 0 -- Keep track of the number of targets found
 local stopLocation = CFrame.new(238.0698699951172, 2.999999523162842, -702.163330078125)
 local tpLocation = CFrame.new(233.63250732421875, 2.999999523162842, -704.8561401367188) -- The location for the 15-second teleport toggle
 
--- Function to teleport the player behind models with specific accessories
-local function teleportBehindModels(character)
-    -- Function to find all models with the required accessories
-    local function findAllTargetModels()
-        local modelsToTeleport = {}
-        for _, model in pairs(workspace.AiCharacters:GetChildren()) do
-            if model:IsA("Model") and model.Name ~= game.Players.LocalPlayer.Name then -- Exclude the local player
-                -- Check for specific accessories in the model
-                for _, accessory in pairs(model:GetChildren()) do
-                    if accessory:IsA("Accessory") then
-                        if accessory.Name == "PurpleHair" or accessory.Name == "zeus" or accessory.Name == "Meshes/hairflowersAccessory" or accessory.Name == "AliengIRLHair" or accessory.Name == "BlondeBraid" then
-                            -- Found the target model with the required accessory
-                            table.insert(modelsToTeleport, model)
-                        end
-                    end
-                end
-            end
+-- Function to teleport the player every second
+local tpTask -- Variable to hold the teleport task
+
+local function startTeleportLoop(character)
+    -- Start teleporting every second
+    tpTask = coroutine.wrap(function()
+        while tpActive do
+            character:SetPrimaryPartCFrame(tpLocation)
+            wait(1) -- Teleport every second
         end
-        return modelsToTeleport
-    end
+    end)
 
-    -- Function to teleport the player behind a model
-    local function teleportToModel(targetModel)
-        local humanoidRootPart = targetModel:FindFirstChild("HumanoidRootPart")
-        if humanoidRootPart then
-            -- Teleport player behind the model
-            character:SetPrimaryPartCFrame(humanoidRootPart.CFrame - humanoidRootPart.CFrame.LookVector * 5)
-        end
-    end
-
-    -- Keep looping until AF1 is turned off or player is fully transparent
-    while af1Active do
-        -- Check if the character is visible (not fully transparent)
-        local humanoid = character:FindFirstChild("Humanoid")
-        if humanoid and humanoid.Health > 0 then
-            -- If the character is visible (not fully transparent), perform teleportation logic
-            local progressBarText = game:GetService("Players").LocalPlayer.PlayerGui.GameUI.Quests.InformationFrame.ScrollingFrame.QuestPartProgress.Progress.Text
-
-            if progressBarText == "3/3" then
-                -- If progress is 3/3, teleport to the stop location
-                -- Loop teleporting to the stop location until progress resets
-                while game:GetService("Players").LocalPlayer.PlayerGui.GameUI.Quests.InformationFrame.ScrollingFrame.QuestPartProgress.Progress.Text == "3/3" do
-                    character:SetPrimaryPartCFrame(stopLocation)
-                    wait(1) -- Loop every 1 second while progress is 3/3
-                end
-            elseif progressBarText == "0/3" or progressBarText == "1/3" or progressBarText == "2/3" then
-                -- If progress is 0/3, 1/3, or 2/3, continue teleporting behind models
-                local targetModels = findAllTargetModels()
-                if #targetModels > 0 then
-                    -- Update the targets found count and the label
-                    targetsFoundCount = #targetModels
-                    targetsFoundLabel.Text = "Targets Found: " .. targetsFoundCount
-
-                    for _, targetModel in pairs(targetModels) do
-                        teleportToModel(targetModel)
-                    end
-                end
-            end
-        else
-            -- If the character is fully transparent (invisible), stop teleportation
-            break
-        end
-
-        -- Wait 0.2 seconds before next loop iteration
-        wait(0.2)
-    end
+    tpTask()
 end
 
 -- Function to reset the player's velocity every 0.1 seconds
@@ -140,12 +87,57 @@ local function resetVelocity()
     end
 end
 
--- Function to handle teleportation every 15 seconds
-local function startTeleportLoop(character)
-    -- Start teleporting every 15 seconds
-    while tpActive do
-        character:SetPrimaryPartCFrame(tpLocation)
-        wait(15) -- Teleport every 15 seconds
+-- Add AF1 logic from Script 1
+local function teleportBehindModels(character)
+    local function findAllTargetModels()
+        local modelsToTeleport = {}
+        for _, model in pairs(workspace.AiCharacters:GetChildren()) do
+            if model:IsA("Model") and model.Name ~= game.Players.LocalPlayer.Name then
+                for _, accessory in pairs(model:GetChildren()) do
+                    if accessory:IsA("Accessory") and 
+                        (accessory.Name == "PurpleHair" or 
+                        accessory.Name == "zeus" or 
+                        accessory.Name == "Meshes/hairflowersAccessory" or 
+                        accessory.Name == "AliengIRLHair" or 
+                        accessory.Name == "BlondeBraid") then
+                        table.insert(modelsToTeleport, model)
+                    end
+                end
+            end
+        end
+        return modelsToTeleport
+    end
+
+    local function teleportToModel(targetModel)
+        local humanoidRootPart = targetModel:FindFirstChild("HumanoidRootPart")
+        if humanoidRootPart then
+            character:SetPrimaryPartCFrame(humanoidRootPart.CFrame - humanoidRootPart.CFrame.LookVector * 5)
+        end
+    end
+
+    while af1Active do
+        local humanoid = character:FindFirstChild("Humanoid")
+        if humanoid and humanoid.Health > 0 then
+            local progressBarText = game:GetService("Players").LocalPlayer.PlayerGui.GameUI.Quests.InformationFrame.ScrollingFrame.QuestPartProgress.Progress.Text
+
+            if progressBarText == "3/3" then
+                while game:GetService("Players").LocalPlayer.PlayerGui.GameUI.Quests.InformationFrame.ScrollingFrame.QuestPartProgress.Progress.Text == "3/3" do
+                    character:SetPrimaryPartCFrame(stopLocation)
+                    wait(1)
+                end
+            elseif progressBarText == "0/3" or progressBarText == "1/3" or progressBarText == "2/3" then
+                local targetModels = findAllTargetModels()
+                if #targetModels > 0 then
+                    targetsFoundCount = #targetModels
+                    for _, targetModel in pairs(targetModels) do
+                        teleportToModel(targetModel)
+                    end
+                end
+            end
+        else
+            break
+        end
+        wait(0.2)
     end
 end
 
@@ -154,14 +146,11 @@ af1Button.MouseButton1Click:Connect(function()
     af1Active = not af1Active
 
     if af1Active then
-        -- Set the button to green when active
-        af1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
-        -- Start teleporting behind all models with the new accessories
+        af1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
         local character = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
         teleportBehindModels(character)
     else
-        -- Set the button back to red when inactive
-        af1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
+        af1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
     end
 end)
 
@@ -170,20 +159,23 @@ autoAF1Button.MouseButton1Click:Connect(function()
     autoAF1Active = not autoAF1Active
 
     if autoAF1Active then
-        -- Enable Auto AF1
-        autoAF1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
-        -- Automatically enable AF1 every second
+        autoAF1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        if not tpActive then
+            tpActive = true
+            tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        end
         while autoAF1Active do
             af1Active = true
-            af1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
-            -- Start teleporting behind all models with the new accessories
+            tpActive = true
+            af1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+            tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
             local character = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
             teleportBehindModels(character)
-            wait(1) -- Loop every 1 second while auto AF1 is enabled
+            startTeleportLoop(character)
+            wait(1)
         end
     else
-        -- Disable Auto AF1
-        autoAF1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
+        autoAF1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
     end
 end)
 
@@ -192,50 +184,64 @@ tpButton.MouseButton1Click:Connect(function()
     tpActive = not tpActive
 
     if tpActive then
-        tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
-        -- Start teleporting the player every 15 seconds
+        tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
         local character = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
         startTeleportLoop(character)
     else
-        tpButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
+        tpButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
     end
 end)
 
--- Button click handler for RV (Reset Velocity)
+-- Button click handler for RV toggle
 rvButton.MouseButton1Click:Connect(function()
     rvActive = not rvActive
 
     if rvActive then
-        rvButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
-        -- Start resetting velocity every 0.1 seconds
+        rvButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
         while rvActive do
             resetVelocity()
             wait(0.1)
         end
     else
-        rvButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
+        rvButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
     end
 end)
 
--- Parent the ScreenGui to the player's PlayerGui to display it
+-- Update the targets found label every 0.1 seconds
+spawn(function()
+    while true do
+        targetsFoundLabel.Text = "Targets Found: " .. targetsFoundCount
+        wait(0.1)
+    end
+end)
+
+-- Add the ScreenGui to the player's PlayerGui
 screenGui.Parent = game.Players.LocalPlayer.PlayerGui
 
--- Auto-enable features after respawn
+-- Function to initialize or reinitialize the character after respawn
+local function initializeCharacter(character)
+    -- Start AutoFarm or TP if their respective features are active
+    if af1Active then
+        teleportBehindModels(character)
+    end
+    
+    if tpActive then
+        startTeleportLoop(character)
+    end
+end
+
+-- Connect the respawn handler
 game.Players.LocalPlayer.CharacterAdded:Connect(function(character)
-    -- Re-enable features automatically on respawn
-    af1Active = true
-    autoAF1Active = true
-    tpActive = true
-    rvActive = true
-
-    af1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
-    autoAF1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
-    tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
-    rvButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
-
-    -- Start teleporting, AF1, and RV as needed
-    local character = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
-    teleportBehindModels(character)
-    startTeleportLoop(character)
-    resetVelocity()
+    -- Wait for the character to load completely
+    character:WaitForChild("HumanoidRootPart")
+    
+    -- Reinitialize features after respawn
+    initializeCharacter(character)
 end)
+
+-- Initialize features for the current character
+local currentCharacter = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
+initializeCharacter(currentCharacter)
+
+-- Parent the GUI to the player's PlayerGui
+screenGui.Parent = game.Players.LocalPlayer.PlayerGui
