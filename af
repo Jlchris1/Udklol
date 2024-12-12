@@ -6,7 +6,7 @@ screenGui.ResetOnSpawn = false -- Persist after respawn
 -- Create the AF1 button (AutoFarm 1)
 local af1Button = Instance.new("TextButton")
 af1Button.Size = UDim2.new(0, 30, 0, 30) -- 30x30 pixels
-af1Button.Position = UDim2.new(0, 800, 0, 550) -- Position at top-left
+af1Button.Position = UDim2.new(0, 1100, 0, 500) -- Position at top-left
 af1Button.Text = "AF1"
 af1Button.TextColor3 = Color3.fromRGB(255, 255, 255)
 af1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red (disabled by default)
@@ -24,7 +24,7 @@ autoAF1Button.Parent = screenGui
 -- Create the TP button (Teleport toggle)
 local tpButton = Instance.new("TextButton")
 tpButton.Size = UDim2.new(0, 30, 0, 30) -- 30x30 pixels
-tpButton.Position = UDim2.new(0, 10, 0, 90) -- Position below Auto AF1
+tpButton.Position = UDim2.new(0, 1200, 0, 550) -- Position below Auto AF1
 tpButton.Text = "TP"
 tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 tpButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red (disabled by default)
