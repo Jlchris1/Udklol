@@ -145,7 +145,7 @@ end
               _G.toggle = true
 
 while _G.toggle do
-wait(0.3)
+wait(0.5)
 for i,v in next, workspace:GetDescendants() do if v.IsA(v,'ProximityPrompt') then fireproximityprompt(v) end end
 end
       end    
