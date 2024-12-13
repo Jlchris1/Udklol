@@ -1,247 +1,163 @@
+local TweenService = game:GetService("TweenService")
+
 -- Create the ScreenGui
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AutoFarmGUI"
 screenGui.ResetOnSpawn = false -- Persist after respawn
 
--- Create the AF1 button (AutoFarm 1)
+-- Buttons configuration
 local af1Button = Instance.new("TextButton")
-af1Button.Size = UDim2.new(0, 30, 0, 30) -- 30x30 pixels
-af1Button.Position = UDim2.new(0, 1100, 0, 500) -- Position at top-left
+af1Button.Size = UDim2.new(0, 60, 0, 30)
+af1Button.Position = UDim2.new(1, -70, 1, -140)
 af1Button.Text = "AF1"
 af1Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-af1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red (disabled by default)
+af1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 af1Button.Parent = screenGui
 
--- Create the AutoEnableAF1 toggle button
-local autoAF1Button = Instance.new("TextButton")
-autoAF1Button.Size = UDim2.new(0, 30, 0, 30) -- 30x30 pixels
-autoAF1Button.Position = UDim2.new(0, 10, 0, 50) -- Position below AF1 button
-autoAF1Button.Text = "Auto AF1"
-autoAF1Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-autoAF1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red (disabled by default)
-autoAF1Button.Parent = screenGui
-
--- Create the TP button (Teleport toggle)
-local tpButton = Instance.new("TextButton")
-tpButton.Size = UDim2.new(0, 30, 0, 30) -- 30x30 pixels
-tpButton.Position = UDim2.new(0, 1200, 0, 550) -- Position below Auto AF1
-tpButton.Text = "TP"
-tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-tpButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red (disabled by default)
-tpButton.Parent = screenGui
-
--- Create the RV button (Reset Velocity)
 local rvButton = Instance.new("TextButton")
-rvButton.Size = UDim2.new(0, 30, 0, 30) -- 30x30 pixels
-rvButton.Position = UDim2.new(0, 10, 0, 130) -- Position below TP
+rvButton.Size = UDim2.new(0, 60, 0, 30)
+rvButton.Position = UDim2.new(1, -70, 1, -100)
 rvButton.Text = "RV"
 rvButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-rvButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red (disabled by default)
+rvButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 rvButton.Parent = screenGui
 
--- Create the TextLabel to display number of targets found for AF1
-local targetsFoundLabel = Instance.new("TextLabel")
-targetsFoundLabel.Size = UDim2.new(0, 100, 0, 30) -- 100x30 pixels
-targetsFoundLabel.Position = UDim2.new(0, 50, 0, 10) -- Position to the right of AF1
-targetsFoundLabel.Text = "Targets Found: 0"
-targetsFoundLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-targetsFoundLabel.BackgroundTransparency = 1 -- Make background transparent
-targetsFoundLabel.Parent = screenGui
+-- States
+local af1Active = false
+local rvActive = false
+local currentTarget = nil
+local stopLocation = CFrame.new(238.069, 2.999, -702.163) -- Location to teleport when progress is 3/3
+local questCheckPosition = Vector3.new(234.79830932617188, 2.999999523162842, -697.8255615234375) -- Location to teleport if QuestPartProgress doesn't exist
 
--- AF1 active state
-local af1Active = true -- Start AF1 as active by default
-local autoAF1Active = true -- Start Auto AF1 as active by default
-local tpActive = false  -- TP active state initially off
-local rvActive = true -- RV active state by default
-local targetsFoundCount = 0 -- Keep track of the number of targets found
-
--- Location to teleport to when progress is 3/3
-local stopLocation = CFrame.new(238.0698699951172, 2.999999523162842, -702.163330078125)
-local tpLocation = CFrame.new(233.63250732421875, 2.999999523162842, -704.8561401367188) -- The location for the 15-second teleport toggle
-
--- Function to teleport the player every second
-local tpTask -- Variable to hold the teleport task
-
-local function startTeleportLoop(character)
-    -- Start teleporting every second
-    tpTask = coroutine.wrap(function()
-        while tpActive do
-            character:SetPrimaryPartCFrame(tpLocation)
-            wait(1) -- Teleport every second
-        end
-    end)
-
-    tpTask()
+-- Check if QuestPartProgress exists
+local function checkQuestPartProgress()
+    local pathway = game:GetService("Players").LocalPlayer.PlayerGui.GameUI.Quests.InformationFrame.ScrollingFrame
+    return pathway:FindFirstChild("QuestPartProgress") == nil
 end
 
--- Function to reset the player's velocity every 0.1 seconds
-local function resetVelocity()
-    local player = game.Players.LocalPlayer
-    local character = player.Character
-    local humanoid = character and character:FindFirstChild("Humanoid")
-
-    if humanoid then
-        -- Reset velocity
-        humanoid.RootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-        humanoid.RootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+-- Tween Movement to Target Position
+local function tweenToPosition(character, targetPosition, targetLookVector)
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if humanoidRootPart then
+        local tweenInfo = TweenInfo.new(0.05) -- Faster tween
+        local tweenGoal = {CFrame = CFrame.new(targetPosition, targetPosition + targetLookVector)}
+        local tween = TweenService:Create(humanoidRootPart, tweenInfo, tweenGoal)
+        tween:Play()
+        tween.Completed:Wait()
     end
 end
 
--- Add AF1 logic from Script 1
-local function teleportBehindModels(character)
-    local function findAllTargetModels()
-        local modelsToTeleport = {}
-        for _, model in pairs(workspace.AiCharacters:GetChildren()) do
-            if model:IsA("Model") and model.Name ~= game.Players.LocalPlayer.Name then
-                for _, accessory in pairs(model:GetChildren()) do
-                    if accessory:IsA("Accessory") and 
-                        (accessory.Name == "PurpleHair" or 
-                        accessory.Name == "zeus" or 
-                        accessory.Name == "Meshes/hairflowersAccessory" or 
-                        accessory.Name == "AliengIRLHair" or 
-                        accessory.Name == "BlondeBraid") then
-                        table.insert(modelsToTeleport, model)
-                    end
+-- Teleport Behind Model
+local function teleportBehindModel(character, targetModel)
+    if targetModel and targetModel.Parent then
+        local humanoidRootPart = targetModel:FindFirstChild("HumanoidRootPart")
+        if humanoidRootPart then
+            local targetPosition = humanoidRootPart.Position - humanoidRootPart.CFrame.LookVector * 5
+            local targetLookVector = humanoidRootPart.CFrame.Position - character.HumanoidRootPart.Position
+            tweenToPosition(character, targetPosition, targetLookVector.Unit)
+        end
+    end
+end
+
+-- Find Target Models
+local function findAllTargetModels()
+    local modelsToTeleport = {}
+    for _, model in pairs(workspace.AiCharacters:GetChildren()) do
+        if model:IsA("Model") and model.Name ~= game.Players.LocalPlayer.Name then
+            for _, accessory in pairs(model:GetChildren()) do
+                if accessory:IsA("Accessory") and 
+                   (accessory.Name == "PurpleHair" or 
+                    accessory.Name == "zeus" or 
+                    accessory.Name == "Meshes/hairflowersAccessory" or 
+                    accessory.Name == "AliengIRLHair" or 
+                    accessory.Name == "BlondeBraid") then
+                    table.insert(modelsToTeleport, model)
                 end
             end
         end
-        return modelsToTeleport
     end
+    return modelsToTeleport
+end
 
-    local function teleportToModel(targetModel)
-        local humanoidRootPart = targetModel:FindFirstChild("HumanoidRootPart")
-        if humanoidRootPart then
-            character:SetPrimaryPartCFrame(humanoidRootPart.CFrame - humanoidRootPart.CFrame.LookVector * 5)
-        end
+-- Reset Velocity Logic
+local function resetVelocity()
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
+
+    if humanoidRootPart then
+        humanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+        humanoidRootPart.AssemblyAngularVelocity = Vector3.zero
     end
+end
 
+-- AF1 Logic
+local function teleportBehindModels(character)
     while af1Active do
         local humanoid = character:FindFirstChild("Humanoid")
         if humanoid and humanoid.Health > 0 then
-            local progressBarText = game:GetService("Players").LocalPlayer.PlayerGui.GameUI.Quests.InformationFrame.ScrollingFrame.QuestPartProgress.Progress.Text
+            -- Check for QuestPartProgress and teleport if it doesn't exist
+            if checkQuestPartProgress() then
+                character:MoveTo(questCheckPosition)
+                wait(1) -- Delay to avoid spamming teleportation
+            else
+                local progressBar = game:GetService("Players").LocalPlayer.PlayerGui.GameUI.Quests.InformationFrame.ScrollingFrame.QuestPartProgress.Progress
+                local progressBarText = progressBar and progressBar.Text or nil
 
-            if progressBarText == "3/3" then
-                while game:GetService("Players").LocalPlayer.PlayerGui.GameUI.Quests.InformationFrame.ScrollingFrame.QuestPartProgress.Progress.Text == "3/3" do
-                    character:SetPrimaryPartCFrame(stopLocation)
-                    wait(1)
-                end
-            elseif progressBarText == "0/3" or progressBarText == "1/3" or progressBarText == "2/3" then
-                local targetModels = findAllTargetModels()
-                if #targetModels > 0 then
-                    targetsFoundCount = #targetModels
-                    for _, targetModel in pairs(targetModels) do
-                        teleportToModel(targetModel)
+                if progressBarText == "3/3" then
+                    tweenToPosition(character, stopLocation.Position, Vector3.new(0, 0, -1))
+                elseif currentTarget and currentTarget.Parent then
+                    teleportBehindModel(character, currentTarget)
+                else
+                    local targetModels = findAllTargetModels()
+                    if #targetModels > 0 then
+                        currentTarget = targetModels[1] -- Select the first available target
+                        teleportBehindModel(character, currentTarget)
+                    else
+                        tweenToPosition(character, stopLocation.Position, Vector3.new(0, 0, -1)) -- Default loop location
                     end
                 end
             end
         else
             break
         end
-        wait(0.2)
+        wait(0.05) -- Faster execution interval
     end
 end
 
--- Button click handler for AF1 toggle
+-- Button Handlers
 af1Button.MouseButton1Click:Connect(function()
     af1Active = not af1Active
-
+    af1Button.BackgroundColor3 = af1Active and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
     if af1Active then
-        af1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
         local character = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
         teleportBehindModels(character)
-    else
-        af1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
     end
 end)
 
--- Button click handler for Auto AF1 toggle
-autoAF1Button.MouseButton1Click:Connect(function()
-    autoAF1Active = not autoAF1Active
-
-    if autoAF1Active then
-        autoAF1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-        if not tpActive then
-            tpActive = true
-            tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-        end
-        while autoAF1Active do
-            af1Active = true
-            tpActive = true
-            af1Button.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-            tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-            local character = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
-            teleportBehindModels(character)
-            startTeleportLoop(character)
-            wait(1)
-        end
-    else
-        autoAF1Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-    end
-end)
-
--- Button click handler for TP toggle
-tpButton.MouseButton1Click:Connect(function()
-    tpActive = not tpActive
-
-    if tpActive then
-        tpButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-        local character = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
-        startTeleportLoop(character)
-    else
-        tpButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-    end
-end)
-
--- Button click handler for RV toggle
 rvButton.MouseButton1Click:Connect(function()
     rvActive = not rvActive
-
-    if rvActive then
-        rvButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-        while rvActive do
-            resetVelocity()
-            wait(0.1)
-        end
-    else
-        rvButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-    end
-end)
-
--- Update the targets found label every 0.1 seconds
-spawn(function()
-    while true do
-        targetsFoundLabel.Text = "Targets Found: " .. targetsFoundCount
+    rvButton.BackgroundColor3 = rvActive and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    while rvActive do
+        resetVelocity()
         wait(0.1)
     end
 end)
 
--- Add the ScreenGui to the player's PlayerGui
-screenGui.Parent = game.Players.LocalPlayer.PlayerGui
-
--- Function to initialize or reinitialize the character after respawn
+-- Handle Respawn Logic
 local function initializeCharacter(character)
-    -- Start AutoFarm or TP if their respective features are active
+    character:WaitForChild("HumanoidRootPart")
     if af1Active then
         teleportBehindModels(character)
     end
-    
-    if tpActive then
-        startTeleportLoop(character)
-    end
 end
 
--- Connect the respawn handler
 game.Players.LocalPlayer.CharacterAdded:Connect(function(character)
-    -- Wait for the character to load completely
-    character:WaitForChild("HumanoidRootPart")
-    
-    -- Reinitialize features after respawn
     initializeCharacter(character)
 end)
 
--- Initialize features for the current character
 local currentCharacter = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
 initializeCharacter(currentCharacter)
 
--- Parent the GUI to the player's PlayerGui
+-- Add GUI to Player
 screenGui.Parent = game.Players.LocalPlayer.PlayerGui
