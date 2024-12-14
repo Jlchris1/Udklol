@@ -116,12 +116,12 @@ while true do
             active = false
             print("No ClickDetector found. Stopping.")
         end
-        wait(1) -- Delay before checking again when inactive
+        wait(2.5) -- Delay before checking again when inactive
     end
 
     -- If active, add a slight delay to control the firing rate
     if active then
-        wait(0.1) -- Adjust this delay for desired firing speed
+        wait(0.7) -- Adjust this delay for desired firing speed
     end
 end
       end    
