@@ -152,96 +152,12 @@ end
 }) Tab:AddButton({
     Name = "click this before using auto quest taker",
     Callback = function()
-              -- Remove specified objects from workspace
-local objectsToRemove = {
-    workspace:FindFirstChild("Teleporters"),
-    workspace:FindFirstChild("Daily Spin"),
-    workspace:FindFirstChild("InteractiveGUI"),
-    workspace:FindFirstChild("NPCs"):FindFirstChild("Mark"),
-    workspace:FindFirstChild("NPCs"):FindFirstChild("Synced Soul")
-}
-
--- Iterate through the list of objects and destroy them if they exist
-for _, object in ipairs(objectsToRemove) do
-    if object then
-        object:Destroy()
-        print("Removed: " .. object:GetFullName())
-    else
-        print("Object not found!")
-    end
-end
-
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/lag%20reducion"))()
       end    
 }) Tab:AddButton({
-	Name = "anchor gui",
+	Name = "use this auto switch tool gui",
 	Callback = function()
-      		-- Create the ScreenGui
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "AutoFarmGUI"
-screenGui.ResetOnSpawn = false -- Persist after respawn
-
--- Create the Anchor button (Anchor when 3/3)
-local anchorButton = Instance.new("TextButton")
-anchorButton.Size = UDim2.new(0, 30, 0, 30) -- 30x30 pixels
-anchorButton.Position = UDim2.new(1, -40, 0, 10) -- Position at the top-right
-anchorButton.Text = "Anchor"
-anchorButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-anchorButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red (disabled by default)
-anchorButton.Parent = screenGui
-
--- Create the TextLabel to display progress status
-local progressLabel = Instance.new("TextLabel")
-progressLabel.Size = UDim2.new(0, 100, 0, 30) -- 100x30 pixels
-progressLabel.Position = UDim2.new(1, -150, 0, 10) -- Position to the left of Anchor button
-progressLabel.Text = "Progress: 0/3"
-progressLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-progressLabel.BackgroundTransparency = 1 -- Make background transparent
-progressLabel.Parent = screenGui
-
--- AF1 active state
-local af1Active = true
-local targetsFoundCount = 0
-local progressBarText = ""
-
--- Function to handle anchoring and unanchoring
-local function anchorHumanoidRootPart(character)
-    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-    if humanoidRootPart then
-        -- Anchor the HumanoidRootPart for 0.4 seconds
-        humanoidRootPart.Anchored = true
-        wait(0.4) -- Keep anchored for 0.4 seconds
-        -- Unanchor after 5 seconds
-        wait(5)
-        humanoidRootPart.Anchored = false
-    end
-end
-
--- Function to check progress and trigger anchoring
-local function checkProgressAndAnchor()
-    local progressText = game:GetService("Players").LocalPlayer.PlayerGui.GameUI.Quests.InformationFrame.ScrollingFrame.QuestPartProgress.Progress.Text
-    if progressText == "3/3" then
-        local character = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
-        anchorHumanoidRootPart(character)
-    end
-end
-
--- Update the progress label every 0.1 seconds
-spawn(function()
-    while true do
-        progressLabel.Text = "Progress: " .. game:GetService("Players").LocalPlayer.PlayerGui.GameUI.Quests.InformationFrame.ScrollingFrame.QuestPartProgress.Progress.Text
-        wait(0.1)
-    end
-end)
-
--- Button click handler for Anchor toggle
-anchorButton.MouseButton1Click:Connect(function()
-    anchorButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green when activated
-    -- Check progress and trigger anchoring if necessary
-    checkProgressAndAnchor()
-end)
-
--- Add the ScreenGui to the player's PlayerGui
-screenGui.Parent = game.Players.LocalPlayer.PlayerGui
+      		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/switch%20tool%20gui%20v1"))()
   	end    
 }) local Tab = Window:MakeTab({
     Name = "auto farm info",
@@ -290,6 +206,34 @@ screenGui.Parent = game.Players.LocalPlayer.PlayerGui
 	Name = "better view quest data",
 	Callback = function()
       		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/better%20view%20quest"))()
+  	end    
+}) local Tab = Window:MakeTab({
+	Name = "Auto Farm V2",
+	Icon = "rbxassetid://4483345998",
+	PremiumOnly = false
+}) Tab:AddButton({
+	Name = "Auto farm V2 [beta] NOT RECOMMENDED RN",
+	Callback = function()
+      		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/af%20V2%20%5BBeta%5D"))()
+  	end    
+}) local Tab = Window:MakeTab({
+	Name = "tool gui is goated",
+	Icon = "rbxassetid://4483345998",
+	PremiumOnly = false
+}) Tab:AddButton({
+	Name = "no need to set auto click targets on tools",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "auto clicker lag reduction🔥🔥🔥",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "you can adjust each switch cooldown🔥🔥🔥",
+	Callback = function()
+      		print("button pressed")
   	end    
 })
 
