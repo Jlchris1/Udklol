@@ -140,12 +140,17 @@ end
               loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/af"))()
       end    
 }) Tab:AddButton({
+	Name = "remove black screen (might be the crash cause)",
+	Callback = function()
+      		game:GetService("Players").LocalPlayer.PlayerGui.GameUI.BlackScreen:destroy()
+  	end    
+}) Tab:AddButton({
     Name = "auto take quest",
     Callback = function()
               _G.toggle = true
 
 while _G.toggle do
-wait(0.5)
+wait(1.5)
 for i,v in next, workspace:GetDescendants() do if v.IsA(v,'ProximityPrompt') then fireproximityprompt(v) end end
 end
       end    
@@ -155,7 +160,7 @@ end
               loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/lag%20reducion"))()
       end    
 }) Tab:AddButton({
-	Name = "use this auto switch tool gui",
+	Name = "WIP (work in progress)",
 	Callback = function()
       		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/switch%20tool%20gui%20v1"))()
   	end    
@@ -212,26 +217,56 @@ end
 	Icon = "rbxassetid://4483345998",
 	PremiumOnly = false
 }) Tab:AddButton({
-	Name = "Auto farm V2 [beta] NOT RECOMMENDED RN",
+	Name = "Auto farm V2 [beta] (recommended)",
 	Callback = function()
       		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/af%20V2%20%5BBeta%5D"))()
   	end    
 }) local Tab = Window:MakeTab({
-	Name = "tool gui is goated",
+	Name = "Pinned updates",
 	Icon = "rbxassetid://4483345998",
 	PremiumOnly = false
 }) Tab:AddButton({
-	Name = "no need to set auto click targets on tools",
+	Name = "❌ = not added/not fixed/not done yet",
 	Callback = function()
       		print("button pressed")
   	end    
 }) Tab:AddButton({
-	Name = "auto clicker lag reduction🔥🔥🔥",
+	Name = "✅ = added/fixed/done",
 	Callback = function()
       		print("button pressed")
   	end    
 }) Tab:AddButton({
-	Name = "you can adjust each switch cooldown🔥🔥🔥",
+	Name = "make v2 auto farm better than v1✅",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "fixed crash issue❌",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "lag reducion on autofarm✅",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "make auto farm faster✅ (currently available on v2)",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "made a nonlaggy auto clicker for abilitys/quests❌",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "made auto take quest (remote version)❌",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "fixed tool gui❌",
 	Callback = function()
       		print("button pressed")
   	end    
