@@ -1,0 +1,210 @@
+-- Create the ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ToolResizeGUI"
+screenGui.ResetOnSpawn = false -- Persist after respawn
+
+-- Create the Resize button (smaller than before)
+local resizeButton = Instance.new("TextButton")
+resizeButton.Size = UDim2.new(0, 120, 0, 40) -- Smaller button size 120x40 pixels
+resizeButton.Position = UDim2.new(1, -160, 0.5, -25) -- Position at right middle
+resizeButton.Text = "Resize Tool"
+resizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+resizeButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green (default color)
+resizeButton.Parent = screenGui
+
+-- Create the TextBox for inputting the size
+local sizeTextBox = Instance.new("TextBox")
+sizeTextBox.Size = UDim2.new(0, 100, 0, 50) -- TextBox size 100x50 pixels
+sizeTextBox.Position = UDim2.new(1, -270, 0.5, -25) -- Position next to the button
+sizeTextBox.Text = "10" -- Default size value (in studs)
+sizeTextBox.TextColor3 = Color3.fromRGB(0, 0, 0)
+sizeTextBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- White background
+sizeTextBox.PlaceholderText = "Size"
+sizeTextBox.Parent = screenGui
+
+-- Create the Destroy GUI button
+local destroyButton = Instance.new("TextButton")
+destroyButton.Size = UDim2.new(0, 120, 0, 40) -- Button size 120x40 pixels
+destroyButton.Position = UDim2.new(1, -160, 0.5, 40) -- Position below the resize button
+destroyButton.Text = "Destroy GUI"
+destroyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+destroyButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red color for destroy
+destroyButton.Parent = screenGui
+
+-- Create a toggle button at the top to hide/show the GUI (This button will always be visible)
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 20, 0, 20) -- Button size 20x20 pixels
+toggleButton.Position = UDim2.new(0.5, -10, 0, 10) -- Position at the top center of the screen
+toggleButton.Text = "H"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red color for the toggle button
+toggleButton.Parent = screenGui
+
+-- Create the "Auto Resize" toggle button
+local autoResizeButton = Instance.new("TextButton")
+autoResizeButton.Size = UDim2.new(0, 120, 0, 40) -- Button size 120x40 pixels
+autoResizeButton.Position = UDim2.new(1, -160, 0.5, 80) -- Position below other buttons
+autoResizeButton.Text = "Auto Resize Off"
+autoResizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoResizeButton.BackgroundColor3 = Color3.fromRGB(0, 255, 255) -- Cyan color for the button
+autoResizeButton.Parent = screenGui
+
+-- Create the Max Zoom button
+local maxZoomButton = Instance.new("TextButton")
+maxZoomButton.Size = UDim2.new(0, 120, 0, 40) -- Button size 120x40 pixels
+maxZoomButton.Position = UDim2.new(1, -160, 0.5, 120) -- Position below other buttons
+maxZoomButton.Text = "Set Max Zoom"
+maxZoomButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+maxZoomButton.BackgroundColor3 = Color3.fromRGB(0, 0, 255) -- Blue color for max zoom
+maxZoomButton.Parent = screenGui
+
+-- Variables to track tool usage and state
+local currentSize = tonumber(sizeTextBox.Text) or 10 -- Default size value
+local toolEquipped = nil
+local autoResizeEnabled = false -- Default Auto Resize state (off)
+
+-- Update the size when the Size TextBox value changes
+sizeTextBox.FocusLost:Connect(function()
+    local newSize = tonumber(sizeTextBox.Text)
+    if newSize and newSize > 0 then
+        currentSize = newSize
+    else
+        sizeTextBox.Text = tostring(currentSize) -- Revert to the current valid size
+    end
+end)
+
+-- Function to resize the tool's handle and add an outline
+local function resizeTool(tool, size)
+    local handle = tool:FindFirstChild("Handle")
+    if handle and handle:IsA("BasePart") then
+        -- Resize the handle
+        handle.Size = Vector3.new(size, size, size)
+        handle.Massless = true -- Make the handle massless
+        handle.CanCollide = false -- Disable collision
+
+        -- Create or update the SelectionBox for the outline
+        local selectionBox = handle:FindFirstChildOfClass("SelectionBox")
+        
+        -- If no SelectionBox exists, create one
+        if not selectionBox then
+            selectionBox = Instance.new("SelectionBox")
+            selectionBox.Parent = handle
+            selectionBox.Adornee = handle
+            selectionBox.LineThickness = 0.1
+            selectionBox.SurfaceColor3 = Color3.new(1, 1, 1) -- Set white color for the outline
+            selectionBox.SurfaceTransparency = 0.5 -- Make it slightly transparent
+            selectionBox.Color3 = Color3.new(0, 1, 0) -- Set green for the box line color
+        end
+
+        print("Resized the Handle to " .. size .. "x" .. size .. "x" .. size)
+    else
+        warn("Handle not found or not a BasePart")
+    end
+end
+
+-- Function to find the character either in Workspace or folders (e.g., ReplicatedStorage)
+local function findCharacter(player)
+    -- Check if the character is in the workspace
+    local character = player.Character or player.CharacterAdded:Wait()
+    if character.Parent == workspace then
+        return character
+    end
+
+    -- If character is not in the workspace, check other folders (ReplicatedStorage or others)
+    local characterFolders = {game.ReplicatedStorage, game.ServerStorage, game.Workspace} -- Add more if needed
+    for _, folder in pairs(characterFolders) do
+        local charInFolder = folder:FindFirstChild(player.Name)
+        if charInFolder then
+            return charInFolder
+        end
+    end
+
+    return nil -- Return nil if the character is not found
+end
+
+-- Function to get the tool from the player's character
+local function getToolFromCharacter(character)
+    for _, item in pairs(character:GetChildren()) do
+        if item:IsA("Tool") then
+            return item
+        end
+    end
+    return nil -- Return nil if no tool is found
+end
+
+-- Button click handler for resizing the tool
+resizeButton.MouseButton1Click:Connect(function()
+    local player = game.Players.LocalPlayer
+    local character = findCharacter(player)
+
+    if character then
+        -- Try to find the tool inside the character
+        local tool = getToolFromCharacter(character)
+        if tool then
+            resizeTool(tool, currentSize)  -- Resize the equipped tool based on the input size
+        else
+            warn("No tool found inside the character!")
+        end
+    else
+        warn("Character not found in any folder")
+    end
+end)
+
+-- Button click handler for destroying the GUI
+destroyButton.MouseButton1Click:Connect(function()
+    screenGui:Destroy()  -- Destroy the GUI when the button is clicked
+    print("GUI Destroyed")
+end)
+
+-- Hide/Show functionality for the GUI (only hide buttons, not the toggle button)
+toggleButton.MouseButton1Click:Connect(function()
+    -- Toggle the visibility of the individual elements (buttons, textboxes, etc.) excluding the toggle button
+    local elements = {resizeButton, sizeTextBox, destroyButton, autoResizeButton, maxZoomButton}
+    
+    -- Toggle visibility
+    local isVisible = resizeButton.Visible  -- Check if the elements are visible (based on resizeButton)
+    for _, element in ipairs(elements) do
+        element.Visible = not isVisible
+    end
+    
+    -- Toggle the text on the toggle button
+    toggleButton.Text = isVisible and "S" or "H"
+end)
+
+-- Toggle auto resize loop
+autoResizeButton.MouseButton1Click:Connect(function()
+    autoResizeEnabled = not autoResizeEnabled
+    if autoResizeEnabled then
+        autoResizeButton.Text = "Auto Resize On"
+        -- Start looping resize every 1 second (or based on size)
+        while autoResizeEnabled do
+            local player = game.Players.LocalPlayer
+            local character = findCharacter(player)
+
+            if character then
+                local tool = getToolFromCharacter(character)
+                if tool then
+                    resizeTool(tool, currentSize)  -- Resize the equipped tool based on the input size
+                else
+                    warn("No tool found inside the character!")
+                end
+            else
+                warn("Character not found in any folder")
+            end
+            wait(1)
+        end
+    else
+        autoResizeButton.Text = "Auto Resize Off"
+    end
+end)
+
+-- Set Max Zoom on button click
+maxZoomButton.MouseButton1Click:Connect(function()
+    local player = game.Players.LocalPlayer
+    local camera = game.Workspace.CurrentCamera
+    camera.CameraMaxZoomDistance = 100000
+    print("Max Zoom set to 100000")
+end)
+
+-- Parent the ScreenGui to the Player's PlayerGui
+screenGui.Parent = game.Players.LocalPlayer.PlayerGui
