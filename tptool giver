@@ -1,0 +1,116 @@
+-- Create the ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ToolGiverGUI"
+screenGui.ResetOnSpawn = false -- Persist after respawn
+
+-- Create the first button (for giving teleport tool)
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 30, 0, 30) -- 30x30 pixels
+button.Position = UDim2.new(1, -40, 0, 10) -- Top-right corner, 10 pixels from top and right
+button.AnchorPoint = Vector2.new(1, 0) -- Adjust anchor for easier positioning
+button.Text = "+"
+button.TextColor3 = Color3.fromRGB(255, 255, 255)
+button.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+button.Parent = screenGui
+
+-- Create the second button (for auto giving teleport tool upon respawn)
+local autoButton = Instance.new("TextButton")
+autoButton.Size = UDim2.new(0, 30, 0, 30) -- 30x30 pixels
+autoButton.Position = UDim2.new(1, -80, 0, 10) -- Right next to the first button
+autoButton.AnchorPoint = Vector2.new(1, 0) -- Adjust anchor for easier positioning
+autoButton.Text = "Auto"
+autoButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoButton.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+autoButton.Parent = screenGui
+
+-- Function to create a teleport tool
+local toolCounter = 0 -- Counter for unique tool naming
+local function createTeleportTool()
+    local tool = Instance.new("Tool")
+    toolCounter += 1 -- Increment the tool counter
+    tool.Name = "TeleportTool" .. toolCounter
+    tool.RequiresHandle = false -- No need for a handle
+
+    -- Tool activation logic
+    local function onToolActivated(player)
+        local mouse = player:GetMouse()
+        local targetPosition = mouse.Hit and mouse.Hit.Position
+
+        if targetPosition then
+            local character = player.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                local humanoidRootPart = character.HumanoidRootPart
+
+                -- Move the character to the clicked location
+                humanoidRootPart.CFrame = CFrame.new(targetPosition)
+            end
+        end
+    end
+
+    -- Player-related setup
+    local player = game.Players.LocalPlayer
+    tool.Activated:Connect(function()
+        onToolActivated(player)
+    end)
+
+    return tool
+end
+
+-- Function to give a new teleport tool to the player
+local function giveTeleportTool()
+    local player = game.Players.LocalPlayer
+    local backpack = player:WaitForChild("Backpack")
+
+    -- Create and add a new teleport tool
+    local tool = createTeleportTool()
+    tool.Parent = backpack
+end
+
+-- Button click handler for regular button
+button.MouseButton1Click:Connect(function()
+    giveTeleportTool()
+end)
+
+-- Variable to track the state of the "Auto" button (on/off)
+local autoEnabled = false
+local autoConnection = nil -- To hold the connection to CharacterAdded event
+
+-- Function to automatically give a teleport tool when respawned
+local function autoGiveTeleportTool()
+    local player = game.Players.LocalPlayer
+    local backpack = player:WaitForChild("Backpack")
+
+    -- Create and add a new teleport tool
+    local tool = createTeleportTool()
+    tool.Parent = backpack
+end
+
+-- Function to toggle the "Auto" button
+autoButton.MouseButton1Click:Connect(function()
+    autoEnabled = not autoEnabled -- Toggle the state
+
+    if autoEnabled then
+        -- Set the button to green when on
+        autoButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
+
+        -- Give the tool immediately when "Auto" is turned on
+        giveTeleportTool()
+
+        -- Connect to the CharacterAdded event for auto-giving the tool upon respawn
+        autoConnection = game.Players.LocalPlayer.CharacterAdded:Connect(function()
+            autoGiveTeleportTool()
+        end)
+    else
+        -- Set the button to red when off
+        autoButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
+
+        -- Disconnect from CharacterAdded event to stop auto-giving the tool
+        if autoConnection then
+            autoConnection:Disconnect()
+            autoConnection = nil
+        end
+    end
+end)
+
+-- Parent the ScreenGui to Player's PlayerGui
+screenGui.Parent = game.Players.LocalPlayer.PlayerGui
