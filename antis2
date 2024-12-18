@@ -1,0 +1,275 @@
+-- Create the ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "Antis"
+screenGui.ResetOnSpawn = false -- To persist the GUI after respawn
+
+-- Create the main draggable frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0.3, 0, 0.5, 0)
+mainFrame.Position = UDim2.new(0.35, 0, 0.25, 0)
+mainFrame.BackgroundTransparency = 0.5
+mainFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+mainFrame.Parent = screenGui
+mainFrame.Visible = true -- Initially visible
+
+-- Function to make any frame draggable
+local function makeDraggable(frame)
+    local dragging, dragInput, mousePos, framePos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            mousePos = input.Position
+            framePos = frame.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
+            local delta = input.Position - mousePos
+            frame.Position = UDim2.new(framePos.X.Scale, framePos.X.Offset + delta.X, framePos.Y.Scale, framePos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- Make the main frame draggable
+makeDraggable(mainFrame)
+
+-- Create a ScrollingFrame inside the mainFrame
+local scrollingFrame = Instance.new("ScrollingFrame")
+scrollingFrame.Size = UDim2.new(1, 0, 1, 0)
+scrollingFrame.CanvasSize = UDim2.new(0, 0, 1.5, 0)
+scrollingFrame.ScrollBarThickness = 8
+scrollingFrame.Parent = mainFrame
+
+-- Utility function to create buttons and toggles
+local function createButton(name, parent)
+    local button = Instance.new("TextButton")
+    button.Name = name
+    button.Text = name
+    button.Size = UDim2.new(0.9, 0, 0.1, 0)
+    button.Position = UDim2.new(0.05, 0, #parent:GetChildren() * 0.11, 0)
+    button.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+    button.TextColor3 = Color3.new(1, 1, 1)
+    button.Parent = parent
+    return button
+end
+
+-- Create a toggle button to show/hide the mainFrame
+local toggleGuiButton = Instance.new("TextButton")
+toggleGuiButton.Size = UDim2.new(0.1, 0, 0.05, 0)
+toggleGuiButton.Position = UDim2.new(0.45, 0, 0, 0)
+toggleGuiButton.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+toggleGuiButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleGuiButton.Text = "Toggle GUI"
+toggleGuiButton.Parent = screenGui
+
+toggleGuiButton.MouseButton1Click:Connect(function()
+    mainFrame.Visible = not mainFrame.Visible
+end)
+
+-- Anti Fling Toggle
+local antiFlingButton = createButton("Anti Fling", scrollingFrame)
+local antiFlingEnabled = false
+
+-- Table to store the anchored state of parts
+local anchoredState = {}
+local originalPosition = nil
+
+-- Function to disable collisions for unanchored parts and reset velocity for both anchored and unanchored parts
+local function disableFling()
+    while antiFlingEnabled do
+        -- Loop through all parts in the workspace
+        for _, part in pairs(workspace:GetDescendants()) do
+            if part:IsA("BasePart") then
+                -- If the part is unanchored, disable collision and reset velocity
+                if not part.Anchored then
+                    if not anchoredState[part] then
+                        part.CanCollide = false
+                        part.Velocity = Vector3.new(0, 0, 0)
+                        anchoredState[part] = false -- Track the unanchored state
+                    end
+                else
+                    -- If the part is anchored and it's been previously unanchored, restore collision
+                    if anchoredState[part] == false then
+                        part.CanCollide = true
+                        part.Velocity = Vector3.new(0, 0, 0)
+                        anchoredState[part] = true -- Track the anchored state
+                    end
+                end
+            end
+        end
+        
+        -- Disable collisions with other players' parts and reset velocity for those parts
+        for _, player in pairs(game.Players:GetPlayers()) do
+            if player ~= game.Players.LocalPlayer and player.Character then
+                for _, part in pairs(player.Character:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                        part.Velocity = Vector3.new(0, 0, 0)
+                    end
+                end
+            end
+        end
+
+        -- Disable collisions with other players' characters
+        local localPlayer = game.Players.LocalPlayer
+        if localPlayer.Character then
+            for _, player in pairs(game.Players:GetPlayers()) do
+                if player ~= localPlayer and player.Character then
+                    local char = player.Character
+                    for _, part in pairs(char:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            -- Disable collision between local player's character and other players' part
+                            for _, ownPart in pairs(localPlayer.Character:GetChildren()) do
+                                if ownPart:IsA("BasePart") then
+                                    -- Turn off collision between this part and the other player's part
+                                    ownPart.CanCollide = false
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        wait(0.5) -- Check every 0.5 seconds
+    end
+end
+
+antiFlingButton.MouseButton1Click:Connect(function()
+    antiFlingEnabled = not antiFlingEnabled
+    antiFlingButton.Text = "Anti Fling: " .. (antiFlingEnabled and "ON" or "OFF")
+    
+    if antiFlingEnabled then
+        -- Start the loop in a new thread
+        spawn(disableFling)
+        
+        -- Anti Fling velocity reset check
+        local character = game.Players.LocalPlayer.Character
+        if character then
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            local velocityThreshold = humanoid.JumpPower + 10  -- Set a threshold to reset velocity
+            local resetVelocityTime = 3 -- Reset velocity for 3 seconds
+
+            -- Store the character's position before being flung
+            originalPosition = character.HumanoidRootPart.Position
+
+            game:GetService("RunService").Heartbeat:Connect(function()
+                if character and humanoid then
+                    local velocity = humanoid.RootPart.Velocity.magnitude
+                    local isOffGround = humanoid:GetState() == Enum.HumanoidStateType.Physics
+
+                    if velocity > velocityThreshold and isOffGround then
+                        -- Strong fling detected, return the character to the original position
+                        character.HumanoidRootPart.CFrame = CFrame.new(originalPosition)
+                        wait(resetVelocityTime)
+                        humanoid.RootPart.Velocity = Vector3.new(0, 0, 0)
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- Anti Void Toggle
+local antiVoidButton = createButton("Anti Void", scrollingFrame)
+local antiVoidEnabled = false
+local originalHeight = workspace.FallenPartsDestroyHeight  -- Store the original value
+
+antiVoidButton.MouseButton1Click:Connect(function()
+    antiVoidEnabled = not antiVoidEnabled
+    antiVoidButton.Text = "Anti Void: " .. (antiVoidEnabled and "ON" or "OFF")
+    
+    if antiVoidEnabled then
+        -- Set to NaN (0/0 creates NaN in Lua)
+        workspace.FallenPartsDestroyHeight = 0 / 0
+    else
+        -- Restore the original height
+        workspace.FallenPartsDestroyHeight = originalHeight
+    end
+end)
+
+-- Anti One Shot Button
+local antiOneShotButton = createButton("Anti One Shot", scrollingFrame)
+
+antiOneShotButton.MouseButton1Click:Connect(function()
+    local character = game.Players.LocalPlayer.Character
+    if not character then return end
+    
+    -- Clone the Humanoid and set PlatformStand to true for each clone
+    for i = 1, 3 do
+        local humanoidClone = character:FindFirstChildOfClass("Humanoid"):Clone()
+        humanoidClone.Parent = character
+        humanoidClone.PlatformStand = true  -- Set PlatformStand for clones
+    end
+    
+    -- Wait for respawn to destroy the GUI
+    game.Players.LocalPlayer.CharacterAdded:Wait()
+    screenGui:Destroy()
+end)
+
+-- Anti Drag Toggle
+local antiDragButton = createButton("Anti Drag", scrollingFrame)
+local antiDragEnabled = false
+
+local function removeUnnecessaryPhysics()
+    while antiDragEnabled do
+        local character = game.Players.LocalPlayer.Character
+        if character then
+            -- Remove unnecessary physics attachments like BodyVelocity, BodyGyro
+            for _, part in pairs(character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    for _, descendant in pairs(part:GetChildren()) do
+                        if descendant:IsA("BodyVelocity") or descendant:IsA("BodyGyro") then
+                            descendant:Destroy() -- Remove unnecessary physics elements
+                        end
+                    end
+                end
+            end
+        end
+        wait(1) -- Check every second
+    end
+end
+
+antiDragButton.MouseButton1Click:Connect(function()
+    antiDragEnabled = not antiDragEnabled
+    antiDragButton.Text = "Anti Drag: " .. (antiDragEnabled and "ON" or "OFF")
+    
+    if antiDragEnabled then
+        -- Start the loop in a new thread
+        spawn(removeUnnecessaryPhysics)
+    end
+end)
+
+-- Destroy GUI Button
+local destroyGuiButton = createButton("Destroy GUI", scrollingFrame)
+
+destroyGuiButton.MouseButton1Click:Connect(function()
+    -- Turn off all toggles
+    antiFlingEnabled = false
+    antiVoidEnabled = false
+    antiDragEnabled = false
+    
+    -- Update button texts
+    antiFlingButton.Text = "Anti Fling: OFF"
+    antiVoidButton.Text = "Anti Void: OFF"
+    antiDragButton.Text = "Anti Drag: OFF"
+
+    -- Destroy the GUI
+    screenGui:Destroy()
+end)
+
+-- Parent the ScreenGui to Player's PlayerGui
+screenGui.Parent = game.Players.LocalPlayer.PlayerGui
