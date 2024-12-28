@@ -236,12 +236,17 @@ end
       		print("button pressed")
   	end    
 }) Tab:AddButton({
+	Name = "❌✅ = Fixed for a big part",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
 	Name = "make v2 auto farm better than v1✅",
 	Callback = function()
       		print("button pressed")
   	end    
 }) Tab:AddButton({
-	Name = "fixed crash issue❌",
+	Name = "fixed crash issue❌✅",
 	Callback = function()
       		print("button pressed")
   	end    
@@ -267,6 +272,59 @@ end
   	end    
 }) Tab:AddButton({
 	Name = "fixed tool gui❌",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) local Tab = Window:MakeTab({
+	Name = "auto farm v3 (recommended)",
+	Icon = "rbxassetid://4483345998",
+	PremiumOnly = false
+}) Tab:AddButton({
+	Name = "auto farm v3 (fixed crash for alot of bit and farms more before crashing) lower profit total",
+	Callback = function()
+      		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/AutoFarmV3%5BWIP%5D%5BBeta%5D"))()
+  	end    
+}) Tab:AddButton({
+	Name = "use this before auto farming v2 (recommended)",
+	Callback = function()
+      		local objectsToDestroy = {
+    workspace:FindFirstChild("Teleporters"),
+    workspace:FindFirstChild("Daily Spin"),
+    workspace:FindFirstChild("InteractiveGUI")
+}
+
+for _, obj in ipairs(objectsToDestroy) do
+    if obj then
+        obj:Destroy()
+        print(obj.Name .. " has been destroyed.")
+    else
+        print("Object not found.")
+    end
+end
+
+  	end    
+}) Tab:AddButton({
+	Name = "it will ignore gravitron npcs but it farms demons now",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "might be alot slower but atleast were not getting less realistic profit",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "farms 400-700 an hour",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "v4 will target gravitrons but will have an diffrent targetting system on them",
+	Callback = function()
+      		print("button pressed")
+  	end    
+}) Tab:AddButton({
+	Name = "just be patient ok?",
 	Callback = function()
       		print("button pressed")
   	end    
