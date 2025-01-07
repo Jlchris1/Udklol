@@ -272,6 +272,36 @@ print("Camera position locked at world position (0, 0, 0) and will not follow th
 	Callback = function()
       		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/af%20V2%20%5BBeta%5D"))()
   	end    
+}) Tab:AddButton({
+	Name = "auto take quest",
+	Callback = function()
+      		_G.toggle = true
+
+while _G.toggle do
+wait(0.2)
+for i,v in next, workspace:GetDescendants() do if v.IsA(v,'ProximityPrompt') then fireproximityprompt(v) end end
+end
+  	end    
+})Tab:AddButton({
+	Name = "click this before auto take quest",
+	Callback = function()
+      		local objectsToDestroy = {
+    workspace:FindFirstChild("Teleporters"),
+    workspace:FindFirstChild("Daily Spin"),
+    workspace:FindFirstChild("InteractiveGUI")
+}
+
+for _, obj in ipairs(objectsToDestroy) do
+    if obj then
+        obj:Destroy()
+        print(obj.Name .. " has been destroyed.")
+    else
+        print("Object not found.")
+    end
+end
+
+
+  	end    
 }) local Tab = Window:MakeTab({
 	Name = "Pinned updates",
 	Icon = "rbxassetid://4483345998",
