@@ -263,6 +263,11 @@ print("Camera position locked at world position (0, 0, 0) and will not follow th
 
   	end    
 }) Tab:AddButton({
+	Name = "remove forger (use this)",
+	Callback = function()
+      		workspace.Interactables["Forge Information"]:destroy()
+  	end    
+}) Tab:AddButton({
 	Name = "Auto farm V2 [beta] (recommended)",
 	Callback = function()
       		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/af%20V2%20%5BBeta%5D"))()
