@@ -217,6 +217,52 @@ end
 	Icon = "rbxassetid://4483345998",
 	PremiumOnly = false
 }) Tab:AddButton({
+	Name = "lock camara/fix crash issue (spawn in first otherwise it breaks)",
+	Callback = function()
+      		local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+
+local LocalPlayer = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
+
+-- World position to lock the camera at (separated from character)
+local lockedPosition = Vector3.new(0, 0, 0)
+
+-- Function to lock the camera
+local function lockCamera()
+    -- Set the camera to Scriptable mode and disable following the character
+    camera.CameraSubject = nil
+    camera.CameraType = Enum.CameraType.Scriptable
+
+    -- Continuous loop on Heartbeat to keep the camera at (0, 0, 0)
+    while true do
+        if camera then
+            camera.CFrame = CFrame.new(lockedPosition)
+        end
+        RunService.Heartbeat:Wait() -- Ensure this runs every frame
+    end
+end
+
+-- Ensure the camera lock function runs on respawn as well
+LocalPlayer.CharacterAdded:Connect(function()
+    -- Wait a bit to ensure the character has fully loaded
+    wait(2)
+    
+    -- Lock the camera once the player respawns
+    lockCamera()
+end)
+
+-- If the player is already in the game, lock the camera immediately
+if LocalPlayer.Character then
+    lockCamera()
+end
+
+print("Camera position locked at world position (0, 0, 0) and will not follow the character, even after respawn.")
+
+
+  	end    
+}) Tab:AddButton({
 	Name = "Auto farm V2 [beta] (recommended)",
 	Callback = function()
       		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/af%20V2%20%5BBeta%5D"))()
@@ -246,7 +292,7 @@ end
       		print("button pressed")
   	end    
 }) Tab:AddButton({
-	Name = "fixed crash issue❌✅",
+	Name = "fixed crash issue✅",
 	Callback = function()
       		print("button pressed")
   	end    
