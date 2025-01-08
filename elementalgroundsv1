@@ -409,6 +409,15 @@ end
 	Callback = function()
       		print("button pressed")
   	end    
+}) local Tab = Window:MakeTab({
+	Name = "full fixed v2",
+	Icon = "rbxassetid://4483345998",
+	PremiumOnly = false
+}) Tab:AddButton({
+	Name = "full fixed v2 (unfinished)",
+	Callback = function()
+      		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/auto%20farm%20full%20fixed%20version%20comming%20soon"))()
+  	end    
 })
 
 getgenv().syn = syn
