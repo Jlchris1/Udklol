@@ -24,6 +24,8 @@ local toolresizegui = Instance.new("TextButton")
 local tptoolgiver = Instance.new("TextButton")
 local antigui = Instance.new("TextButton")
 local unanchoredguiv2 = Instance.new("TextButton")
+local elementalgroundsreworked = Instance.new("TextButton")
+local fireallremotes = Instance.new("TextButton")
 local toggle = Instance.new("TextButton")
 
 --Properties:
@@ -53,7 +55,6 @@ scrollingmain.BorderColor3 = Color3.fromRGB(0, 0, 0)
 scrollingmain.BorderSizePixel = 0
 scrollingmain.Position = UDim2.new(0, 0, 0.983007789, 0)
 scrollingmain.Size = UDim2.new(0, 200, 0, 204)
-scrollingmain.CanvasPosition = Vector2.new(0, 600)
 scrollingmain.CanvasSize = UDim2.new(0, 0, 29, 0)
 
 unanchoredgui.Name = "unanchored gui"
@@ -282,6 +283,31 @@ unanchoredguiv2.TextColor3 = Color3.fromRGB(255, 0, 0)
 unanchoredguiv2.TextSize = 15.000
 unanchoredguiv2.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 
+elementalgroundsreworked.Name = "elemental grounds reworked"
+elementalgroundsreworked.Parent = scrollingmain
+elementalgroundsreworked.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+elementalgroundsreworked.BorderColor3 = Color3.fromRGB(0, 0, 0)
+elementalgroundsreworked.BorderSizePixel = 0
+elementalgroundsreworked.Position = UDim2.new(0, 0, 0.529988587, 0)
+elementalgroundsreworked.Size = UDim2.new(0, 133, 0, 36)
+elementalgroundsreworked.Font = Enum.Font.SourceSansBold
+elementalgroundsreworked.Text = "e.g reworked"
+elementalgroundsreworked.TextColor3 = Color3.fromRGB(255, 0, 0)
+elementalgroundsreworked.TextSize = 24.000
+elementalgroundsreworked.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+
+fireallremotes.Name = "fire all remotes"
+fireallremotes.Parent = scrollingmain
+fireallremotes.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+fireallremotes.BorderColor3 = Color3.fromRGB(0, 0, 0)
+fireallremotes.BorderSizePixel = 0
+fireallremotes.Position = UDim2.new(0, 0, 0.566999972, 0)
+fireallremotes.Size = UDim2.new(0, 133, 0, 38)
+fireallremotes.Font = Enum.Font.SourceSansBold
+fireallremotes.Text = "fire all remotes v1"
+fireallremotes.TextColor3 = Color3.fromRGB(255, 0, 0)
+fireallremotes.TextSize = 20.000
+
 toggle.Name = "toggle"
 toggle.Parent = guilauncherv2
 toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -296,7 +322,7 @@ toggle.TextSize = 29.000
 
 -- Scripts:
 
-local function SELN_fake_script() -- unanchoredgui.Script 
+local function LQPEY_fake_script() -- unanchoredgui.Script 
 	local script = Instance.new('Script', unanchoredgui)
 
 	function Click(mouse)
@@ -309,8 +335,8 @@ local function SELN_fake_script() -- unanchoredgui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(SELN_fake_script)()
-local function RMJV_fake_script() -- adonisbypass.Script 
+coroutine.wrap(LQPEY_fake_script)()
+local function IOSXP_fake_script() -- adonisbypass.Script 
 	local script = Instance.new('Script', adonisbypass)
 
 	function Click(mouse)
@@ -322,8 +348,8 @@ local function RMJV_fake_script() -- adonisbypass.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(RMJV_fake_script)()
-local function IWSPPD_fake_script() -- flinggui.Script 
+coroutine.wrap(IOSXP_fake_script)()
+local function SQQWD_fake_script() -- flinggui.Script 
 	local script = Instance.new('Script', flinggui)
 
 	function Click(mouse)
@@ -336,8 +362,8 @@ local function IWSPPD_fake_script() -- flinggui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(IWSPPD_fake_script)()
-local function IOLVY_fake_script() -- chatbypass.Script 
+coroutine.wrap(SQQWD_fake_script)()
+local function ZWWTB_fake_script() -- chatbypass.Script 
 	local script = Instance.new('Script', chatbypass)
 
 	function Click(mouse)
@@ -349,8 +375,8 @@ local function IOLVY_fake_script() -- chatbypass.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(IOLVY_fake_script)()
-local function JVPW_fake_script() -- explorer.expl 
+coroutine.wrap(ZWWTB_fake_script)()
+local function DKZWNFX_fake_script() -- explorer.expl 
 	local script = Instance.new('Script', explorer)
 
 	function Click(mouse)
@@ -365,8 +391,8 @@ local function JVPW_fake_script() -- explorer.expl
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(JVPW_fake_script)()
-local function QGYRT_fake_script() -- remotespy.rem 
+coroutine.wrap(DKZWNFX_fake_script)()
+local function ACYX_fake_script() -- remotespy.rem 
 	local script = Instance.new('Script', remotespy)
 
 	function Click(mouse)
@@ -381,8 +407,8 @@ local function QGYRT_fake_script() -- remotespy.rem
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(QGYRT_fake_script)()
-local function GBKZJ_fake_script() -- respawnbuttons.Script 
+coroutine.wrap(ACYX_fake_script)()
+local function IFRLFT_fake_script() -- respawnbuttons.Script 
 	local script = Instance.new('Script', respawnbuttons)
 
 	function Click(mouse)
@@ -393,8 +419,8 @@ local function GBKZJ_fake_script() -- respawnbuttons.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(GBKZJ_fake_script)()
-local function SAOZX_fake_script() -- positionfinder.pos 
+coroutine.wrap(IFRLFT_fake_script)()
+local function MJRPKFN_fake_script() -- positionfinder.pos 
 	local script = Instance.new('Script', positionfinder)
 
 	function Click(mouse)
@@ -406,8 +432,8 @@ local function SAOZX_fake_script() -- positionfinder.pos
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(SAOZX_fake_script)()
-local function BQMX_fake_script() -- wormygui.Script 
+coroutine.wrap(MJRPKFN_fake_script)()
+local function WSWFEY_fake_script() -- wormygui.Script 
 	local script = Instance.new('Script', wormygui)
 
 	function Click(mouse)
@@ -420,8 +446,8 @@ local function BQMX_fake_script() -- wormygui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(BQMX_fake_script)()
-local function JYBY_fake_script() -- TAUgui.Script 
+coroutine.wrap(WSWFEY_fake_script)()
+local function IDJERO_fake_script() -- TAUgui.Script 
 	local script = Instance.new('Script', TAUgui)
 
 	function Click(mouse)
@@ -529,8 +555,8 @@ local function JYBY_fake_script() -- TAUgui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(JYBY_fake_script)()
-local function AIQTH_fake_script() -- elementalgroundsgui.Script 
+coroutine.wrap(IDJERO_fake_script)()
+local function URIH_fake_script() -- elementalgroundsgui.Script 
 	local script = Instance.new('Script', elementalgroundsgui)
 
 	function Click(mouse)
@@ -542,8 +568,8 @@ local function AIQTH_fake_script() -- elementalgroundsgui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(AIQTH_fake_script)()
-local function MCZIAYM_fake_script() -- bps.Script 
+coroutine.wrap(URIH_fake_script)()
+local function CISBEC_fake_script() -- bps.Script 
 	local script = Instance.new('Script', bps)
 
 	function Click(mouse)
@@ -555,8 +581,8 @@ local function MCZIAYM_fake_script() -- bps.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(MCZIAYM_fake_script)()
-local function UBPMQLF_fake_script() -- destroyui.Script 
+coroutine.wrap(CISBEC_fake_script)()
+local function XPUWNIP_fake_script() -- destroyui.Script 
 	local script = Instance.new('Script', destroyui)
 
 	function Click(mouse)
@@ -568,8 +594,8 @@ local function UBPMQLF_fake_script() -- destroyui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(UBPMQLF_fake_script)()
-local function BHZYV_fake_script() -- touchflingv1.Script 
+coroutine.wrap(XPUWNIP_fake_script)()
+local function IWDT_fake_script() -- touchflingv1.Script 
 	local script = Instance.new('Script', touchflingv1)
 
 	function Click(mouse)
@@ -581,8 +607,8 @@ local function BHZYV_fake_script() -- touchflingv1.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(BHZYV_fake_script)()
-local function GKGFWA_fake_script() -- toolresizegui.Script 
+coroutine.wrap(IWDT_fake_script)()
+local function XYEB_fake_script() -- toolresizegui.Script 
 	local script = Instance.new('Script', toolresizegui)
 
 	function Click(mouse)
@@ -594,8 +620,8 @@ local function GKGFWA_fake_script() -- toolresizegui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(GKGFWA_fake_script)()
-local function ELKSFK_fake_script() -- tptoolgiver.Script 
+coroutine.wrap(XYEB_fake_script)()
+local function BNGYMIT_fake_script() -- tptoolgiver.Script 
 	local script = Instance.new('Script', tptoolgiver)
 
 	function Click(mouse)
@@ -607,8 +633,8 @@ local function ELKSFK_fake_script() -- tptoolgiver.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(ELKSFK_fake_script)()
-local function EAKEMRT_fake_script() -- antigui.Script 
+coroutine.wrap(BNGYMIT_fake_script)()
+local function MLUFGJZ_fake_script() -- antigui.Script 
 	local script = Instance.new('Script', antigui)
 
 	function Click(mouse)
@@ -620,8 +646,8 @@ local function EAKEMRT_fake_script() -- antigui.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(EAKEMRT_fake_script)()
-local function IUVIC_fake_script() -- unanchoredguiv2.Script 
+coroutine.wrap(MLUFGJZ_fake_script)()
+local function SDND_fake_script() -- unanchoredguiv2.Script 
 	local script = Instance.new('Script', unanchoredguiv2)
 
 	function Click(mouse)
@@ -633,8 +659,79 @@ local function IUVIC_fake_script() -- unanchoredguiv2.Script
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(IUVIC_fake_script)()
-local function SCFXF_fake_script() -- GuiLauncher.LocalScript 
+coroutine.wrap(SDND_fake_script)()
+local function OVOQOAW_fake_script() -- elementalgroundsreworked.Script 
+	local script = Instance.new('Script', elementalgroundsreworked)
+
+	function Click(mouse)
+	
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/ElementalGroundsV2"))()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(OVOQOAW_fake_script)()
+local function FZYRO_fake_script() -- fireallremotes.Script 
+	local script = Instance.new('Script', fireallremotes)
+
+	function Click(mouse)
+	
+		local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	
+		-- Function to recursively search and handle RemoteEvents and RemoteFunctions
+		local function findAndFireRemotesInContainer(container)
+			for _, obj in pairs(container:GetDescendants()) do
+				-- Detect if the object is a RemoteEvent or RemoteFunction
+				if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+					-- Get the full path of the remote to distinguish it even if it shares the same name
+					local fullPath = obj:GetFullName()
+	
+					-- Log the RemoteEvent or RemoteFunction
+					print("Found remote: " .. obj.Name .. " at path: " .. fullPath)
+	
+					-- If it's a RemoteEvent, we fire it
+					if obj:IsA("RemoteEvent") then
+						obj:FireServer() -- Fire the RemoteEvent
+						print("Fired RemoteEvent: " .. obj.Name)
+					elseif obj:IsA("RemoteFunction") then
+						-- Fire the RemoteFunction by invoking it with default arguments (you can customize this)
+						local success, result = pcall(function()
+							return obj:InvokeServer() -- Optionally pass arguments here
+						end)
+	
+						if success then
+							print("Successfully invoked RemoteFunction: " .. obj.Name .. " | Result: " .. tostring(result))
+						else
+							print("Failed to invoke RemoteFunction: " .. obj.Name .. " | Error: " .. result)
+						end
+					end
+				elseif obj:IsA("Folder") or obj:IsA("Model") then
+					-- If the object is a folder or a container-like object, recursively check its descendants
+					print("Searching inside folder/model: " .. obj.Name)
+					findAndFireRemotesInContainer(obj)
+				end
+			end
+		end
+	
+		-- Function to start searching for all remotes in ReplicatedStorage
+		local function fireAllRemotes()
+			-- Search through ReplicatedStorage and fire remotes
+			print("Starting remote search in ReplicatedStorage...")
+			findAndFireRemotesInContainer(ReplicatedStorage)
+		end
+	
+		-- Call the function to fire all remotes
+		fireAllRemotes()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(FZYRO_fake_script)()
+local function XYQJWX_fake_script() -- GuiLauncher.LocalScript 
 	local script = Instance.new('LocalScript', GuiLauncher)
 
 	local dragger = {}; 
@@ -681,8 +778,8 @@ local function SCFXF_fake_script() -- GuiLauncher.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(SCFXF_fake_script)()
-local function TFGOJ_fake_script() -- toggle.LocalScript 
+coroutine.wrap(XYQJWX_fake_script)()
+local function UWBD_fake_script() -- toggle.LocalScript 
 	local script = Instance.new('LocalScript', toggle)
 
 	local dragger = {}; 
@@ -729,8 +826,8 @@ local function TFGOJ_fake_script() -- toggle.LocalScript
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(TFGOJ_fake_script)()
-local function AOYTPMI_fake_script() -- toggle.LocalScript 
+coroutine.wrap(UWBD_fake_script)()
+local function UOPLGU_fake_script() -- toggle.LocalScript 
 	local script = Instance.new('LocalScript', toggle)
 
 	local back = script.Parent.Parent.GuiLauncher
@@ -760,4 +857,4 @@ local function AOYTPMI_fake_script() -- toggle.LocalScript
 	
 	end)
 end
-coroutine.wrap(AOYTPMI_fake_script)()
+coroutine.wrap(UOPLGU_fake_script)()
