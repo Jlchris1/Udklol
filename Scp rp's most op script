@@ -1,0 +1,288 @@
+local Players = game:GetService("Players")
+local TextChatService = game:GetService("TextChatService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+local loopkillTargets = {}
+local loopgodTargets = {}
+local loopdieActive = false
+local loopfdieActive = false
+local loopdieCooldown = 5
+local loopfdieCooldown = 5
+
+local touchyActive = false
+local clickkillTool = nil
+
+-- Function to apply godmode (0/0 damage)
+local function godmodeHumanoid(humanoid)
+    if humanoid then
+        local args = { "Damage", humanoid, 0/0 }
+        player.Character.Shotgun.Receiver:FireServer(unpack(args))
+    end
+end
+
+-- Function to deal massive damage (kill)
+local function killHumanoid(humanoid)
+    if humanoid then
+        -- Check if the shotgun is equipped in the character, if not, check the backpack
+        local shotgun = player.Character:FindFirstChild("Shotgun") or player.Backpack:FindFirstChild("Shotgun")
+        
+        -- If shotgun is found, fire the damage
+        if shotgun then
+            local args = { "Damage", humanoid, 9e37 }
+            shotgun.Receiver:FireServer(unpack(args))
+        else
+            warn("No Shotgun found in character or backpack!")
+        end
+    end
+end
+
+-- Recursive function to find and target humanoids or meshparts deeply inside models
+local function searchAndKill(object, allowPlayers)
+    local humanoid = object:FindFirstChildOfClass("Humanoid")
+    
+    if humanoid then
+        if allowPlayers or not Players:GetPlayerFromCharacter(object) then
+            killHumanoid(humanoid)
+        end
+        return true
+    end
+
+    if object:IsA("MeshPart") or object:IsA("Part") then
+        local model = object.Parent
+        if model and model:IsA("Model") then
+            local modelHumanoid = model:FindFirstChildOfClass("Humanoid")
+            if modelHumanoid then
+                if allowPlayers or not Players:GetPlayerFromCharacter(model) then
+                    killHumanoid(modelHumanoid)
+                end
+                return true
+            end
+        end
+    end
+
+    for _, child in pairs(object:GetChildren()) do
+        if searchAndKill(child, allowPlayers) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function executeDie(allowPlayers)
+    for _, object in pairs(workspace:GetChildren()) do
+        if object ~= player.Character then
+            local foundHumanoid = searchAndKill(object, allowPlayers)
+            if not foundHumanoid then
+                for _, child in pairs(object:GetChildren()) do
+                    searchAndKill(child, allowPlayers)
+                end
+            end
+        end
+    end
+end
+
+-- Loop execution for loopkill and loopgod
+RunService.Heartbeat:Connect(function()
+    for targetPlayer, _ in pairs(loopkillTargets) do
+        killHumanoid(targetPlayer.Character and targetPlayer.Character:FindFirstChildOfClass("Humanoid"))
+    end
+    for targetPlayer, _ in pairs(loopgodTargets) do
+        godmodeHumanoid(targetPlayer.Character and targetPlayer.Character:FindFirstChildOfClass("Humanoid"))
+    end
+end)
+
+-- Loopdie function
+local function loopDieExecution()
+    while loopdieActive do
+        executeDie(true)
+        wait(loopdieCooldown)
+    end
+end
+
+-- Loopfdie function
+local function loopFDieExecution()
+    while loopfdieActive do
+        executeDie(false)
+        wait(loopfdieCooldown)
+    end
+end
+
+-- Function to give the ClickKill tool
+local function giveClickKillTool()
+    if clickkillTool then
+        clickkillTool:Destroy()  -- Remove previous tool if it exists
+    end
+
+    -- Create the tool
+    local tool = Instance.new("Tool")
+    tool.Name = "ClickKillTool"
+    tool.RequiresHandle = false
+    tool.Parent = player.Backpack
+    clickkillTool = tool
+
+    -- Handle clicking to kill NPCs/Players
+    tool.Activated:Connect(function()
+        local mouse = player:GetMouse()
+        local target = mouse.Target
+
+        if target then
+            local humanoid = target.Parent:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                killHumanoid(humanoid)  -- Uses the remote to apply damage
+            end
+        end
+    end)
+end
+
+-- Function to handle chat commands
+local function onChatMessage(message, sender)
+    if sender ~= player then return end
+    message = message:lower()
+
+    local args = {}
+    for word in message:gmatch("%S+") do table.insert(args, word) end
+    local command = args[1]
+    local target = args[2]
+
+    -- Handle chat commands for killing players
+    if command == ":kill" then
+        if target == "all" then
+            for _, targetPlayer in pairs(Players:GetPlayers()) do
+                if targetPlayer ~= player then
+                    killHumanoid(targetPlayer.Character and targetPlayer.Character:FindFirstChildOfClass("Humanoid"))
+                end
+            end
+        else
+            for _, targetPlayer in pairs(Players:GetPlayers()) do
+                if targetPlayer ~= player and (targetPlayer.Name:lower():find(target:lower()) or targetPlayer.DisplayName:lower():find(target:lower())) then
+                    killHumanoid(targetPlayer.Character and targetPlayer.Character:FindFirstChildOfClass("Humanoid"))
+                end
+            end
+        end
+
+    -- Handle loopkill command
+    elseif command == ":loopkill" then
+        if target == "all" then
+            for _, targetPlayer in pairs(Players:GetPlayers()) do
+                if targetPlayer ~= player then
+                    loopkillTargets[targetPlayer] = true
+                end
+            end
+        else
+            for _, targetPlayer in pairs(Players:GetPlayers()) do
+                if targetPlayer ~= player and (targetPlayer.Name:lower():find(target:lower()) or targetPlayer.DisplayName:lower():find(target:lower())) then
+                    loopkillTargets[targetPlayer] = true
+                end
+            end
+        end
+
+    elseif command == ":unloopkill" then
+        if target == "all" then
+            loopkillTargets = {}
+        else
+            for _, targetPlayer in pairs(Players:GetPlayers()) do
+                if loopkillTargets[targetPlayer] and (targetPlayer.Name:lower():find(target:lower()) or targetPlayer.DisplayName:lower():find(target:lower())) then
+                    loopkillTargets[targetPlayer] = nil
+                end
+            end
+        end
+
+    -- Handle godmode command
+    elseif command == ":god" then
+        if not target then
+            -- Default to applying godmode to local player
+            godmodeHumanoid(player.Character and player.Character:FindFirstChildOfClass("Humanoid"))
+        else
+            for _, targetPlayer in pairs(Players:GetPlayers()) do
+                if targetPlayer.Name:lower():find(target:lower()) or targetPlayer.DisplayName:lower():find(target:lower()) then
+                    godmodeHumanoid(targetPlayer.Character and targetPlayer.Character:FindFirstChildOfClass("Humanoid"))
+                end
+            end
+        end
+
+    -- Handle loopgod command
+    elseif command == ":loopgod" then
+        if not target then
+            -- Default to applying loopgod mode to the local player
+            loopgodTargets[player] = true
+        else
+            for _, targetPlayer in pairs(Players:GetPlayers()) do
+                if targetPlayer.Name:lower():find(target:lower()) or targetPlayer.DisplayName:lower():find(target:lower()) then
+                    loopgodTargets[targetPlayer] = true
+                end
+            end
+        end
+
+    elseif command == ":unloopgod" then
+        loopgodTargets = {}
+
+    -- Handle die and fdie commands
+    elseif command == ":die" then
+        executeDie(true)
+
+    elseif command == ":fdie" then
+        executeDie(false)
+
+    -- Handle loopdie and loopfdie commands
+    elseif command == ":loopdie" then
+        if not loopdieActive then
+            loopdieActive = true
+            loopDieExecution()
+        end
+
+    elseif command == ":loopdiecd" then
+        local newCooldown = tonumber(args[2])
+        if newCooldown then
+            loopdieCooldown = math.max(newCooldown, 0.1)
+        end
+
+    elseif command == ":unloopdie" then
+        loopdieActive = false
+
+    elseif command == ":loopfdie" then
+        if not loopfdieActive then
+            loopfdieActive = true
+            loopFDieExecution()
+        end
+
+    elseif command == ":loopfdiecd" then
+        local newCooldown = tonumber(args[2])
+        if newCooldown then
+            loopfdieCooldown = math.max(newCooldown, 0.1)
+        end
+
+    elseif command == ":unloopfdie" then
+        loopfdieActive = false
+
+    -- Handle touchy and un-touchy commands
+    elseif command == ":touchy" then
+        touchyActive = true
+        player.Character.Humanoid.Touched:Connect(function(otherPart)
+            local model = otherPart.Parent
+            local humanoid = model and model:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                killHumanoid(humanoid)
+            end
+        end)
+
+    elseif command == ":untouchy" then
+        touchyActive = false
+
+    -- Handle clickkill command
+    elseif command == ":clickkill" then
+        giveClickKillTool()  -- Gives the player a tool to click and kill
+    end
+end
+
+TextChatService.MessageReceived:Connect(function(chatMessage)
+    if chatMessage.TextSource then
+        local sender = Players:GetPlayerByUserId(chatMessage.TextSource.UserId)
+        if sender then
+            onChatMessage(chatMessage.Text, sender)
+        end
+    end
+end)
