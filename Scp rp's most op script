@@ -18,8 +18,22 @@ local clickkillTool = nil
 -- Function to apply godmode (0/0 damage)
 local function godmodeHumanoid(humanoid)
     if humanoid then
-        local args = { "Damage", humanoid, 0/0 }
-        player.Character.Shotgun.Receiver:FireServer(unpack(args))
+        -- Check for the Shotgun in the character first, then in the backpack
+        local shotgun = player.Character:FindFirstChild("Shotgun") or player.Backpack:FindFirstChild("Shotgun")
+        
+        -- If shotgun is found, apply godmode
+        if shotgun then
+            local args = { "Damage", humanoid, 0/0 }
+            if player.Character:FindFirstChild("Shotgun") then
+                -- Use the character pathway
+                player.Character.Shotgun.Receiver:FireServer(unpack(args))
+            elseif player.Backpack:FindFirstChild("Shotgun") then
+                -- Use the backpack pathway
+                player.Backpack.Shotgun.Receiver:FireServer(unpack(args))
+            end
+        else
+            warn("No Shotgun found in character or backpack!")
+        end
     end
 end
 
@@ -32,7 +46,13 @@ local function killHumanoid(humanoid)
         -- If shotgun is found, fire the damage
         if shotgun then
             local args = { "Damage", humanoid, 9e37 }
-            shotgun.Receiver:FireServer(unpack(args))
+            if player.Character:FindFirstChild("Shotgun") then
+                -- Use the character pathway
+                player.Character.Shotgun.Receiver:FireServer(unpack(args))
+            elseif player.Backpack:FindFirstChild("Shotgun") then
+                -- Use the backpack pathway
+                player.Backpack.Shotgun.Receiver:FireServer(unpack(args))
+            end
         else
             warn("No Shotgun found in character or backpack!")
         end
@@ -194,7 +214,7 @@ local function onChatMessage(message, sender)
     -- Handle godmode command
     elseif command == ":god" then
         if not target then
-            -- Default to applying godmode to local player
+            -- Default to applying godmode to local player if no target is given
             godmodeHumanoid(player.Character and player.Character:FindFirstChildOfClass("Humanoid"))
         else
             for _, targetPlayer in pairs(Players:GetPlayers()) do
@@ -207,7 +227,7 @@ local function onChatMessage(message, sender)
     -- Handle loopgod command
     elseif command == ":loopgod" then
         if not target then
-            -- Default to applying loopgod mode to the local player
+            -- Default to applying loopgod mode to the local player if no target is given
             loopgodTargets[player] = true
         else
             for _, targetPlayer in pairs(Players:GetPlayers()) do
