@@ -1,0 +1,179 @@
+-- Gui to Lua
+-- Version: 3.2
+
+-- Instances:
+
+local InfoFrame = Instance.new("ScreenGui")
+local Frame = Instance.new("Frame")
+local close = Instance.new("TextButton")
+local info7 = Instance.new("TextLabel")
+local info3 = Instance.new("TextLabel")
+local info2 = Instance.new("TextLabel")
+local info9 = Instance.new("TextLabel")
+local info8 = Instance.new("TextLabel")
+local info10 = Instance.new("TextLabel")
+local info6 = Instance.new("TextLabel")
+local info4 = Instance.new("TextLabel")
+local info1 = Instance.new("TextButton")
+local info5 = Instance.new("TextLabel")
+
+--Properties:
+
+InfoFrame.Name = "InfoFrame"
+InfoFrame.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+InfoFrame.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+Frame.Parent = InfoFrame
+Frame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+Frame.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Frame.BorderSizePixel = 0
+Frame.Position = UDim2.new(0.260748416, 0, 0.118312754, 0)
+Frame.Size = UDim2.new(0, 681, 0, 360)
+
+close.Name = "close"
+close.Parent = Frame
+close.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+close.BorderColor3 = Color3.fromRGB(0, 0, 0)
+close.BorderSizePixel = 0
+close.Position = UDim2.new(0.945126593, 0, 0, 0)
+close.Size = UDim2.new(0, 37, 0, 38)
+close.Font = Enum.Font.SourceSansBold
+close.Text = "X"
+close.TextColor3 = Color3.fromRGB(0, 0, 0)
+close.TextSize = 29.000
+
+info7.Name = "info7"
+info7.Parent = Frame
+info7.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+info7.BorderColor3 = Color3.fromRGB(0, 0, 0)
+info7.BorderSizePixel = 0
+info7.Size = UDim2.new(0, 643, 0, 38)
+info7.Font = Enum.Font.SourceSansBold
+info7.Text = "how to loop the effects: put loop in in the textbox and then put an number after it"
+info7.TextColor3 = Color3.fromRGB(255, 0, 0)
+info7.TextSize = 20.000
+
+info3.Name = "info3"
+info3.Parent = Frame
+info3.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+info3.BorderColor3 = Color3.fromRGB(0, 0, 0)
+info3.BorderSizePixel = 0
+info3.Position = UDim2.new(0, 0, 0.105194688, 0)
+info3.Size = UDim2.new(0, 681, 0, 28)
+info3.Font = Enum.Font.SourceSansBold
+info3.Text = "example loop: loop 100"
+info3.TextColor3 = Color3.fromRGB(255, 0, 0)
+info3.TextSize = 20.000
+
+info2.Name = "info2"
+info2.Parent = Frame
+info2.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+info2.BorderColor3 = Color3.fromRGB(0, 0, 0)
+info2.BorderSizePixel = 0
+info2.Position = UDim2.new(0, 0, 0.181826919, 0)
+info2.Size = UDim2.new(0, 681, 0, 36)
+info2.Font = Enum.Font.SourceSansBold
+info2.Text = "how to unloop: just insert unloop"
+info2.TextColor3 = Color3.fromRGB(255, 0, 0)
+info2.TextSize = 20.000
+
+info9.Name = "info9"
+info9.Parent = Frame
+info9.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+info9.BorderColor3 = Color3.fromRGB(0, 0, 0)
+info9.BorderSizePixel = 0
+info9.Position = UDim2.new(0, 0, 0.281118423, 0)
+info9.Size = UDim2.new(0, 681, 0, 36)
+info9.Font = Enum.Font.SourceSansBold
+info9.Text = "what does strength do? it removes the slippery effect off your character"
+info9.TextColor3 = Color3.fromRGB(255, 0, 0)
+info9.TextSize = 20.000
+
+info8.Name = "info8"
+info8.Parent = Frame
+info8.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+info8.BorderColor3 = Color3.fromRGB(0, 0, 0)
+info8.BorderSizePixel = 0
+info8.Position = UDim2.new(0, 0, 0.381068498, 0)
+info8.Size = UDim2.new(0, 681, 0, 36)
+info8.Font = Enum.Font.SourceSansBold
+info8.Text = "what does strength do? it removes the slippery effect off your character"
+info8.TextColor3 = Color3.fromRGB(255, 0, 0)
+info8.TextSize = 20.000
+
+info10.Name = "info10"
+info10.Parent = Frame
+info10.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+info10.BorderColor3 = Color3.fromRGB(0, 0, 0)
+info10.BorderSizePixel = 0
+info10.Position = UDim2.new(0, 0, 0.478582025, 0)
+info10.Size = UDim2.new(0, 681, 0, 36)
+info10.Font = Enum.Font.SourceSansBold
+info10.Text = "what does strength do? it removes the slippery effect off your character"
+info10.TextColor3 = Color3.fromRGB(255, 0, 0)
+info10.TextSize = 20.000
+
+info6.Name = "info6"
+info6.Parent = Frame
+info6.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+info6.BorderColor3 = Color3.fromRGB(0, 0, 0)
+info6.BorderSizePixel = 0
+info6.Position = UDim2.new(0, 0, 0.577507019, 0)
+info6.Size = UDim2.new(0, 681, 0, 36)
+info6.Font = Enum.Font.SourceSansBold
+info6.Text = "example strength: when you start running at speed 2500 you will start drifting however strength removes that or reduces"
+info6.TextColor3 = Color3.fromRGB(255, 0, 0)
+info6.TextSize = 15.000
+
+info4.Name = "info4"
+info4.Parent = Frame
+info4.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+info4.BorderColor3 = Color3.fromRGB(0, 0, 0)
+info4.BorderSizePixel = 0
+info4.Position = UDim2.new(0, 0, 0.676432133, 0)
+info4.Size = UDim2.new(0, 681, 0, 36)
+info4.Font = Enum.Font.SourceSansBold
+info4.Text = "the higher the number, the less you drift or slip. it also accelerates you faster or instantly."
+info4.TextColor3 = Color3.fromRGB(255, 0, 0)
+info4.TextSize = 15.000
+
+info1.Name = "info1"
+info1.Parent = Frame
+info1.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+info1.BorderColor3 = Color3.fromRGB(0, 0, 0)
+info1.BorderSizePixel = 0
+info1.Position = UDim2.new(0, 0, 0.775028169, 0)
+info1.Size = UDim2.new(0, 681, 0, 38)
+info1.Font = Enum.Font.SourceSansBold
+info1.Text = "1e1 numbers or 9e37 numbers. how they work: 1e2: 100 and 9e37: 90000000000000000000000000000000000000"
+info1.TextColor3 = Color3.fromRGB(255, 0, 0)
+info1.TextSize = 16.000
+
+info5.Name = "info5"
+info5.Parent = Frame
+info5.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+info5.BorderColor3 = Color3.fromRGB(0, 0, 0)
+info5.BorderSizePixel = 0
+info5.Position = UDim2.new(0, 0, 0.880222857, 0)
+info5.Size = UDim2.new(0, 681, 0, 43)
+info5.Font = Enum.Font.SourceSansBold
+info5.Text = "so basicly every number after e/ e-number is an 0 so if i put 2 after the e it will mean it adds two 0's 1e2 = 100"
+info5.TextColor3 = Color3.fromRGB(255, 0, 0)
+info5.TextSize = 16.000
+info5.TextStrokeColor3 = Color3.fromRGB(255, 0, 0)
+
+-- Scripts:
+
+local function JVGJS_fake_script() -- close.Script 
+	local script = Instance.new('Script', close)
+
+	function Click(mouse)
+	
+		game.Players.LocalPlayer.PlayerGui.InfoFrame:Destroy()
+	
+	end
+	
+	
+	script.Parent.MouseButton1Down:connect(Click)
+end
+coroutine.wrap(JVGJS_fake_script)()
