@@ -164,20 +164,20 @@ info5.TextStrokeColor3 = Color3.fromRGB(255, 0, 0)
 
 -- Scripts:
 
-local function JSXKSO_fake_script() -- close.Script 
+local function FNVCANW_fake_script() -- close.Script 
 	local script = Instance.new('Script', close)
 
 	function Click(mouse)
 	
-		game.Players.LocalPlayer.PlayerGui.jlmain:Destroy()
+		game.Players.LocalPlayer.PlayerGui.InfoFrame:Destroy()
 	
 	end
 	
 	
 	script.Parent.MouseButton1Down:connect(Click)
 end
-coroutine.wrap(JSXKSO_fake_script)()
-local function KSXVL_fake_script() -- Frame.drag 
+coroutine.wrap(FNVCANW_fake_script)()
+local function FXXOO_fake_script() -- Frame.drag 
 	local script = Instance.new('LocalScript', Frame)
 
 	local dragger = {}; 
@@ -224,4 +224,4 @@ local function KSXVL_fake_script() -- Frame.drag
 	script.Parent.Active = true
 	script.Parent.Draggable = true
 end
-coroutine.wrap(KSXVL_fake_script)()
+coroutine.wrap(FXXOO_fake_script)()
