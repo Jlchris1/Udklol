@@ -1,1 +1,186 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
 
+-- GUI Setup
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+ScreenGui.Name = "HitboxGUI"
+
+local TextBox = Instance.new("TextBox", ScreenGui)
+TextBox.Size = UDim2.new(0, 150, 0, 30)
+TextBox.Position = UDim2.new(1, -160, 0.2, 0)
+TextBox.PlaceholderText = "Enter Size"
+TextBox.TextScaled = true
+TextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+
+local HitboxNonFriends = Instance.new("TextButton", ScreenGui)
+HitboxNonFriends.Size = UDim2.new(0, 150, 0, 30)
+HitboxNonFriends.Position = UDim2.new(1, -160, 0.3, 0)
+HitboxNonFriends.Text = "Hitbox Non-Friends"
+HitboxNonFriends.TextColor3 = Color3.fromRGB(255, 255, 255)
+HitboxNonFriends.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+
+local HitboxAll = Instance.new("TextButton", ScreenGui)
+HitboxAll.Size = UDim2.new(0, 150, 0, 30)
+HitboxAll.Position = UDim2.new(1, -160, 0.4, 0)
+HitboxAll.Text = "Hitbox All"
+HitboxAll.TextColor3 = Color3.fromRGB(255, 255, 255)
+HitboxAll.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+
+local LoopHitboxNonFriends = Instance.new("TextButton", ScreenGui)
+LoopHitboxNonFriends.Size = UDim2.new(0, 150, 0, 30)
+LoopHitboxNonFriends.Position = UDim2.new(1, -160, 0.5, 0)
+LoopHitboxNonFriends.Text = "Loop Hitbox Non-Friends"
+LoopHitboxNonFriends.TextColor3 = Color3.fromRGB(255, 255, 255)
+LoopHitboxNonFriends.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+
+local LoopHitboxAll = Instance.new("TextButton", ScreenGui)
+LoopHitboxAll.Size = UDim2.new(0, 150, 0, 30)
+LoopHitboxAll.Position = UDim2.new(1, -160, 0.6, 0)
+LoopHitboxAll.Text = "Loop Hitbox All"
+LoopHitboxAll.TextColor3 = Color3.fromRGB(255, 255, 255)
+LoopHitboxAll.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+
+-- Function to adjust HumanoidRootPart size based on textbox value
+local function adjustHPRSize(player, size)
+    -- Ensure the player has a character
+    local character = player.Character or player.CharacterAdded:Wait()
+
+    -- Ensure the character has a humanoid root part
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+    -- Adjust the HumanoidRootPart size based on the textbox input
+    humanoidRootPart.Size = Vector3.new(size, size, size)
+
+    -- Disable collisions to avoid flinging
+    humanoidRootPart.CanCollide = false
+end
+
+-- Function to apply the ESP aura outline to the player's HumanoidRootPart
+local function applyAuraOutline(player)
+    -- Ensure the player has a character
+    local character = player.Character or player.CharacterAdded:Wait()
+
+    -- Ensure the character has a humanoid root part
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    
+    -- Create SelectionBox to act as the aura outline
+    local outline = Instance.new("SelectionBox")
+    outline.Adornee = humanoidRootPart
+    outline.Parent = humanoidRootPart
+    outline.LineThickness = 0.05  -- Adjust outline thickness
+    outline.Color3 = Color3.fromRGB(255, 0, 0)  -- Red outline color
+    outline.Transparency = 0.5  -- Slight transparency for aura effect
+    outline.ZIndex = 10  -- Make sure the outline is rendered above everything else
+
+    -- Persist outline even if the character respawns
+    player.CharacterAdded:Connect(function()
+        -- Reapply outline on respawn
+        local newCharacter = player.Character
+        if newCharacter then
+            local newHumanoidRootPart = newCharacter:WaitForChild("HumanoidRootPart")
+            outline.Adornee = newHumanoidRootPart
+        end
+    end)
+end
+
+-- Function to remove aura outlines when players leave
+local function removeAuraOutline(player)
+    local character = player.Character
+    if character then
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        if humanoidRootPart then
+            -- Remove the SelectionBox when the player leaves
+            local selectionBox = humanoidRootPart:FindFirstChildOfClass("SelectionBox")
+            if selectionBox then
+                selectionBox:Destroy()
+            end
+        end
+    end
+end
+
+-- Button actions for toggling the aura outline and adjusting HPR size
+HitboxNonFriends.MouseButton1Click:Connect(function()
+    local size = tonumber(TextBox.Text) or 50  -- Default size if the TextBox is empty
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and not LocalPlayer:IsFriendsWith(player.UserId) then
+            adjustHPRSize(player, size)
+            applyAuraOutline(player)
+        end
+    end
+end)
+
+HitboxAll.MouseButton1Click:Connect(function()
+    local size = tonumber(TextBox.Text) or 50  -- Default size if the TextBox is empty
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            adjustHPRSize(player, size)
+            applyAuraOutline(player)
+        end
+    end
+end)
+
+-- Loop versions for applying outlines to players
+LoopHitboxNonFriends.MouseButton1Click:Connect(function()
+    local size = tonumber(TextBox.Text) or 50  -- Default size if the TextBox is empty
+    local playersWithOutlines = {}
+    while true do
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and not LocalPlayer:IsFriendsWith(player.UserId) and not playersWithOutlines[player] then
+                adjustHPRSize(player, size)
+                applyAuraOutline(player)
+                playersWithOutlines[player] = true
+            end
+        end
+        wait(1)  -- Adjust the loop delay if necessary
+    end
+end)
+
+LoopHitboxAll.MouseButton1Click:Connect(function()
+    local size = tonumber(TextBox.Text) or 50  -- Default size if the TextBox is empty
+    local playersWithOutlines = {}
+    while true do
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and not playersWithOutlines[player] then
+                adjustHPRSize(player, size)
+                applyAuraOutline(player)
+                playersWithOutlines[player] = true
+            end
+        end
+        wait(1)  -- Adjust the loop delay if necessary
+    end
+end)
+
+-- Update the aura outline and HPR size for new players
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(character)
+        -- Apply the aura outline and size adjustment to newly joined players
+        local size = tonumber(TextBox.Text) or 50  -- Default size if the TextBox is empty
+        adjustHPRSize(player, size)
+        applyAuraOutline(player)
+    end)
+end)
+
+-- Apply the aura and size adjustment to all existing players in the game
+for _, player in pairs(Players:GetPlayers()) do
+    if player ~= LocalPlayer then
+        local size = tonumber(TextBox.Text) or 50  -- Default size if the TextBox is empty
+        adjustHPRSize(player, size)
+        applyAuraOutline(player)
+    end
+end
+
+-- Remove aura outline and reset size when players leave
+Players.PlayerRemoving:Connect(function(player)
+    removeAuraOutline(player)
+end)
+
+-- Listen for respawns (CharacterAdded) and reapply outline and size
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(character)
+        local size = tonumber(TextBox.Text) or 50  -- Default size if the TextBox is empty
+        adjustHPRSize(player, size)
+        applyAuraOutline(player)
+    end)
+end)
