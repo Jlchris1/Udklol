@@ -1,0 +1,187 @@
+local player = game:GetService("Players").LocalPlayer
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local runService = game:GetService("RunService")
+
+-- Persistent toggle states
+local killAuraEnabled = false
+local lastRadius = "10"
+local lastPower = "7"
+
+-- Function to create GUI
+local function setupGUI()
+    -- Remove old GUI if exists
+    if player.PlayerGui:FindFirstChild("AuraGUI") then
+        player.PlayerGui.AuraGUI:Destroy()
+    end
+
+    -- Create GUI
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "AuraGUI"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = player.PlayerGui
+
+    -- UI Positioning Offsets
+    local startX, startY, spacing = 0.8, 0.2, 0.07
+
+    -- TextBox for attack radius
+    local radiusBox = Instance.new("TextBox", screenGui)
+    radiusBox.Size = UDim2.new(0, 150, 0, 40)
+    radiusBox.Position = UDim2.new(startX, 0, startY, 0)
+    radiusBox.Text = lastRadius
+    radiusBox.PlaceholderText = "Radius"
+
+    -- TextBox for attack power
+    local powerBox = Instance.new("TextBox", screenGui)
+    powerBox.Size = UDim2.new(0, 150, 0, 40)
+    powerBox.Position = UDim2.new(startX, 0, startY + spacing, 0)
+    powerBox.Text = lastPower
+    powerBox.PlaceholderText = "Power"
+
+    -- Kill Aura Toggle Button
+    local killAuraButton = Instance.new("TextButton", screenGui)
+    killAuraButton.Size = UDim2.new(0, 150, 0, 40)
+    killAuraButton.Position = UDim2.new(startX, 0, startY + spacing * 2, 0)
+    killAuraButton.Text = killAuraEnabled and "Kill Aura: ON" or "Kill Aura: OFF"
+
+    -- Self NaN Damage Button
+    local selfNanButton = Instance.new("TextButton", screenGui)
+    selfNanButton.Size = UDim2.new(0, 150, 0, 40)
+    selfNanButton.Position = UDim2.new(startX, 0, startY + spacing * 3, 0)
+    selfNanButton.Text = "God Mode"
+
+    -- Toggle Functions
+    killAuraButton.MouseButton1Click:Connect(function()
+        killAuraEnabled = not killAuraEnabled
+        killAuraButton.Text = killAuraEnabled and "Kill Aura: ON" or "Kill Aura: OFF"
+    end)
+
+    -- Self NaN Damage Function (Anchors then Unanchors after applying NaN)
+    selfNanButton.MouseButton1Click:Connect(function()
+        local character = player.Character
+        if character then
+            -- Anchor all parts
+            for _, part in pairs(character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.Anchored = true
+                end
+            end
+
+            -- Apply NaN damage
+            if character:FindFirstChild("Humanoid") then
+                local args = {
+                    [1] = character:FindFirstChild("Right Arm") or character:FindFirstChild("Head"),
+                    [2] = character,
+                    [3] = -math.huge, -- minus inf Damage
+                    [4] = 0,
+                    [5] = 0,
+                    [6] = 0,
+                    [7] = character:FindFirstChild("Fists")
+                }
+                replicatedStorage:FindFirstChild("Hit"):FireServer(unpack(args))
+            end
+
+            -- Wait before unanchoring
+            task.wait(0.5) -- Short delay to make sure NaN damage applies
+
+            -- Unanchor all parts
+            for _, part in pairs(character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.Anchored = false
+                end
+            end
+        end
+    end)
+
+    -- Store values when changed
+    radiusBox.FocusLost:Connect(function() lastRadius = radiusBox.Text end)
+    powerBox.FocusLost:Connect(function() lastPower = powerBox.Text end)
+
+    return screenGui, radiusBox, powerBox, killAuraButton, selfNanButton
+end
+
+local function setupCharacter()
+    local character = player.Character or player.CharacterAdded:Wait()
+    local hrp = character:WaitForChild("HumanoidRootPart")
+    return character, hrp
+end
+
+-- Initialize GUI & Character
+local screenGui, radiusBox, powerBox, killAuraButton, selfNanButton = setupGUI()
+local character, hrp = setupCharacter()
+local hitRemote = replicatedStorage:FindFirstChild("Hit")
+
+-- Function to get nearest target (Players & NPCs)
+local function getNearestTarget(radius)
+    local closestTarget = nil
+    local shortestDistance = radius
+
+    -- Check NPCs
+    for _, npc in pairs(workspace.NPCS:GetChildren()) do
+        if npc:IsA("Model") and npc:FindFirstChild("Humanoid") then
+            local npcHRP = npc:FindFirstChild("HumanoidRootPart")
+            if npcHRP then
+                local distance = (npcHRP.Position - hrp.Position).Magnitude
+                if distance < shortestDistance then
+                    closestTarget = npc
+                    shortestDistance = distance
+                end
+            end
+        end
+    end
+
+    -- Check Players
+    for _, otherPlayer in pairs(game:GetService("Players"):GetPlayers()) do
+        if otherPlayer ~= player and otherPlayer.Character and otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local otherHRP = otherPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local distance = (otherHRP.Position - hrp.Position).Magnitude
+            if distance < shortestDistance then
+                closestTarget = otherPlayer.Character
+                shortestDistance = distance
+            end
+        end
+    end
+
+    return closestTarget
+end
+
+-- Function to safely convert power values
+local function parsePower(input)
+    local number = tonumber(input)
+    if number == nil or number ~= number then  -- NaN check
+        return math.huge
+    end
+    return number
+end
+
+-- Main loop
+runService.RenderStepped:Connect(function()
+    if killAuraEnabled and hitRemote then
+        local radius = tonumber(radiusBox.Text) or 10
+        local power = parsePower(powerBox.Text)  -- Convert power safely
+        local nearestTarget = getNearestTarget(radius)
+
+        if nearestTarget and nearestTarget:FindFirstChild("Right Arm") then
+            local args = {
+                [1] = nearestTarget:FindFirstChild("Right Arm"),
+                [2] = nearestTarget,
+                [3] = power, -- Adjustable power with NaN & Inf support
+                [4] = 0,
+                [5] = 0,
+                [6] = 0,
+                [7] = player.Character:FindFirstChild("Fists")
+            }
+            hitRemote:FireServer(unpack(args))
+        end
+    end
+end)
+
+-- Reconnect everything after respawn
+player.CharacterAdded:Connect(function()
+    character, hrp = setupCharacter()
+    screenGui, radiusBox, powerBox, killAuraButton, selfNanButton = setupGUI()
+
+    -- Restore previous settings
+    radiusBox.Text = lastRadius
+    powerBox.Text = lastPower
+    killAuraButton.Text = killAuraEnabled and "Kill Aura: ON" or "Kill Aura: OFF"
+end)
