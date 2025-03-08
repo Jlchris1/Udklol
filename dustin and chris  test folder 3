@@ -1,825 +1,187 @@
--- Gui to Lua
--- Version: 3.2
+local player = game:GetService("Players").LocalPlayer
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local runService = game:GetService("RunService")
 
--- Instances:
+-- Persistent toggle states
+local killAuraEnabled = false
+local lastRadius = "10"
+local lastPower = "7"
 
-local jlmain = Instance.new("ScreenGui")
-local Frame = Instance.new("Frame")
-local TextLabel = Instance.new("TextLabel")
-local ScrollingFrame = Instance.new("ScrollingFrame")
-local antifirstperson = Instance.new("TextButton")
-local antigameplaypaused = Instance.new("TextButton")
-local antivoid = Instance.new("TextButton")
-local flygui = Instance.new("TextButton")
-local guilauncher = Instance.new("TextButton")
-local infjump = Instance.new("TextButton")
-local maxzoom100kmax = Instance.new("TextButton")
-local loopantifp = Instance.new("TextButton")
-local loopantigameplaypaused = Instance.new("TextButton")
-local loopantivoid = Instance.new("TextButton")
-local loopinfjump = Instance.new("TextButton")
-local loopmaxzoom100kmax = Instance.new("TextButton")
-local SpeedAdjuster = Instance.new("TextBox")
-local JumppowerAdjuster = Instance.new("TextBox")
-local lightmass = Instance.new("TextBox")
-local speedlabel = Instance.new("TextLabel")
-local strengthlabel = Instance.new("TextLabel")
-local jumppowerlabel = Instance.new("TextLabel")
-local opentextboxinformation = Instance.new("TextButton")
-local destroygui = Instance.new("TextButton")
-local toggle = Instance.new("TextButton")
+-- Function to create GUI
+local function setupGUI()
+    -- Remove old GUI if exists
+    if player.PlayerGui:FindFirstChild("AuraGUI") then
+        player.PlayerGui.AuraGUI:Destroy()
+    end
 
---Properties:
+    -- Create GUI
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "AuraGUI"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = player.PlayerGui
 
-jlmain.Name = "jlmain"
-jlmain.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-jlmain.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-jlmain.ResetOnSpawn = false
+    -- UI Positioning Offsets
+    local startX, startY, spacing = 0.8, 0.2, 0.07
 
-Frame.Parent = jlmain
-Frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-Frame.BorderColor3 = Color3.fromRGB(0, 0, 0)
-Frame.BorderSizePixel = 0
-Frame.Position = UDim2.new(0.372641504, 0, 0.140603557, 0)
-Frame.Size = UDim2.new(0, 331, 0, 58)
+    -- TextBox for attack radius
+    local radiusBox = Instance.new("TextBox", screenGui)
+    radiusBox.Size = UDim2.new(0, 150, 0, 40)
+    radiusBox.Position = UDim2.new(startX, 0, startY, 0)
+    radiusBox.Text = lastRadius
+    radiusBox.PlaceholderText = "Radius"
 
-TextLabel.Parent = Frame
-TextLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-TextLabel.BorderColor3 = Color3.fromRGB(0, 0, 0)
-TextLabel.BorderSizePixel = 0
-TextLabel.Size = UDim2.new(0, 331, 0, 58)
-TextLabel.Font = Enum.Font.SourceSansBold
-TextLabel.Text = "jlchris main gui"
-TextLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
-TextLabel.TextSize = 50.000
+    -- TextBox for attack power
+    local powerBox = Instance.new("TextBox", screenGui)
+    powerBox.Size = UDim2.new(0, 150, 0, 40)
+    powerBox.Position = UDim2.new(startX, 0, startY + spacing, 0)
+    powerBox.Text = lastPower
+    powerBox.PlaceholderText = "Power"
 
-ScrollingFrame.Parent = Frame
-ScrollingFrame.Active = true
-ScrollingFrame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-ScrollingFrame.BorderColor3 = Color3.fromRGB(0, 0, 0)
-ScrollingFrame.BorderSizePixel = 0
-ScrollingFrame.Position = UDim2.new(0, 0, 0.983149052, 0)
-ScrollingFrame.Size = UDim2.new(0, 331, 0, 327)
-ScrollingFrame.CanvasPosition = Vector2.new(0, 560)
-ScrollingFrame.CanvasSize = UDim2.new(0, 0, 200, 0)
+    -- Kill Aura Toggle Button
+    local killAuraButton = Instance.new("TextButton", screenGui)
+    killAuraButton.Size = UDim2.new(0, 150, 0, 40)
+    killAuraButton.Position = UDim2.new(startX, 0, startY + spacing * 2, 0)
+    killAuraButton.Text = killAuraEnabled and "Kill Aura: ON" or "Kill Aura: OFF"
 
-antifirstperson.Name = "antifirstperson"
-antifirstperson.Parent = ScrollingFrame
-antifirstperson.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-antifirstperson.BorderColor3 = Color3.fromRGB(0, 0, 0)
-antifirstperson.BorderSizePixel = 0
-antifirstperson.Position = UDim2.new(0.635999978, 0, 0.023, 0)
-antifirstperson.Size = UDim2.new(0, 98, 0, 50)
-antifirstperson.Font = Enum.Font.SourceSansBold
-antifirstperson.Text = "anti first person"
-antifirstperson.TextColor3 = Color3.fromRGB(255, 0, 0)
-antifirstperson.TextSize = 14.000
+    -- Self NaN Damage Button
+    local selfNanButton = Instance.new("TextButton", screenGui)
+    selfNanButton.Size = UDim2.new(0, 150, 0, 40)
+    selfNanButton.Position = UDim2.new(startX, 0, startY + spacing * 3, 0)
+    selfNanButton.Text = "God Mode"
 
-antigameplaypaused.Name = "antigameplaypaused"
-antigameplaypaused.Parent = ScrollingFrame
-antigameplaypaused.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-antigameplaypaused.BorderColor3 = Color3.fromRGB(0, 0, 0)
-antigameplaypaused.BorderSizePixel = 0
-antigameplaypaused.Position = UDim2.new(0, 0, 0.023, 0)
-antigameplaypaused.Size = UDim2.new(0, 98, 0, 50)
-antigameplaypaused.Font = Enum.Font.SourceSansBold
-antigameplaypaused.Text = "anti gameplay paused"
-antigameplaypaused.TextColor3 = Color3.fromRGB(255, 0, 0)
-antigameplaypaused.TextSize = 12.000
+    -- Toggle Functions
+    killAuraButton.MouseButton1Click:Connect(function()
+        killAuraEnabled = not killAuraEnabled
+        killAuraButton.Text = killAuraEnabled and "Kill Aura: ON" or "Kill Aura: OFF"
+    end)
 
-antivoid.Name = "antivoid"
-antivoid.Parent = ScrollingFrame
-antivoid.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-antivoid.BorderColor3 = Color3.fromRGB(0, 0, 0)
-antivoid.BorderSizePixel = 0
-antivoid.Position = UDim2.new(0, 0, 0.0649999976, 0)
-antivoid.Size = UDim2.new(0, 98, 0, 50)
-antivoid.Font = Enum.Font.SourceSansBold
-antivoid.Text = "antivoid"
-antivoid.TextColor3 = Color3.fromRGB(255, 0, 0)
-antivoid.TextSize = 14.000
+    -- Self NaN Damage Function (Anchors then Unanchors after applying NaN)
+    selfNanButton.MouseButton1Click:Connect(function()
+        local character = player.Character
+        if character then
+            -- Anchor all parts
+            for _, part in pairs(character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.Anchored = true
+                end
+            end
 
-flygui.Name = "flygui"
-flygui.Parent = ScrollingFrame
-flygui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-flygui.BorderColor3 = Color3.fromRGB(0, 0, 0)
-flygui.BorderSizePixel = 0
-flygui.Size = UDim2.new(0, 100, 0, 50)
-flygui.Font = Enum.Font.SourceSansBold
-flygui.Text = "fly gui"
-flygui.TextColor3 = Color3.fromRGB(255, 0, 0)
-flygui.TextSize = 34.000
+            -- Apply NaN damage
+            if character:FindFirstChild("Humanoid") then
+                local args = {
+                    [1] = character:FindFirstChild("Right Arm") or character:FindFirstChild("Head"),
+                    [2] = character,
+                    [3] = -math.huge, -- minus inf Damage
+                    [4] = 0,
+                    [5] = 0,
+                    [6] = 0,
+                    [7] = character:FindFirstChild("Fists")
+                }
+                replicatedStorage:FindFirstChild("Hit"):FireServer(unpack(args))
+            end
 
-guilauncher.Name = "gui launcher"
-guilauncher.Parent = ScrollingFrame
-guilauncher.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-guilauncher.BorderColor3 = Color3.fromRGB(0, 0, 0)
-guilauncher.BorderSizePixel = 0
-guilauncher.Position = UDim2.new(0, 0, 0.0120000001, 0)
-guilauncher.Size = UDim2.new(0, 270, 0, 50)
-guilauncher.Font = Enum.Font.SourceSansBold
-guilauncher.Text = "gui launcher"
-guilauncher.TextColor3 = Color3.fromRGB(255, 0, 0)
-guilauncher.TextSize = 14.000
+            -- Wait before unanchoring
+            task.wait(0.5) -- Short delay to make sure NaN damage applies
 
-infjump.Name = "infjump"
-infjump.Parent = ScrollingFrame
-infjump.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-infjump.BorderColor3 = Color3.fromRGB(0, 0, 0)
-infjump.BorderSizePixel = 0
-infjump.Position = UDim2.new(0.400000006, 0, 0.0649999976, 0)
-infjump.Size = UDim2.new(0, 98, 0, 50)
-infjump.Font = Enum.Font.SourceSansBold
-infjump.Text = "inf jump"
-infjump.TextColor3 = Color3.fromRGB(255, 0, 0)
-infjump.TextSize = 14.000
+            -- Unanchor all parts
+            for _, part in pairs(character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.Anchored = false
+                end
+            end
+        end
+    end)
 
-maxzoom100kmax.Name = "maxzoom100k(max)"
-maxzoom100kmax.Parent = ScrollingFrame
-maxzoom100kmax.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-maxzoom100kmax.BorderColor3 = Color3.fromRGB(0, 0, 0)
-maxzoom100kmax.BorderSizePixel = 0
-maxzoom100kmax.Position = UDim2.new(0.317999989, 0, 0.023, 0)
-maxzoom100kmax.Size = UDim2.new(0, 98, 0, 50)
-maxzoom100kmax.Font = Enum.Font.SourceSansBold
-maxzoom100kmax.Text = "maxzoom 100k (max)"
-maxzoom100kmax.TextColor3 = Color3.fromRGB(255, 0, 0)
-maxzoom100kmax.TextSize = 14.000
+    -- Store values when changed
+    radiusBox.FocusLost:Connect(function() lastRadius = radiusBox.Text end)
+    powerBox.FocusLost:Connect(function() lastPower = powerBox.Text end)
 
-loopantifp.Name = "loop anti fp"
-loopantifp.Parent = ScrollingFrame
-loopantifp.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-loopantifp.BorderColor3 = Color3.fromRGB(0, 0, 0)
-loopantifp.BorderSizePixel = 0
-loopantifp.Position = UDim2.new(0.635999978, 0, 0.0340000018, 0)
-loopantifp.Size = UDim2.new(0, 98, 0, 50)
-loopantifp.Font = Enum.Font.SourceSansBold
-loopantifp.Text = "loop anti first person"
-loopantifp.TextColor3 = Color3.fromRGB(255, 0, 0)
-loopantifp.TextSize = 11.000
-
-loopantigameplaypaused.Name = "loop anti gameplaypaused"
-loopantigameplaypaused.Parent = ScrollingFrame
-loopantigameplaypaused.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-loopantigameplaypaused.BorderColor3 = Color3.fromRGB(0, 0, 0)
-loopantigameplaypaused.BorderSizePixel = 0
-loopantigameplaypaused.Position = UDim2.new(0, 0, 0.0340000018, 0)
-loopantigameplaypaused.Size = UDim2.new(0, 98, 0, 50)
-loopantigameplaypaused.Font = Enum.Font.SourceSansBold
-loopantigameplaypaused.Text = "loop anti gameplay paused"
-loopantigameplaypaused.TextColor3 = Color3.fromRGB(255, 0, 0)
-loopantigameplaypaused.TextSize = 10.000
-
-loopantivoid.Name = "loop anti void"
-loopantivoid.Parent = ScrollingFrame
-loopantivoid.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-loopantivoid.BorderColor3 = Color3.fromRGB(0, 0, 0)
-loopantivoid.BorderSizePixel = 0
-loopantivoid.Position = UDim2.new(0.400000006, 0, 0.0850000009, 0)
-loopantivoid.Size = UDim2.new(0, 98, 0, 50)
-loopantivoid.Font = Enum.Font.SourceSansBold
-loopantivoid.Text = "loop anti void"
-loopantivoid.TextColor3 = Color3.fromRGB(255, 0, 0)
-loopantivoid.TextSize = 14.000
-
-loopinfjump.Name = "loop inf jump"
-loopinfjump.Parent = ScrollingFrame
-loopinfjump.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-loopinfjump.BorderColor3 = Color3.fromRGB(0, 0, 0)
-loopinfjump.BorderSizePixel = 0
-loopinfjump.Position = UDim2.new(0, 0, 0.0850000009, 0)
-loopinfjump.Size = UDim2.new(0, 98, 0, 50)
-loopinfjump.Font = Enum.Font.SourceSansBold
-loopinfjump.Text = "loop inf jump"
-loopinfjump.TextColor3 = Color3.fromRGB(255, 0, 0)
-loopinfjump.TextSize = 14.000
-
-loopmaxzoom100kmax.Name = "loop maxzoom100k(max)"
-loopmaxzoom100kmax.Parent = ScrollingFrame
-loopmaxzoom100kmax.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-loopmaxzoom100kmax.BorderColor3 = Color3.fromRGB(0, 0, 0)
-loopmaxzoom100kmax.BorderSizePixel = 0
-loopmaxzoom100kmax.Position = UDim2.new(0.32100001, 0, 0.0340000018, 0)
-loopmaxzoom100kmax.Size = UDim2.new(0, 98, 0, 50)
-loopmaxzoom100kmax.Font = Enum.Font.SourceSansBold
-loopmaxzoom100kmax.Text = "loop maxzoom 100k (max)"
-loopmaxzoom100kmax.TextColor3 = Color3.fromRGB(255, 0, 0)
-loopmaxzoom100kmax.TextSize = 10.000
-
-SpeedAdjuster.Name = "SpeedAdjuster"
-SpeedAdjuster.Parent = ScrollingFrame
-SpeedAdjuster.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-SpeedAdjuster.BorderColor3 = Color3.fromRGB(0, 0, 0)
-SpeedAdjuster.BorderSizePixel = 0
-SpeedAdjuster.Position = UDim2.new(0, 0, 0.0529999994, 0)
-SpeedAdjuster.Size = UDim2.new(0, 100, 0, 50)
-SpeedAdjuster.Font = Enum.Font.SourceSans
-SpeedAdjuster.Text = ""
-SpeedAdjuster.TextColor3 = Color3.fromRGB(255, 0, 0)
-SpeedAdjuster.TextSize = 14.000
-
-JumppowerAdjuster.Name = "JumppowerAdjuster"
-JumppowerAdjuster.Parent = ScrollingFrame
-JumppowerAdjuster.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-JumppowerAdjuster.BorderColor3 = Color3.fromRGB(0, 0, 0)
-JumppowerAdjuster.BorderSizePixel = 0
-JumppowerAdjuster.Position = UDim2.new(0.326000005, 0, 0.0529999994, 0)
-JumppowerAdjuster.Size = UDim2.new(0, 100, 0, 50)
-JumppowerAdjuster.Font = Enum.Font.SourceSans
-JumppowerAdjuster.Text = ""
-JumppowerAdjuster.TextColor3 = Color3.fromRGB(255, 0, 0)
-JumppowerAdjuster.TextSize = 14.000
-
-lightmass.Name = "light mass"
-lightmass.Parent = ScrollingFrame
-lightmass.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-lightmass.BorderColor3 = Color3.fromRGB(0, 0, 0)
-lightmass.BorderSizePixel = 0
-lightmass.Position = UDim2.new(0.656000018, 0, 0.0529999994, 0)
-lightmass.Size = UDim2.new(0, 100, 0, 50)
-lightmass.Font = Enum.Font.SourceSans
-lightmass.Text = ""
-lightmass.TextColor3 = Color3.fromRGB(255, 0, 0)
-lightmass.TextSize = 14.000
-
-speedlabel.Name = "speed label"
-speedlabel.Parent = ScrollingFrame
-speedlabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-speedlabel.BackgroundTransparency = 1.000
-speedlabel.BorderColor3 = Color3.fromRGB(0, 0, 0)
-speedlabel.BorderSizePixel = 0
-speedlabel.Position = UDim2.new(0, 0, 0.0480000004, 0)
-speedlabel.Size = UDim2.new(0, 100, 0, 50)
-speedlabel.Font = Enum.Font.SourceSansBold
-speedlabel.Text = "speed"
-speedlabel.TextColor3 = Color3.fromRGB(0, 0, 0)
-speedlabel.TextSize = 23.000
-
-strengthlabel.Name = "strength label"
-strengthlabel.Parent = ScrollingFrame
-strengthlabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-strengthlabel.BackgroundTransparency = 1.000
-strengthlabel.BorderColor3 = Color3.fromRGB(0, 0, 0)
-strengthlabel.BorderSizePixel = 0
-strengthlabel.Position = UDim2.new(0.656000018, 0, 0.0480000004, 0)
-strengthlabel.Size = UDim2.new(0, 100, 0, 50)
-strengthlabel.Font = Enum.Font.SourceSansBold
-strengthlabel.Text = "strength"
-strengthlabel.TextColor3 = Color3.fromRGB(0, 0, 0)
-strengthlabel.TextSize = 23.000
-
-jumppowerlabel.Name = "jumppower label"
-jumppowerlabel.Parent = ScrollingFrame
-jumppowerlabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-jumppowerlabel.BackgroundTransparency = 1.000
-jumppowerlabel.BorderColor3 = Color3.fromRGB(0, 0, 0)
-jumppowerlabel.BorderSizePixel = 0
-jumppowerlabel.Position = UDim2.new(0.326000005, 0, 0.0480000004, 0)
-jumppowerlabel.Size = UDim2.new(0, 100, 0, 50)
-jumppowerlabel.Font = Enum.Font.SourceSansBold
-jumppowerlabel.Text = "jumppower"
-jumppowerlabel.TextColor3 = Color3.fromRGB(0, 0, 0)
-jumppowerlabel.TextSize = 23.000
-
-opentextboxinformation.Name = "open textbox information"
-opentextboxinformation.Parent = ScrollingFrame
-opentextboxinformation.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-opentextboxinformation.BorderColor3 = Color3.fromRGB(0, 0, 0)
-opentextboxinformation.BorderSizePixel = 0
-opentextboxinformation.Position = UDim2.new(0.195999995, 0, 0.0399999991, 0)
-opentextboxinformation.Size = UDim2.new(0, 200, 0, 50)
-opentextboxinformation.Font = Enum.Font.SourceSansBold
-opentextboxinformation.Text = "open textbox information"
-opentextboxinformation.TextColor3 = Color3.fromRGB(255, 0, 0)
-opentextboxinformation.TextSize = 22.000
-
-destroygui.Name = "destroy gui"
-destroygui.Parent = ScrollingFrame
-destroygui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-destroygui.BorderColor3 = Color3.fromRGB(0, 0, 0)
-destroygui.BorderSizePixel = 0
-destroygui.Position = UDim2.new(0.653776526, 0, 0, 0)
-destroygui.Size = UDim2.new(0, 100, 0, 50)
-destroygui.Font = Enum.Font.SourceSansBold
-destroygui.Text = "destroy gui"
-destroygui.TextColor3 = Color3.fromRGB(255, 0, 0)
-destroygui.TextSize = 23.000
-
-toggle.Name = "toggle"
-toggle.Parent = jlmain
-toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-toggle.BorderColor3 = Color3.fromRGB(0, 0, 0)
-toggle.BorderSizePixel = 0
-toggle.Position = UDim2.new(0.455525607, 0, 0.0222908091, 0)
-toggle.Size = UDim2.new(0, 58, 0, 50)
-toggle.Font = Enum.Font.SourceSansBold
-toggle.Text = "X"
-toggle.TextColor3 = Color3.fromRGB(255, 0, 0)
-toggle.TextSize = 64.000
-
--- Scripts:
-
-local function KZCE_fake_script() -- Frame.drag 
-	local script = Instance.new('LocalScript', Frame)
-
-	local dragger = {}; 
-	local resizer = {};
-	
-	do
-		local mouse = game:GetService("Players").LocalPlayer:GetMouse();
-		local inputService = game:GetService('UserInputService');
-		local heartbeat = game:GetService("RunService").Heartbeat;
-		-- // credits to Ririchi / Inori for this cute drag function :)
-		function dragger.new(frame)
-			local s, event = pcall(function()
-				return frame.MouseEnter
-			end)
-	
-			if s then
-				frame.Active = true;
-	
-				event:connect(function()
-					local input = frame.InputBegan:connect(function(key)
-						if key.UserInputType == Enum.UserInputType.MouseButton1 then
-							local objectPosition = Vector2.new(mouse.X - frame.AbsolutePosition.X, mouse.Y - frame.AbsolutePosition.Y);
-							while heartbeat:wait() and inputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-								frame:TweenPosition(UDim2.new(0, mouse.X - objectPosition.X + (frame.Size.X.Offset * frame.AnchorPoint.X), 0, mouse.Y - objectPosition.Y + (frame.Size.Y.Offset * frame.AnchorPoint.Y)), 'Out', 'Quad', 0.1, true);
-							end
-						end
-					end)
-	
-					local leave;
-					leave = frame.MouseLeave:connect(function()
-						input:disconnect();
-						leave:disconnect();
-					end)
-				end)
-			end
-		end
-	
-		function resizer.new(p, s)
-			p:GetPropertyChangedSignal('AbsoluteSize'):connect(function()
-				s.Size = UDim2.new(s.Size.X.Scale, s.Size.X.Offset, s.Size.Y.Scale, p.AbsoluteSize.Y);
-			end)
-		end
-	end
-	script.Parent.Active = true
-	script.Parent.Draggable = true
+    return screenGui, radiusBox, powerBox, killAuraButton, selfNanButton
 end
-coroutine.wrap(KZCE_fake_script)()
-local function XETHC_fake_script() -- antifirstperson.Script 
-	local script = Instance.new('Script', antifirstperson)
 
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.CameraMinZoomDistance = 0.5
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
+local function setupCharacter()
+    local character = player.Character or player.CharacterAdded:Wait()
+    local hrp = character:WaitForChild("HumanoidRootPart")
+    return character, hrp
 end
-coroutine.wrap(XETHC_fake_script)()
-local function OWKAGSR_fake_script() -- antigameplaypaused.Script 
-	local script = Instance.new('Script', antigameplaypaused)
 
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.GameplayPaused = false
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(OWKAGSR_fake_script)()
-local function ANOM_fake_script() -- antivoid.Script 
-	local script = Instance.new('Script', antivoid)
+-- Initialize GUI & Character
+local screenGui, radiusBox, powerBox, killAuraButton, selfNanButton = setupGUI()
+local character, hrp = setupCharacter()
+local hitRemote = replicatedStorage:FindFirstChild("Hit")
 
-	function Click(mouse)
-		
-		workspace.FallenPartsDestroyHeight=0/0
-		
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(ANOM_fake_script)()
-local function QFPXXQQ_fake_script() -- flygui.Script 
-	local script = Instance.new('Script', flygui)
+-- Function to get nearest target (Players & NPCs)
+local function getNearestTarget(radius)
+    local closestTarget = nil
+    local shortestDistance = radius
 
-	function Click(mouse)
-	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-	
-	
-end
-coroutine.wrap(QFPXXQQ_fake_script)()
-local function RYXV_fake_script() -- guilauncher.Script 
-	local script = Instance.new('Script', guilauncher)
+    -- Check NPCs
+    for _, npc in pairs(workspace.NPCS:GetChildren()) do
+        if npc:IsA("Model") and npc:FindFirstChild("Humanoid") then
+            local npcHRP = npc:FindFirstChild("HumanoidRootPart")
+            if npcHRP then
+                local distance = (npcHRP.Position - hrp.Position).Magnitude
+                if distance < shortestDistance then
+                    closestTarget = npc
+                    shortestDistance = distance
+                end
+            end
+        end
+    end
 
-	function Click(mouse)
-	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/gui%20launcher"))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(RYXV_fake_script)()
-local function QVNGME_fake_script() -- infjump.Script 
-	local script = Instance.new('Script', infjump)
+    -- Check Players
+    for _, otherPlayer in pairs(game:GetService("Players"):GetPlayers()) do
+        if otherPlayer ~= player and otherPlayer.Character and otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local otherHRP = otherPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local distance = (otherHRP.Position - hrp.Position).Magnitude
+            if distance < shortestDistance then
+                closestTarget = otherPlayer.Character
+                shortestDistance = distance
+            end
+        end
+    end
 
-	function Click(mouse)
-	
-		
-	
-		local InfiniteJumpEnabled = true
-		game:GetService("UserInputService").JumpRequest:connect(function()
-			if InfiniteJumpEnabled then
-				game:GetService"Players".LocalPlayer.Character:FindFirstChildOfClass'Humanoid':ChangeState("Jumping")
-			end
-		end)
-	
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
+    return closestTarget
 end
-coroutine.wrap(QVNGME_fake_script)()
-local function YUTCFC_fake_script() -- maxzoom100kmax.Script 
-	local script = Instance.new('Script', maxzoom100kmax)
 
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.CameraMaxZoomDistance = 1000000000
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
+-- Function to safely convert power values
+local function parsePower(input)
+    local number = tonumber(input)
+    if number == nil or number ~= number then  -- NaN check
+        return math.huge
+    end
+    return number
 end
-coroutine.wrap(YUTCFC_fake_script)()
-local function UZFB_fake_script() -- loopantifp.Script 
-	local script = Instance.new('Script', loopantifp)
 
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait(0.3)
-		game.Players.LocalPlayer.CameraMinZoomDistance = 0.5
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(UZFB_fake_script)()
-local function OKVL_fake_script() -- loopantigameplaypaused.Script 
-	local script = Instance.new('Script', loopantigameplaypaused)
+-- Main loop
+runService.RenderStepped:Connect(function()
+    if killAuraEnabled and hitRemote then
+        local radius = tonumber(radiusBox.Text) or 10
+        local power = parsePower(powerBox.Text)  -- Convert power safely
+        local nearestTarget = getNearestTarget(radius)
 
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait(0.3)
-		game.Players.LocalPlayer.GameplayPaused = false
-		end
-		
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(OKVL_fake_script)()
-local function XCGEGO_fake_script() -- loopantivoid.Script 
-	local script = Instance.new('Script', loopantivoid)
+        if nearestTarget and nearestTarget:FindFirstChild("Right Arm") then
+            local args = {
+                [1] = nearestTarget:FindFirstChild("Right Arm"),
+                [2] = nearestTarget,
+                [3] = power, -- Adjustable power with NaN & Inf support
+                [4] = 0,
+                [5] = 0,
+                [6] = 0,
+                [7] = player.Character:FindFirstChild("Fists")
+            }
+            hitRemote:FireServer(unpack(args))
+        end
+    end
+end)
 
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait( )
-		workspace.FallenPartsDestroyHeight=0/0
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(XCGEGO_fake_script)()
-local function EMXFNC_fake_script() -- loopinfjump.Script 
-	local script = Instance.new('Script', loopinfjump)
+-- Reconnect everything after respawn
+player.CharacterAdded:Connect(function()
+    character, hrp = setupCharacter()
+    screenGui, radiusBox, powerBox, killAuraButton, selfNanButton = setupGUI()
 
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait(0.3)
-		
-	
-		local InfiniteJumpEnabled = true
-		game:GetService("UserInputService").JumpRequest:connect(function()
-			if InfiniteJumpEnabled then
-				game:GetService"Players".LocalPlayer.Character:FindFirstChildOfClass'Humanoid':ChangeState("Jumping")
-			end
-		end)
-	end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(EMXFNC_fake_script)()
-local function YZVZI_fake_script() -- loopmaxzoom100kmax.Script 
-	local script = Instance.new('Script', loopmaxzoom100kmax)
-
-	function Click(mouse)
-		_G.toggle = true
-	
-		while _G.toggle do
-			wait(0.3)
-		game.Players.LocalPlayer.CameraMaxZoomDistance = 1000000000
-		end
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(YZVZI_fake_script)()
-local function VVFWETM_fake_script() -- SpeedAdjuster.walkspeed 
-	local script = Instance.new('LocalScript', SpeedAdjuster)
-
-	local textBox = script.Parent  -- Speed TextBox
-	local player = game.Players.LocalPlayer
-	local unloopTextBox = game.Workspace:FindFirstChild("UnloopTextBox")  -- Unloop TextBox
-	local isLooping = false  
-	
-	local function applySpeed(speedValue)
-		local character = player.Character
-		if character then
-			local humanoid = character:FindFirstChildOfClass("Humanoid")
-			if humanoid then
-				humanoid.WalkSpeed = speedValue
-			end
-		end
-	end
-	
-	local function processInput()
-		local inputText = textBox.Text
-		local speedValue = tonumber(inputText) or loadstring("return " .. inputText)()
-		local loopCount = tonumber(textBox:GetAttribute("Loop"))
-	
-		if not speedValue then return end  
-	
-		isLooping = true  
-	
-		if loopCount then
-			for i = 1, loopCount do
-				if not isLooping then break end
-				applySpeed(speedValue)
-				wait(0.5)
-			end
-		else
-			applySpeed(speedValue)  
-		end
-	end
-	
-	unloopTextBox.FocusLost:Connect(function()
-		isLooping = false
-	end)
-	
-	textBox.FocusLost:Connect(function()
-		processInput()
-	end)
-	
-	player.CharacterAdded:Connect(function()
-		wait(1)
-		processInput()
-	end)
-	
-end
-coroutine.wrap(VVFWETM_fake_script)()
-local function RFTIG_fake_script() -- JumppowerAdjuster.jumppower 
-	local script = Instance.new('LocalScript', JumppowerAdjuster)
-
-	local textBox = script.Parent  -- JumpPower TextBox
-	local player = game.Players.LocalPlayer
-	local unloopTextBox = game.Workspace:FindFirstChild("UnloopTextBox")  -- Unloop TextBox
-	local isLooping = false  
-	
-	local function applyJumpPower(jumpValue)
-		local character = player.Character
-		if character then
-			local humanoid = character:FindFirstChildOfClass("Humanoid")
-			if humanoid then
-				humanoid.JumpPower = jumpValue
-			end
-		end
-	end
-	
-	local function processInput()
-		local inputText = textBox.Text
-		local jumpValue = tonumber(inputText) or loadstring("return " .. inputText)()
-		local loopCount = tonumber(textBox:GetAttribute("Loop"))
-	
-		if not jumpValue then return end  
-	
-		isLooping = true  
-	
-		if loopCount then
-			for i = 1, loopCount do
-				if not isLooping then break end
-				applyJumpPower(jumpValue)
-				wait(0.5)
-			end
-		else
-			applyJumpPower(jumpValue)  
-		end
-	end
-	
-	unloopTextBox.FocusLost:Connect(function()
-		isLooping = false
-	end)
-	
-	textBox.FocusLost:Connect(function()
-		processInput()
-	end)
-	
-	player.CharacterAdded:Connect(function()
-		wait(1)
-		processInput()
-	end)
-	
-end
-coroutine.wrap(RFTIG_fake_script)()
-local function QUNIWGP_fake_script() -- lightmass.strength 
-	local script = Instance.new('LocalScript', lightmass)
-
-	local textBox = script.Parent  -- LightMass TextBox
-	local player = game.Players.LocalPlayer
-	local unloopTextBox = game.Workspace:FindFirstChild("UnloopTextBox")  -- Unloop TextBox
-	local isLooping = false  
-	
-	local function applyLightMass(massValue)
-		local character = player.Character
-		if character then
-			local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-			if humanoidRootPart then
-				humanoidRootPart.CustomPhysicalProperties = PhysicalProperties.new(massValue, math.huge, math.huge)
-			end
-		end
-	end
-	
-	local function processInput()
-		local inputText = textBox.Text
-		local massValue = tonumber(inputText) or loadstring("return " .. inputText)()
-		local loopCount = tonumber(textBox:GetAttribute("Loop"))
-	
-		if not massValue then return end  
-	
-		isLooping = true  
-	
-		if loopCount then
-			for i = 1, loopCount do
-				if not isLooping then break end
-				applyLightMass(massValue)
-				wait(0.5)
-			end
-		else
-			applyLightMass(massValue)  
-		end
-	end
-	
-	unloopTextBox.FocusLost:Connect(function()
-		isLooping = false
-	end)
-	
-	textBox.FocusLost:Connect(function()
-		processInput()
-	end)
-	
-	player.CharacterAdded:Connect(function()
-		wait(1)
-		processInput()
-	end)
-	
-end
-coroutine.wrap(QUNIWGP_fake_script)()
-local function MJGJD_fake_script() -- opentextboxinformation.Script 
-	local script = Instance.new('Script', opentextboxinformation)
-
-	function Click(mouse)
-	
-		loadstring(game:HttpGet("https://github.com/Jlchris1/Udklol/blob/main/textbox%20info%20frame"))()
-	
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(MJGJD_fake_script)()
-local function HMPQC_fake_script() -- destroygui.Script 
-	local script = Instance.new('Script', destroygui)
-
-	function Click(mouse)
-	
-		game.Players.LocalPlayer.PlayerGui.InfoFrame:Destroy()
-		
-	end
-	
-	
-	script.Parent.MouseButton1Down:connect(Click)
-end
-coroutine.wrap(HMPQC_fake_script)()
-local function CJFSJ_fake_script() -- toggle.drag 
-	local script = Instance.new('LocalScript', toggle)
-
-	local dragger = {}; 
-	local resizer = {};
-	
-	do
-		local mouse = game:GetService("Players").LocalPlayer:GetMouse();
-		local inputService = game:GetService('UserInputService');
-		local heartbeat = game:GetService("RunService").Heartbeat;
-		-- // credits to Ririchi / Inori for this cute drag function :)
-		function dragger.new(frame)
-			local s, event = pcall(function()
-				return frame.MouseEnter
-			end)
-	
-			if s then
-				frame.Active = true;
-	
-				event:connect(function()
-					local input = frame.InputBegan:connect(function(key)
-						if key.UserInputType == Enum.UserInputType.MouseButton1 then
-							local objectPosition = Vector2.new(mouse.X - frame.AbsolutePosition.X, mouse.Y - frame.AbsolutePosition.Y);
-							while heartbeat:wait() and inputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-								frame:TweenPosition(UDim2.new(0, mouse.X - objectPosition.X + (frame.Size.X.Offset * frame.AnchorPoint.X), 0, mouse.Y - objectPosition.Y + (frame.Size.Y.Offset * frame.AnchorPoint.Y)), 'Out', 'Quad', 0.1, true);
-							end
-						end
-					end)
-	
-					local leave;
-					leave = frame.MouseLeave:connect(function()
-						input:disconnect();
-						leave:disconnect();
-					end)
-				end)
-			end
-		end
-	
-		function resizer.new(p, s)
-			p:GetPropertyChangedSignal('AbsoluteSize'):connect(function()
-				s.Size = UDim2.new(s.Size.X.Scale, s.Size.X.Offset, s.Size.Y.Scale, p.AbsoluteSize.Y);
-			end)
-		end
-	end
-	script.Parent.Active = true
-	script.Parent.Draggable = true
-end
-coroutine.wrap(CJFSJ_fake_script)()
-local function EPDL_fake_script() -- toggle.close 
-	local script = Instance.new('LocalScript', toggle)
-
-	local back = script.Parent.Parent.Frame
-	local con = script.Parent.Parent.Frame
-	
-	local window = {
-		count = 0;
-		toggles = {},
-		closed = false;
-	}
-	script.Parent.MouseButton1Click:connect(function()
-		window.closed = not window.closed
-		script.Parent.Text = (window.closed and "+" or "-")
-		if script.Parent.Text == "+" then
-			back:TweenSize(UDim2.new(0, 0,0, 0), "Out", "Sine", 0.5)
-			con:TweenSize(UDim2.new(0, 0,0, 0), "Out", "Sine", 0.5)
-			wait(0.1) do
-				con.Visible = false
-			end
-		else
-			back:TweenSize(UDim2.new(0, 331,0, 58), "Out", "Sine", 0.5)
-			con:TweenSize(UDim2.new(0, 331,0, 58), "Out", "Sine", 0.5)
-			wait(0.2) do
-				con.Visible = true
-			end
-		end
-	
-	end)
-end
-coroutine.wrap(EPDL_fake_script)()
+    -- Restore previous settings
+    radiusBox.Text = lastRadius
+    powerBox.Text = lastPower
+    killAuraButton.Text = killAuraEnabled and "Kill Aura: ON" or "Kill Aura: OFF"
+end)
