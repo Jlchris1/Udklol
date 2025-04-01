@@ -6,7 +6,7 @@ local RunService = game:GetService("RunService")
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 ScreenGui.Name = "HitboxGUI"
 
--- Create function to simplify UI creation
+-- Function to create UI elements
 local function createUIElement(class, properties)
     local element = Instance.new(class)
     for property, value in pairs(properties) do
@@ -26,7 +26,7 @@ local TextBox = createUIElement("TextBox", {
     BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 })
 
--- Define buttons and their positions
+-- Buttons Setup
 local buttons = {
     HitboxNonFriends = {pos = 0.2, text = "Hitbox Non-Friends"},
     HitboxAll = {pos = 0.3, text = "Hitbox All"},
@@ -47,7 +47,7 @@ for name, data in pairs(buttons) do
     })
 end
 
--- Toggle UI visibility button (except itself)
+-- Toggle UI visibility button
 local ToggleUI = createUIElement("TextButton", {
     Size = UDim2.new(0, 20, 0, 20),
     Position = UDim2.new(0, 5, 0, 5),
@@ -66,42 +66,58 @@ ToggleUI.MouseButton1Click:Connect(function()
     end
 end)
 
--- Function to adjust HumanoidRootPart size and disable collisions
+-- Function to find the HumanoidRootPart even if renamed
+local function findHumanoidRootPart(character)
+    if character then
+        for _, part in ipairs(character:GetChildren()) do
+            if part:IsA("BasePart") and part.Name:lower():find("humanoidroot") then
+                return part
+            end
+        end
+    end
+    return nil
+end
+
+-- Function to adjust HumanoidRootPart size
 local function adjustHPRSize(target, size)
-    local humanoidRootPart = target:FindFirstChild("HumanoidRootPart", true)
+    if target and target ~= LocalPlayer.Character then -- Ensure local player is unaffected
+        local humanoidRootPart = findHumanoidRootPart(target)
+        if humanoidRootPart and humanoidRootPart.Size ~= Vector3.new(size, size, size) then
+            humanoidRootPart.Size = Vector3.new(size, size, size)
+            humanoidRootPart.CanCollide = false 
+        end
+    end
+end
+
+-- Function to apply/remove outline
+local function manageOutline(target, apply)
+    local humanoidRootPart = findHumanoidRootPart(target)
     if humanoidRootPart then
-        humanoidRootPart.Size = Vector3.new(size, size, size)
-        humanoidRootPart.CanCollide = false -- Prevent flinging
+        local outline = humanoidRootPart:FindFirstChildOfClass("SelectionBox")
+        if apply then
+            if not outline then
+                outline = Instance.new("SelectionBox")
+                outline.Adornee = humanoidRootPart
+                outline.Parent = humanoidRootPart
+                outline.LineThickness = 0.05
+                outline.Color3 = Color3.fromRGB(255, 0, 0)
+                outline.Transparency = 0.5
+                outline.ZIndex = 10
+            end
+        else
+            if outline then
+                outline:Destroy()
+            end
+        end
     end
 end
 
--- Function to apply an outline
-local function applyAuraOutline(target)
-    local humanoidRootPart = target:FindFirstChild("HumanoidRootPart", true)
-    if humanoidRootPart and not humanoidRootPart:FindFirstChildOfClass("SelectionBox") then
-        local outline = Instance.new("SelectionBox")
-        outline.Adornee = humanoidRootPart
-        outline.Parent = humanoidRootPart
-        outline.LineThickness = 0.05
-        outline.Color3 = Color3.fromRGB(255, 0, 0)
-        outline.Transparency = 0.5
-        outline.ZIndex = 10
-    end
-end
-
--- Function to find all NPCs (anything with a HumanoidRootPart excluding players)
+-- Function to find all NPCs
 local function findAllNPCs()
     local npcs = {}
     for _, descendant in pairs(workspace:GetDescendants()) do
-        if descendant:IsA("Model") and descendant:FindFirstChild("HumanoidRootPart", true) then
-            local isPlayer = false
-            for _, player in pairs(Players:GetPlayers()) do
-                if player.Character and player.Character:IsDescendantOf(descendant) then
-                    isPlayer = true
-                    break
-                end
-            end
-            if not isPlayer then
+        if descendant:IsA("Model") and findHumanoidRootPart(descendant) then
+            if not Players:GetPlayerFromCharacter(descendant) then
                 table.insert(npcs, descendant)
             end
         end
@@ -114,7 +130,7 @@ local function applyHitboxToNPCs()
     local size = tonumber(TextBox.Text) or 50
     for _, npc in pairs(findAllNPCs()) do
         adjustHPRSize(npc, size)
-        applyAuraOutline(npc)
+        manageOutline(npc, true)
     end
 end
 
@@ -124,48 +140,43 @@ local function applyHitboxToPlayers(filter)
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and (filter == "all" or (filter == "nonfriends" and not LocalPlayer:IsFriendsWith(player.UserId))) then
             adjustHPRSize(player.Character, size)
-            applyAuraOutline(player.Character)
+            manageOutline(player.Character, true)
         end
     end
 end
 
--- Function to toggle loops ON/OFF
+-- Toggle loop functions
+local loopStates = {}
 local function toggleLoop(button, filter)
-    local isRunning = false
+    loopStates[filter] = false
     button.MouseButton1Click:Connect(function()
-        isRunning = not isRunning
-        button.Text = (isRunning and filter:upper() .. " [ON]" or filter:upper() .. " [OFF]")
-        while isRunning do
-            if filter == "all" or filter == "nonfriends" then
-                applyHitboxToPlayers(filter)
-            elseif filter == "npcs" then
+        loopStates[filter] = not loopStates[filter]
+        button.Text = loopStates[filter] and (filter:upper() .. " [ON]") or (filter:upper() .. " [OFF]")
+        while loopStates[filter] do
+            if filter == "npcs" then
                 applyHitboxToNPCs()
+            else
+                applyHitboxToPlayers(filter)
             end
             wait(1)
         end
     end)
 end
 
--- Button Click Actions
-UIButtons.HitboxNonFriends.MouseButton1Click:Connect(function() applyHitboxToPlayers("nonfriends") end)
-UIButtons.HitboxAll.MouseButton1Click:Connect(function() applyHitboxToPlayers("all") end)
-UIButtons.HitboxNPCs.MouseButton1Click:Connect(function() applyHitboxToNPCs() end)
-
--- Toggle loops
 toggleLoop(UIButtons.LoopHitboxNonFriends, "nonfriends")
 toggleLoop(UIButtons.LoopHitboxAll, "all")
 toggleLoop(UIButtons.LoopHitboxNPCs, "npcs")
 
--- Auto-adjust hitbox on new players joining
+-- Cleanup outlines on respawn
 Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function()
-        applyHitboxToPlayers("all")
+    player.CharacterAdded:Connect(function(character)
+        wait(0.5)
+        manageOutline(character, false)
     end)
 end)
 
--- Auto-adjust hitbox for NPCs if new ones are added
 workspace.DescendantAdded:Connect(function(descendant)
-    if descendant:IsA("Model") and descendant:FindFirstChild("HumanoidRootPart", true) then
+    if descendant:IsA("Model") and findHumanoidRootPart(descendant) then
         applyHitboxToNPCs()
     end
 end)
