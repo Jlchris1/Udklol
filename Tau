@@ -287,4 +287,120 @@ game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args
 game:GetService("ReplicatedStorage").Assets.Signals.Event:FireServer(unpack(args))
 
       end    
+})local Tab = Window:MakeTab({
+    Name = "Tartarus Life Support",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "auto collect sexy pornhub 4k HD 60 FPS Ultra orginal by me fragments",
+    Callback = function()
+              local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+local function getCharacter()
+    local char = player.Character or player.CharacterAdded:Wait()
+    char:WaitForChild("HumanoidRootPart")
+    return char
+end
+
+local function teleportTo(cframe)
+    local char = getCharacter()
+    char:WaitForChild("HumanoidRootPart").CFrame = cframe + Vector3.new(0, 5, 0)
+end
+
+-- Loop to fire proximity prompts
+task.spawn(function()
+    while task.wait(0.1) do
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("ProximityPrompt") then
+                pcall(function()
+                    fireproximityprompt(v)
+                end)
+            end
+        end
+    end
+end)
+
+local visited = {}
+
+-- Watcher loop
+while true do
+    local foundNew = false
+    for _, frag in pairs(workspace:GetChildren()) do
+        if frag.Name == "Blood Moon Fragment" and not visited[frag] and frag:IsA("BasePart") then
+            foundNew = true
+            visited[frag] = true
+            teleportTo(frag.CFrame)
+            repeat
+                task.wait(1)
+            until not frag or not frag.Parent
+        end
+    end
+
+    -- If no unvisited or existing fragments, wait for a new one
+    if not foundNew then
+        local connection
+        connection = workspace.ChildAdded:Connect(function(child)
+            if child.Name == "Blood Moon Fragment" and child:IsA("BasePart") then
+                visited = {} -- Reset visited list for new fragments
+                connection:Disconnect()
+            end
+        end)
+        repeat task.wait(0.5) until not connection.Connected
+    end
+
+    task.wait(0.5)
+end
+
+      end    
+})local Tab = Window:MakeTab({
+    Name = " Bypasses",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "remove out of bounds",
+    Callback = function()
+              local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+-- Function to destroy the OutOfBounds GUI if it exists
+local function removeOutOfBounds()
+    local notifications = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("Notifications")
+    if notifications then
+        local outOfBounds = notifications:FindFirstChild("OutOfBounds")
+        if outOfBounds then
+            outOfBounds:Destroy()
+        end
+    end
+end
+
+-- Re-run removal on GUI changes
+player:WaitForChild("PlayerGui"):WaitForChild("Notifications").ChildAdded:Connect(function(child)
+    if child.Name == "OutOfBounds" then
+        child:Destroy()
+    end
+end)
+
+-- Reconnect everything on respawn (when PlayerGui is recreated)
+player.CharacterAdded:Connect(function()
+    -- Wait for the GUI to be recreated
+    local gui = player:WaitForChild("PlayerGui")
+    gui.ChildAdded:Connect(function(child)
+        if child.Name == "Notifications" then
+            child.ChildAdded:Connect(function(n)
+                if n.Name == "OutOfBounds" then
+                    n:Destroy()
+                end
+            end)
+        end
+    end)
+end)
+
+-- Loop for backup (in case other events miss it)
+while true do
+    removeOutOfBounds()
+    task.wait(1)
+end
+
+      end    
 })
