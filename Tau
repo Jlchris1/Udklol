@@ -724,4 +724,198 @@ end
 giveKeyToPlayer()
 
   	end    
+}) Tab:AddButton({
+	Name = "collect evil and normal Ducky",
+	Callback = function()
+      		local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local function getCharacter()
+    while not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") do
+        task.wait()
+    end
+    return LocalPlayer.Character
+end
+
+local function teleportAndTrigger(duckName)
+    local character = getCharacter()
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+
+    local duck = workspace:FindFirstChild(duckName)
+    if duck and duck:IsA("BasePart") then
+        hrp.CFrame = duck.CFrame + Vector3.new(0, 3, 0)
+        task.wait(0.5)
+
+        for _, prompt in ipairs(workspace:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") then
+                local distance = (prompt.Parent.Position - hrp.Position).Magnitude
+                if distance <= prompt.MaxActivationDistance then
+                    fireproximityprompt(prompt)
+                end
+            end
+        end
+    else
+        warn(duckName .. " not found in workspace.")
+    end
+end
+
+-- Teleport to both duckies
+teleportAndTrigger("Rubber Ducky")
+teleportAndTrigger("Evil Ducky")
+
+  	end    
+}) Tab:AddButton({
+	Name = "Stash Evil and Normal ducky",
+	Callback = function()
+      		local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local function cloneDuckies()
+    local duckNames = { "Rubber Ducky", "Evil Ducky" }
+
+    local function checkAndClone(container)
+        if container then
+            for _, item in ipairs(container:GetChildren()) do
+                if item:IsA("Tool") and table.find(duckNames, item.Name) then
+                    local cloned = item:Clone()
+                    cloned.Parent = ReplicatedStorage
+                    print("Cloned " .. item.Name .. " from: " .. container:GetFullName())
+                end
+            end
+        end
+    end
+
+    checkAndClone(LocalPlayer.Backpack)
+    checkAndClone(LocalPlayer.Character)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            checkAndClone(player.Backpack)
+            checkAndClone(player.Character)
+        end
+    end
+end
+
+cloneDuckies()
+
+  	end    
+}) Tab:AddButton({
+	Name = "inf ducks",
+	Callback = function()
+      		local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local function giveDuckies()
+    local duckNames = { "Rubber Ducky", "Evil Ducky" }
+
+    for _, name in ipairs(duckNames) do
+        local item = ReplicatedStorage:FindFirstChild(name)
+        if item and item:IsA("Tool") then
+            local clone = item:Clone()
+            clone.Parent = LocalPlayer.Backpack
+            print("Cloned " .. name .. " into Backpack.")
+        else
+            warn(name .. " not found in ReplicatedStorage.")
+        end
+    end
+end
+
+giveDuckies()
+
+  	end    
+}) Tab:AddButton({
+	Name = "Get Axe",
+	Callback = function()
+      		local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local function getCharacter()
+    while not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") do
+        task.wait()
+    end
+    return LocalPlayer.Character
+end
+
+local function teleportAndTrigger()
+    local character = getCharacter()
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+
+    local axe = workspace:FindFirstChild("Axe")
+    if axe and axe:IsA("BasePart") then
+        hrp.CFrame = axe.CFrame + Vector3.new(0, 3, 0)
+        task.wait(0.5)
+
+        for _, prompt in ipairs(workspace:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") then
+                local distance = (prompt.Parent.Position - hrp.Position).Magnitude
+                if distance <= prompt.MaxActivationDistance then
+                    fireproximityprompt(prompt)
+                end
+            end
+        end
+    else
+        warn("Axe not found in workspace.")
+    end
+end
+
+teleportAndTrigger()
+
+  	end    
+}) Tab:AddButton({
+	Name = "Stash Axe",
+	Callback = function()
+      		local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local function cloneAxe()
+    local function checkAndClone(container)
+        if container then
+            for _, item in ipairs(container:GetChildren()) do
+                if item:IsA("Tool") and item.Name == "Axe" then
+                    local cloned = item:Clone()
+                    cloned.Parent = ReplicatedStorage
+                    print("Cloned Axe from:", container:GetFullName())
+                end
+            end
+        end
+    end
+
+    checkAndClone(LocalPlayer.Backpack)
+    checkAndClone(LocalPlayer.Character)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            checkAndClone(player.Backpack)
+            checkAndClone(player.Character)
+        end
+    end
+end
+
+cloneAxe()
+
+  	end    
+}) Tab:AddButton({
+	Name = "inf axe farm",
+	Callback = function()
+      		local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local function giveAxeToPlayer()
+    local axe = ReplicatedStorage:FindFirstChild("Axe")
+    if axe and axe:IsA("Tool") then
+        local clone = axe:Clone()
+        clone.Parent = LocalPlayer.Backpack
+        print("Cloned Axe into Backpack.")
+    else
+        warn("No Axe found in ReplicatedStorage.")
+    end
+end
+
+giveAxeToPlayer()
+
+  	end    
 })
