@@ -403,4 +403,325 @@ while true do
 end
 
       end    
+})local Tab = Window:MakeTab({
+    Name = "Tool Manipulation",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+}) Tab:AddButton({
+    Name = "get a bat",
+    Callback = function()
+              local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- Wait for character to load
+local function getCharacter()
+    while not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") do
+        task.wait()
+    end
+    return LocalPlayer.Character
+end
+
+-- Teleport and activate nearby ProximityPrompts
+local function teleportAndTrigger()
+    local character = getCharacter()
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+
+    local bat = workspace:FindFirstChild("Bat")
+    if bat and bat:IsA("BasePart") then
+        hrp.CFrame = bat.CFrame + Vector3.new(0, 3, 0) -- Slightly above to avoid collision
+        task.wait(0.5)
+
+        -- Fire nearby prompts
+        for _, prompt in ipairs(workspace:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") then
+                local distance = (prompt.Parent.Position - hrp.Position).Magnitude
+                if distance <= prompt.MaxActivationDistance then
+                    fireproximityprompt(prompt)
+                end
+            end
+        end
+    else
+        warn("Bat not found in workspace.")
+    end
+end
+
+teleportAndTrigger()
+
+      end    
+}) Tab:AddButton({
+    Name = "Make Combat Legal",
+    Callback = function()
+              workspace.CombatLegal.Value = true
+      end    
+}) Tab:AddButton({
+    Name = "Stash the bat to duplicate",
+    Callback = function()
+              local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local function findAndCloneBat()
+    local function checkAndClone(container)
+        if container then
+            for _, item in ipairs(container:GetChildren()) do
+                if item:IsA("Tool") and item.Name == "Bat" then
+                    local clonedBat = item:Clone()
+                    clonedBat.Parent = ReplicatedStorage
+                    print("Cloned Bat from:", container:GetFullName())
+                end
+            end
+        end
+    end
+
+    -- Check local player
+    checkAndClone(LocalPlayer.Backpack)
+    checkAndClone(LocalPlayer.Character)
+
+    -- Check other players
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            checkAndClone(player.Backpack)
+            checkAndClone(player.Character)
+        end
+    end
+end
+
+findAndCloneBat()
+
+      end    
+}) Tab:AddButton({
+    Name = "inf bat farm💀🙏",
+    Callback = function()
+              local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local function giveBatToPlayer()
+    local batInStorage = ReplicatedStorage:FindFirstChild("Bat")
+    if batInStorage and batInStorage:IsA("Tool") then
+        local clonedBat = batInStorage:Clone()
+        clonedBat.Parent = LocalPlayer.Backpack
+        print("Cloned Bat into your Backpack.")
+    else
+        warn("No Bat found in ReplicatedStorage.")
+    end
+end
+
+giveBatToPlayer()
+
+      end    
+}) Tab:AddButton({
+    Name = "Loopkill zombies",
+    Callback = function()
+              _G.toggle = true
+
+while _G.toggle do
+wait()
+local player = game:GetService("Players").LocalPlayer
+local hitEffect = player.Character.Bat.BodyAttach.Hit
+local remote = game:GetService("ReplicatedStorage"):WaitForChild("M6D")
+
+for _, model in ipairs(workspace:GetDescendants()) do
+    if model:IsA("Model") and model:FindFirstChild("HumanoidRootPart") then
+        local args = {
+            [1] = {
+                ["A"] = model,
+                ["reason"] = "HitZombie",
+                ["B"] = hitEffect
+            }
+        }
+        remote:FireServer(unpack(args))
+    end
+end
+
+end
+      end    
+}) Tab:AddButton({
+    Name = "get fire Extinguisher",
+    Callback = function()
+ local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local function getCharacter()
+    while not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") do
+        task.wait()
+    end
+    return LocalPlayer.Character
+end
+
+local function teleportAndTrigger()
+    local character = getCharacter()
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+
+    local extinguisher = workspace:FindFirstChild("Fire Extinguisher")
+    if extinguisher and extinguisher:IsA("BasePart") then
+        hrp.CFrame = extinguisher.CFrame + Vector3.new(0, 3, 0)
+        task.wait(0.5)
+
+        for _, prompt in ipairs(workspace:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") then
+                local distance = (prompt.Parent.Position - hrp.Position).Magnitude
+                if distance <= prompt.MaxActivationDistance then
+                    fireproximityprompt(prompt)
+                end
+            end
+        end
+    else
+        warn("Fire Extinguisher not found in workspace.")
+    end
+end
+
+teleportAndTrigger()
+
+
+
+      end    
+}) Tab:AddButton({
+    Name = "Stash fire Extinguisher",
+    Callback = function()
+              local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local function findAndCloneExtinguisher()
+    local function checkAndClone(container)
+        if container then
+            for _, item in ipairs(container:GetChildren()) do
+                if item:IsA("Tool") and item.Name == "Fire Extinguisher" then
+                    local cloned = item:Clone()
+                    cloned.Parent = ReplicatedStorage
+                    print("Cloned Fire Extinguisher from:", container:GetFullName())
+                end
+            end
+        end
+    end
+
+    checkAndClone(LocalPlayer.Backpack)
+    checkAndClone(LocalPlayer.Character)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            checkAndClone(player.Backpack)
+            checkAndClone(player.Character)
+        end
+    end
+end
+
+findAndCloneExtinguisher()
+
+      end    
+}) Tab:AddButton({
+    Name = "Infinite Fire Extinguisher farm💀👨‍🦽🙏",
+    Callback = function()
+              local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local function giveExtinguisherToPlayer()
+    local stored = ReplicatedStorage:FindFirstChild("Fire Extinguisher")
+    if stored and stored:IsA("Tool") then
+        local cloned = stored:Clone()
+        cloned.Parent = LocalPlayer.Backpack
+        print("Cloned Fire Extinguisher into your Backpack.")
+    else
+        warn("No Fire Extinguisher found in ReplicatedStorage.")
+    end
+end
+
+giveExtinguisherToPlayer()
+
+      end    
+}) Tab:AddButton({
+	Name = "collect key",
+	Callback = function()
+      		local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local function getCharacter()
+    while not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") do
+        task.wait()
+    end
+    return LocalPlayer.Character
+end
+
+local function teleportAndTrigger()
+    local character = getCharacter()
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+
+    local key = workspace:FindFirstChild("Shelter Key")
+    if key and key:IsA("BasePart") then
+        hrp.CFrame = key.CFrame + Vector3.new(0, 3, 0)
+        task.wait(0.5)
+
+        for _, prompt in ipairs(workspace:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") then
+                local distance = (prompt.Parent.Position - hrp.Position).Magnitude
+                if distance <= prompt.MaxActivationDistance then
+                    fireproximityprompt(prompt)
+                end
+            end
+        end
+    else
+        warn("Shelter Key not found in workspace.")
+    end
+end
+
+teleportAndTrigger()
+
+  	end    
+}) Tab:AddButton({
+	Name = "Stash the key",
+	Callback = function()
+      		local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local function findAndCloneKey()
+    local function checkAndClone(container)
+        if container then
+            for _, item in ipairs(container:GetChildren()) do
+                if item:IsA("Tool") and item.Name == "Shelter Key" then
+                    local cloned = item:Clone()
+                    cloned.Parent = ReplicatedStorage
+                    print("Cloned Shelter Key from:", container:GetFullName())
+                end
+            end
+        end
+    end
+
+    checkAndClone(LocalPlayer.Backpack)
+    checkAndClone(LocalPlayer.Character)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            checkAndClone(player.Backpack)
+            checkAndClone(player.Character)
+        end
+    end
+end
+
+findAndCloneKey()
+
+  	end    
+}) Tab:AddButton({
+	Name = "inf key farm (tf is the point of it all?)",
+	Callback = function()
+      		local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local function giveKeyToPlayer()
+    local key = ReplicatedStorage:FindFirstChild("Shelter Key")
+    if key and key:IsA("Tool") then
+        local cloned = key:Clone()
+        cloned.Parent = LocalPlayer.Backpack
+        print("Cloned Shelter Key into your Backpack.")
+    else
+        warn("No Shelter Key found in ReplicatedStorage.")
+    end
+end
+
+giveKeyToPlayer()
+
+  	end    
 })
