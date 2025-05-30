@@ -120,19 +120,19 @@ local spawnPosition
 
 -- Create "Refresh" button
 local refreshButton = Instance.new("TextButton")
-refreshButton.Size = UDim2.new(0, 100, 0, 30)
-refreshButton.Position = UDim2.new(1, -110, 0.5, -45)  -- Restoring original position
+refreshButton.Size = UDim2.new(0, 65, 0, 20)
+refreshButton.Position = UDim2.new(1, -100, 0.5, -60)  -- Restoring original position
 refreshButton.Text = "Refresh"
-refreshButton.TextSize = 16
+refreshButton.TextSize = 12
 refreshButton.ZIndex = 10000000000
 refreshButton.Parent = screenGui
 
 -- Create "Respawn" button
 local respawnButton = Instance.new("TextButton")
-respawnButton.Size = UDim2.new(0, 100, 0, 30)
-respawnButton.Position = UDim2.new(1, -110, 0.5, 15)  -- Restoring original position
+respawnButton.Size = UDim2.new(0, 65, 0, 20)
+respawnButton.Position = UDim2.new(1, -100, 0.5, 0)  -- Restoring original position
 respawnButton.Text = "Respawn"
-respawnButton.TextSize = 16
+respawnButton.TextSize = 12
 respawnButton.ZIndex = 10000000000
 respawnButton.Parent = screenGui
 
@@ -165,10 +165,10 @@ end)
 
 -- Create "Jump" button
 local jumpButton = Instance.new("TextButton")
-jumpButton.Size = UDim2.new(0, 100, 0, 30)
-jumpButton.Position = UDim2.new(1, -110, 0.5, 65)  -- Restoring original position
+jumpButton.Size = UDim2.new(0, 65, 0, 20)
+jumpButton.Position = UDim2.new(1, -100, 0.5, 40)  -- Restoring original position
 jumpButton.Text = "Jump"
-jumpButton.TextSize = 16
+jumpButton.TextSize = 12
 jumpButton.ZIndex = 10000000000
 jumpButton.Parent = screenGui
 
