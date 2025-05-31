@@ -1,0 +1,65 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- GUI setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.ResetOnSpawn = false
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 120, 0, 40)
+toggleButton.Position = UDim2.new(0, 20, 0, 20)
+toggleButton.Text = "Lock Camera: ON"
+toggleButton.Parent = screenGui
+
+-- Camera lock starts enabled
+local cameraLockEnabled = true
+LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson -- Start in first person
+
+toggleButton.MouseButton1Click:Connect(function()
+	cameraLockEnabled = not cameraLockEnabled
+	toggleButton.Text = "Lock Camera: " .. (cameraLockEnabled and "ON" or "OFF")
+
+	if cameraLockEnabled then
+		LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+	else
+		LocalPlayer.CameraMode = Enum.CameraMode.Classic
+	end
+end)
+
+-- Get nearest alive player
+local function getNearestPlayer()
+	local closestPlayer = nil
+	local shortestDistance = math.huge
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+			local head = player.Character:FindFirstChild("Head")
+			if head and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
+				local dist = (head.Position - LocalPlayer.Character.Head.Position).Magnitude
+				if dist < shortestDistance then
+					shortestDistance = dist
+					closestPlayer = player
+				end
+			end
+		end
+	end
+
+	return closestPlayer
+end
+
+-- Lock camera rotation only when enabled
+RunService.RenderStepped:Connect(function()
+	if not cameraLockEnabled then return end
+	if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return end
+
+	local camPos = Camera.CFrame.Position
+	local targetPlayer = getNearestPlayer()
+
+	if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("Head") then
+		local targetPos = targetPlayer.Character.Head.Position
+		Camera.CFrame = CFrame.new(camPos, targetPos)
+	end
+end)
