@@ -1,0 +1,267 @@
+-- VelocityBlastGUI.lua
+-- Place this LocalScript under StarterGui > ScreenGui
+
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+
+-- Flags and settings
+local enabled = false
+local mode = "Normal" -- "Normal" or "Tornado"
+local vectorText = "9e37"
+local tornadoSpinSpeed = 80
+local tornadoUpwardSpeed = 50
+local tornadoRadius = 40
+
+-- Utility: detect if a part belongs to any player's character
+local function isPlayerPart(part)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local char = plr.Character
+        if char and part:IsDescendantOf(char) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Parse input string into Vector3
+local function parseVectorInput(input)
+    local nums = {}
+    for token in input:gmatch("[^%s]+") do
+        local n = tonumber(token)
+        if not n then return nil end
+        table.insert(nums, n)
+    end
+    if #nums == 1 then
+        return Vector3.new(nums[1], nums[1], nums[1])
+    elseif #nums == 3 then
+        return Vector3.new(nums[1], nums[2], nums[3])
+    end
+    return nil
+end
+
+-- Normal fling mode velocity application
+local function applyNormalFling()
+    local vec = parseVectorInput(vectorText)
+    if not vec then return end
+
+    local originPart = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not originPart then return end
+
+    local origin = originPart.Position
+    local magnitude = vec.Magnitude
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= "Baseplate" then
+            local direction = (obj.Position - origin).Unit
+            local velocity = direction * magnitude
+            obj.CanCollide = false
+            obj.Velocity = velocity
+            obj.AssemblyLinearVelocity = velocity
+        end
+    end
+end
+
+-- Tornado mode velocity application (infinite range with pull to orbit)
+local function applyTornadoMode()
+    local originPart = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not originPart then return end
+    local origin = originPart.Position
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= "Baseplate" then
+            local relative = obj.Position - origin
+            local flatDirection = Vector3.new(relative.X, 0, relative.Z)
+            local currentDistance = flatDirection.Magnitude
+            if currentDistance == 0 then currentDistance = 0.01 end -- prevent divide by zero
+
+            local desiredDirection = flatDirection.Unit
+            local spinDirection = Vector3.new(-desiredDirection.Z, 0, desiredDirection.X) -- perpendicular vector for spin
+
+            local pullForce = 0
+            if currentDistance < tornadoRadius then
+                -- Inside orbit zone: no outward pull, just orbit + up
+                pullForce = 0
+            else
+                -- Outside orbit zone: apply pull force toward the tornado radius boundary
+                pullForce = (tornadoRadius - currentDistance)
+            end
+
+            -- Calculate velocity components:
+            -- Spin (orbit)
+            local spinVelocity = spinDirection * tornadoSpinSpeed
+            -- Upwards lift
+            local upwardVelocity = Vector3.new(0, tornadoUpwardSpeed, 0)
+            -- Pull towards orbit zone boundary (positive if outside)
+            local pullVelocity = desiredDirection * pullForce * 2
+
+            local velocity = spinVelocity + upwardVelocity + pullVelocity
+
+            obj.CanCollide = false
+            obj.Velocity = velocity
+            obj.AssemblyLinearVelocity = velocity
+
+            -- PlatformStand on NPC Humanoids
+            local humanoid = obj.Parent and obj.Parent:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.PlatformStand = true
+            end
+        end
+    end
+end
+
+-- Reset velocities to zero
+local function resetVelocities()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= "Baseplate" then
+            obj.Velocity = Vector3.zero
+            obj.AssemblyLinearVelocity = Vector3.zero
+            -- Remove PlatformStand when tornado off
+            local humanoid = obj.Parent and obj.Parent:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.PlatformStand = false
+            end
+        end
+    end
+end
+
+-- Main loop runner
+local function runBlastLoop()
+    while enabled do
+        if mode == "Normal" then
+            applyNormalFling()
+        elseif mode == "Tornado" then
+            applyTornadoMode()
+        end
+        task.wait(0.1)
+    end
+end
+
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "VelocityBlastGUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 100
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+-- Toggle button
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 24, 0, 24)
+toggleBtn.Position = UDim2.new(0.5, -130, 0, 10)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 16
+toggleBtn.Text = "O"
+toggleBtn.ZIndex = 2
+toggleBtn.Parent = screenGui
+
+-- Mode button
+local modeBtn = Instance.new("TextButton")
+modeBtn.Size = UDim2.new(0, 140, 0, 24)
+modeBtn.Position = UDim2.new(0.5, -100, 0, 10)
+modeBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+modeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+modeBtn.Font = Enum.Font.SourceSansBold
+modeBtn.TextSize = 14
+modeBtn.Text = "Mode: Normal Fling"
+modeBtn.ZIndex = 2
+modeBtn.Parent = screenGui
+
+-- Vector input
+local inputBox = Instance.new("TextBox")
+inputBox.Size = UDim2.new(0, 120, 0, 24)
+inputBox.Position = UDim2.new(0.5, 45, 0, 10) -- right of mode button
+inputBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+inputBox.TextColor3 = Color3.fromRGB(0, 0, 0)
+inputBox.Font = Enum.Font.SourceSans
+inputBox.TextSize = 16
+inputBox.PlaceholderText = "Vector (e.g. 1e5)"
+inputBox.Text = vectorText
+inputBox.ClearTextOnFocus = false
+inputBox.ZIndex = 2
+inputBox.Parent = screenGui
+
+-- Tornado controls creation function
+local function createInput(default, posX)
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0, 80, 0, 20)
+    box.Position = UDim2.new(0.5, posX, 0, 38)
+    box.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+    box.TextColor3 = Color3.fromRGB(0, 0, 0)
+    box.Font = Enum.Font.SourceSans
+    box.TextSize = 14
+    box.Text = tostring(default)
+    box.Visible = false
+    box.ZIndex = 2
+    box.Parent = screenGui
+    return box
+end
+
+local spinInput = createInput(tornadoSpinSpeed, -100)
+local upwardInput = createInput(tornadoUpwardSpeed, -10)
+local radiusInput = createInput(tornadoRadius, 80)
+
+-- Input handlers
+inputBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        local newText = inputBox.Text
+        if parseVectorInput(newText) then
+            vectorText = newText
+        else
+            inputBox.Text = vectorText
+        end
+    end
+end)
+
+spinInput.FocusLost:Connect(function()
+    local val = tonumber(spinInput.Text)
+    if val then tornadoSpinSpeed = val end
+end)
+
+upwardInput.FocusLost:Connect(function()
+    local val = tonumber(upwardInput.Text)
+    if val then tornadoUpwardSpeed = val end
+end)
+
+radiusInput.FocusLost:Connect(function()
+    local val = tonumber(radiusInput.Text)
+    if val then tornadoRadius = val end
+end)
+
+-- Toggle fling
+toggleBtn.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    toggleBtn.Text = enabled and "X" or "O"
+    toggleBtn.BackgroundColor3 = enabled and Color3.fromRGB(150, 50, 50) or Color3.fromRGB(30, 30, 30)
+
+    if enabled then
+        task.spawn(runBlastLoop)
+    else
+        resetVelocities()
+    end
+end)
+
+-- Toggle mode
+modeBtn.MouseButton1Click:Connect(function()
+    if mode == "Normal" then
+        mode = "Tornado"
+        modeBtn.Text = "Mode: Tornado Mode"
+        inputBox.TextEditable = false
+        spinInput.Visible = true
+        upwardInput.Visible = true
+        radiusInput.Visible = true
+    else
+        mode = "Normal"
+        modeBtn.Text = "Mode: Normal Fling"
+        inputBox.TextEditable = true
+        spinInput.Visible = false
+        upwardInput.Visible = false
+        radiusInput.Visible = false
+    end
+
+    -- If enabled, immediately apply velocity according to new mode
+    if enabled then
+        task.spawn(runBlastLoop)
+    end
+end)
