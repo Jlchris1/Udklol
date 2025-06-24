@@ -1,0 +1,353 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local localPlayer = Players.LocalPlayer
+
+-- Flags and settings
+local enabled = false
+local tornadoSpinSpeed = 80
+local tornadoUpwardSpeed = 50
+local tornadoRadius = 40
+local tornadoWindfield = 100
+local tornadoFunnelSpread = 20
+local tornadoMoveSpeed = 10
+local maxWanderDistance = 500
+local randomPathing = false
+
+-- Track multiple tornados
+local tornadoes = {} -- each tornado: {position = Vector3, parts = {BasePart}}
+
+-- GUI references
+local screenGui, toggleBtn, summonBtn, spinInput, upwardInput, radiusInput, windfieldInput, funnelInput, moveSpeedInput, maxDistanceInput, pathingToggle, hideToggle
+
+-- Parts to ignore completely (like baseplate or loopcheck parts)
+local ignoredPartsNames = {
+    ["Baseplate"] = true,
+    -- Add your loopcheck parts names here, e.g.:
+    -- ["LoopCheckPartName"] = true,
+}
+
+-- Utility: detect if a part belongs to any player's character
+local function isPlayerPart(part)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local char = plr.Character
+        if char and part:IsDescendantOf(char) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Utility: check if part is really unanchored (to avoid false positives)
+local function isReallyUnanchored(part)
+    -- Only unanchored and not ignored parts qualify
+    if part.Anchored then return false end
+    if ignoredPartsNames[part.Name] then return false end
+    if isPlayerPart(part) then return false end
+    return true
+end
+
+-- Generate a new random position within the local player's range
+local function getRandomTornadoPosition()
+    local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+    local base = root.Position
+    local offset = Vector3.new(
+        math.random(-maxWanderDistance, maxWanderDistance),
+        0,
+        math.random(-maxWanderDistance, maxWanderDistance)
+    )
+    return base + offset
+end
+
+-- Apply tornado forces on parts assigned to a specific tornado
+local function applyTornadoMode(tornado)
+    local tornadoPosition = tornado.position
+    for _, obj in ipairs(tornado.parts) do
+        if obj and obj:IsA("BasePart") and isReallyUnanchored(obj) then
+            local relative = obj.Position - tornadoPosition
+            local flatDirection = Vector3.new(relative.X, 0, relative.Z)
+            local currentDistance = flatDirection.Magnitude
+            if currentDistance == 0 then currentDistance = 0.01 end
+
+            local directionUnit = flatDirection.Unit
+            local spinDirection = Vector3.new(-directionUnit.Z, 0, directionUnit.X)
+
+            local velocity = Vector3.zero
+
+            if currentDistance < tornadoRadius then
+                -- Inside rotation zone
+                local randomness = Vector3.new(
+                    math.random(-tornadoFunnelSpread, tornadoFunnelSpread),
+                    0,
+                    math.random(-tornadoFunnelSpread, tornadoFunnelSpread)
+                )
+                local spinVelocity = spinDirection * tornadoSpinSpeed + randomness
+                local upwardVelocity = Vector3.new(0, tornadoUpwardSpeed, 0)
+                velocity = spinVelocity + upwardVelocity
+            elseif currentDistance < tornadoWindfield then
+                -- In windfield pull zone
+                local pullStrength = (1 - (currentDistance / tornadoWindfield)) * tornadoSpinSpeed
+                velocity = -directionUnit * pullStrength
+            else
+                velocity = Vector3.zero
+            end
+
+            obj.CanCollide = false
+            obj.Velocity = velocity
+            obj.AssemblyLinearVelocity = velocity
+
+            local humanoid = obj.Parent and obj.Parent:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.PlatformStand = true
+            end
+        end
+    end
+end
+
+-- Update tornado movement if random pathing is enabled
+local function tornadoWanderLoop(tornado)
+    while enabled do
+        if randomPathing then
+            local newTarget = getRandomTornadoPosition()
+            if newTarget then
+                local direction = (newTarget - tornado.position)
+                local distance = direction.Magnitude
+                if distance > 0 then
+                    direction = direction.Unit
+                    local travelTime = math.min(distance / tornadoMoveSpeed, 30)
+                    local startTime = tick()
+                    local startPos = tornado.position
+
+                    while tick() - startTime < travelTime and enabled and randomPathing do
+                        local alpha = (tick() - startTime) / travelTime
+                        tornado.position = startPos:Lerp(newTarget, alpha)
+                        task.wait()
+                    end
+
+                    tornado.position = newTarget
+                    task.wait(math.random(1, 3))
+                end
+            end
+        else
+            local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                tornado.position = root.Position
+            end
+            task.wait(0.5)
+        end
+    end
+end
+
+-- Main tornado loop applying forces for all tornadoes
+local function runBlastLoop()
+    while enabled do
+        for _, tornado in ipairs(tornadoes) do
+            applyTornadoMode(tornado)
+        end
+        task.wait(0.1)
+    end
+end
+
+-- Distribute parts evenly among all tornadoes
+local function distributePartsToTornadoes()
+    -- Gather all valid parts in workspace
+    local validParts = {}
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and isReallyUnanchored(obj) then
+            table.insert(validParts, obj)
+        end
+    end
+
+    local tornadoCount = #tornadoes
+    if tornadoCount == 0 then return end
+
+    -- Clear previous parts assignment
+    for _, tornado in ipairs(tornadoes) do
+        tornado.parts = {}
+    end
+
+    -- Distribute parts evenly
+    for i, part in ipairs(validParts) do
+        local idx = ((i - 1) % tornadoCount) + 1
+        table.insert(tornadoes[idx].parts, part)
+    end
+end
+
+-- Create a new tornado at a random position near player or at player
+local function createNewTornado()
+    local pos = getRandomTornadoPosition()
+    if not pos then
+        -- fallback to player's HumanoidRootPart
+        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        pos = root and root.Position or Vector3.new(0, 0, 0)
+    end
+    local newTornado = {
+        position = pos,
+        parts = {}
+    }
+    table.insert(tornadoes, newTornado)
+    distributePartsToTornadoes()
+    task.spawn(tornadoWanderLoop, newTornado)
+end
+
+-- GUI Setup
+screenGui = Instance.new("ScreenGui")
+screenGui.Name = "TornadoBlastGUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 100
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+-- Hide/Show GUI toggle
+hideToggle = Instance.new("TextButton")
+hideToggle.Size = UDim2.new(0, 40, 0, 20)
+hideToggle.Position = UDim2.new(0, 10, 0, 10)
+hideToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+hideToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+hideToggle.Font = Enum.Font.SourceSansBold
+hideToggle.TextSize = 14
+hideToggle.Text = "Hide"
+hideToggle.Parent = screenGui
+
+local inputsVisible = true
+local function toggleInputs()
+    inputsVisible = not inputsVisible
+    local state = inputsVisible
+    for _, child in ipairs(screenGui:GetChildren()) do
+        if child:IsA("TextBox") or child:IsA("TextLabel") or child.Name == "PathToggle" or child == summonBtn then
+            child.Visible = state
+        end
+    end
+end
+
+hideToggle.MouseButton1Click:Connect(function()
+    toggleInputs()
+    hideToggle.Text = inputsVisible and "Hide" or "Show"
+end)
+
+-- Toggle button
+toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 24, 0, 24)
+toggleBtn.Position = UDim2.new(0.5, -130, 0, 10)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 16
+toggleBtn.Text = "O"
+toggleBtn.ZIndex = 2
+toggleBtn.Parent = screenGui
+
+-- Summon Tornado button
+summonBtn = Instance.new("TextButton")
+summonBtn.Size = UDim2.new(0, 120, 0, 24)
+summonBtn.Position = UDim2.new(0.5, 20, 0, 10)
+summonBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+summonBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+summonBtn.Font = Enum.Font.SourceSansBold
+summonBtn.TextSize = 14
+summonBtn.Text = "Summon Tornado"
+summonBtn.ZIndex = 2
+summonBtn.Parent = screenGui
+
+-- Pathing toggle
+pathingToggle = Instance.new("TextButton")
+pathingToggle.Name = "PathToggle"
+pathingToggle.Size = UDim2.new(0, 120, 0, 24)
+pathingToggle.Position = UDim2.new(0.5, -100, 0, 40)
+pathingToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+pathingToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+pathingToggle.Font = Enum.Font.SourceSansBold
+pathingToggle.TextSize = 14
+pathingToggle.Text = "Path: Follow Player"
+pathingToggle.Parent = screenGui
+
+-- Generic labeled textbox creator
+local function createLabeledTextbox(labelText, default, posY)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 160, 0, 16)
+    label.Position = UDim2.new(0.5, -80, 0, posY)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Font = Enum.Font.SourceSans
+    label.TextSize = 14
+    label.ZIndex = 2
+    label.Parent = screenGui
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0, 160, 0, 20)
+    box.Position = UDim2.new(0.5, -80, 0, posY + 18)
+    box.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+    box.TextColor3 = Color3.fromRGB(0, 0, 0)
+    box.Font = Enum.Font.SourceSans
+    box.TextSize = 14
+    box.Text = tostring(default)
+    box.ZIndex = 2
+    box.Parent = screenGui
+
+    return box
+end
+
+spinInput = createLabeledTextbox("Spin Speed", tornadoSpinSpeed, 70)
+upwardInput = createLabeledTextbox("Upward Speed", tornadoUpwardSpeed, 110)
+radiusInput = createLabeledTextbox("Rotation Radius", tornadoRadius, 150)
+windfieldInput = createLabeledTextbox("Windfield Radius", tornadoWindfield, 190)
+funnelInput = createLabeledTextbox("Funnel Spread", tornadoFunnelSpread, 230)
+moveSpeedInput = createLabeledTextbox("Tornado Movement Speed", tornadoMoveSpeed, 270)
+maxDistanceInput = createLabeledTextbox("Max Distance from Player", maxWanderDistance, 310)
+
+-- Input updates
+spinInput.FocusLost:Connect(function()
+    local val = tonumber(spinInput.Text)
+    if val then tornadoSpinSpeed = val end
+end)
+upwardInput.FocusLost:Connect(function()
+    local val = tonumber(upwardInput.Text)
+    if val then tornadoUpwardSpeed = val end
+end)
+radiusInput.FocusLost:Connect(function()
+    local val = tonumber(radiusInput.Text)
+    if val then tornadoRadius = val end
+end)
+windfieldInput.FocusLost:Connect(function()
+    local val = tonumber(windfieldInput.Text)
+    if val then tornadoWindfield = val end
+end)
+funnelInput.FocusLost:Connect(function()
+    local val = tonumber(funnelInput.Text)
+    if val then tornadoFunnelSpread = val end
+end)
+moveSpeedInput.FocusLost:Connect(function()
+    local val = tonumber(moveSpeedInput.Text)
+    if val then tornadoMoveSpeed = val end
+end)
+maxDistanceInput.FocusLost:Connect(function()
+    local val = tonumber(maxDistanceInput.Text)
+    if val then maxWanderDistance = val end
+end)
+
+pathingToggle.MouseButton1Click:Connect(function()
+    randomPathing = not randomPathing
+    pathingToggle.Text = randomPathing and "Path: Random" or "Path: Follow Player"
+end)
+
+toggleBtn.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    toggleBtn.Text = enabled and "X" or "O"
+    toggleBtn.BackgroundColor3 = enabled and Color3.fromRGB(180, 0, 0) or Color3.fromRGB(30, 30, 30)
+
+    if enabled then
+        tornadoes = {}
+        createNewTornado()
+        task.spawn(runBlastLoop)
+    else
+        -- Stop all tornado movement loops (Note: could be enhanced with task cancellation if needed)
+        tornadoes = {}
+    end
+end)
+
+-- Summon tornado button click handler
+summonBtn.MouseButton1Click:Connect(function()
+    if not enabled then return end
+    createNewTornado()
+end)
