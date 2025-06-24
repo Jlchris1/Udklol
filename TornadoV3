@@ -1,0 +1,277 @@
+-- TornadoBlastGUI.lua (Enhanced with Disable Extra Features Toggle and Pickup Logic Adjustments + Whitelist System)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local localPlayer = Players.LocalPlayer
+local workspace = game:GetService("Workspace")
+
+local enabled = false
+local tornadoSpinSpeed = 80
+local tornadoUpwardSpeed = 50
+local tornadoRadius = 40
+local tornadoWindfield = 100
+local tornadoFunnelSpread = 20
+local tornadoMoveSpeed = 10
+local maxWanderDistance = 500
+local windfieldStrength = 1
+
+local tornadoPosition = nil
+local randomPathing = false
+local consumedParts = {}
+local pickedUpByFunnel = {}
+local whitelistedParts = {}
+local baseplateName = "Baseplate"
+local disableExtras = false
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "TornadoBlastGUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 100
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+local hideToggle = Instance.new("TextButton")
+hideToggle.Size = UDim2.new(0, 40, 0, 20)
+hideToggle.Position = UDim2.new(0, 10, 0, 10)
+hideToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+hideToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+hideToggle.Font = Enum.Font.SourceSansBold
+hideToggle.TextSize = 14
+hideToggle.Text = "Hide"
+hideToggle.Parent = screenGui
+
+local inputsVisible = true
+local function toggleInputs()
+    inputsVisible = not inputsVisible
+    for _, child in ipairs(screenGui:GetChildren()) do
+        if child:IsA("TextBox") or child:IsA("TextLabel") or child.Name:match("^Path") then
+            local hide = disableExtras and (child.Text == "Windfield" or child.Text == "Windfield Strength" or child.Text == "Funnel Spread")
+            child.Visible = inputsVisible and not hide
+        end
+    end
+end
+
+hideToggle.MouseButton1Click:Connect(function()
+    toggleInputs()
+    hideToggle.Text = inputsVisible and "Hide" or "Show"
+end)
+
+local function createLabeledTextbox(labelText, default, index)
+    local screenWidth = 800
+    local boxWidth = 170
+    local boxesPerRow = math.floor(screenWidth / boxWidth)
+    local row = math.floor(index / boxesPerRow)
+    local col = index % boxesPerRow
+    local xOffset = 0.075 + 0.2125 * col
+    local yOffset = 60 + (row * 60)
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 160, 0, 16)
+    label.Position = UDim2.new(xOffset, 0, 0, yOffset)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Font = Enum.Font.SourceSans
+    label.TextSize = 14
+    label.ZIndex = 2
+    label.Parent = screenGui
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0, 160, 0, 20)
+    box.Position = UDim2.new(xOffset, 0, 0, yOffset + 18)
+    box.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+    box.TextColor3 = Color3.fromRGB(0, 0, 0)
+    box.Font = Enum.Font.SourceSans
+    box.TextSize = 14
+    box.Text = tostring(default)
+    box.ZIndex = 2
+    box.Parent = screenGui
+
+    return box
+end
+
+local inputBoxes = {
+    {"Spin Speed", tornadoSpinSpeed},
+    {"Upward Speed", tornadoUpwardSpeed},
+    {"Rotation Radius", tornadoRadius},
+    {"Windfield", tornadoWindfield},
+    {"Funnel Spread", tornadoFunnelSpread},
+    {"Tornado Movement Speed", tornadoMoveSpeed},
+    {"Max Distance from Player", maxWanderDistance},
+    {"Windfield Strength", windfieldStrength},
+}
+
+local references = {}
+for i, data in ipairs(inputBoxes) do
+    references[i] = createLabeledTextbox(data[1], data[2], i - 1)
+end
+
+references[1].FocusLost:Connect(function() local v = tonumber(references[1].Text); if v then tornadoSpinSpeed = v end end)
+references[2].FocusLost:Connect(function() local v = tonumber(references[2].Text); if v then tornadoUpwardSpeed = v end end)
+references[3].FocusLost:Connect(function() local v = tonumber(references[3].Text); if v then tornadoRadius = v end end)
+references[4].FocusLost:Connect(function() local v = tonumber(references[4].Text); if v then tornadoWindfield = v end end)
+references[5].FocusLost:Connect(function() local v = tonumber(references[5].Text); if v then tornadoFunnelSpread = v end end)
+references[6].FocusLost:Connect(function() local v = tonumber(references[6].Text); if v then tornadoMoveSpeed = v end end)
+references[7].FocusLost:Connect(function() local v = tonumber(references[7].Text); if v then maxWanderDistance = v end end)
+references[8].FocusLost:Connect(function() local v = tonumber(references[8].Text); if v then windfieldStrength = v end end)
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 24, 0, 24)
+toggleBtn.Position = UDim2.new(0.5, -130, 0, 10)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 16
+toggleBtn.Text = "O"
+toggleBtn.ZIndex = 2
+toggleBtn.Parent = screenGui
+
+local pathingToggle = Instance.new("TextButton")
+pathingToggle.Name = "PathToggle"
+pathingToggle.Size = UDim2.new(0, 120, 0, 24)
+pathingToggle.Position = UDim2.new(0.5, -100, 0, 40)
+pathingToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+pathingToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+pathingToggle.Font = Enum.Font.SourceSansBold
+pathingToggle.TextSize = 14
+pathingToggle.Text = "Path: Follow Player"
+pathingToggle.Parent = screenGui
+
+pathingToggle.MouseButton1Click:Connect(function()
+    randomPathing = not randomPathing
+    pathingToggle.Text = randomPathing and "Path: Random" or "Path: Follow Player"
+end)
+
+local disableExtrasToggle = Instance.new("TextButton")
+disableExtrasToggle.Name = "DisableExtrasToggle"
+disableExtrasToggle.Size = UDim2.new(0, 150, 0, 24)
+disableExtrasToggle.Position = UDim2.new(0.5, -75, 0, 70)
+disableExtrasToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+disableExtrasToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+disableExtrasToggle.Font = Enum.Font.SourceSansBold
+disableExtrasToggle.TextSize = 14
+disableExtrasToggle.Text = "Disable Extra Features"
+disableExtrasToggle.Parent = screenGui
+
+disableExtrasToggle.MouseButton1Click:Connect(function()
+    disableExtras = not disableExtras
+    disableExtrasToggle.Text = disableExtras and "Extras Disabled" or "Disable Extra Features"
+    toggleInputs()
+end)
+
+local function isPlayerPart(part)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character and part:IsDescendantOf(plr.Character) then
+            return true
+        end
+    end
+    return false
+end
+
+local function applyTornado(position)
+    local parts = disableExtras and workspace:GetDescendants() or workspace:GetPartBoundsInRadius(position, tornadoWindfield)
+    for _, obj in ipairs(parts) do
+        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
+            if not whitelistedParts[obj] then
+                local relative = obj.Position - position
+                local flatDir = Vector3.new(relative.X, 0, relative.Z)
+                local dist = flatDir.Magnitude
+                local dir = flatDir.Magnitude > 0 and flatDir.Unit or Vector3.new()
+                local spinDir = Vector3.new(-dir.Z, 0, dir.X)
+
+                if dist < tornadoRadius then
+                    pickedUpByFunnel[obj] = true
+                    whitelistedParts[obj] = true
+                elseif not disableExtras and dist <= tornadoWindfield then
+                    consumedParts[obj] = true
+                    whitelistedParts[obj] = true
+                end
+            end
+
+            if whitelistedParts[obj] then
+                local relative = obj.Position - position
+                local flatDir = Vector3.new(relative.X, 0, relative.Z)
+                local dist = flatDir.Magnitude
+                local dir = flatDir.Magnitude > 0 and flatDir.Unit or Vector3.new()
+                local spinDir = Vector3.new(-dir.Z, 0, dir.X)
+
+                if pickedUpByFunnel[obj] then
+                    obj.CanCollide = false
+                    local offset = dir * (tornadoRadius - dist)
+                    local randomness = Vector3.new(math.random(-tornadoFunnelSpread, tornadoFunnelSpread), 0, math.random(-tornadoFunnelSpread, tornadoFunnelSpread))
+                    local velocity = spinDir * tornadoSpinSpeed + offset + randomness + Vector3.new(0, tornadoUpwardSpeed, 0)
+                    obj.AssemblyLinearVelocity = velocity
+                else
+                    obj.CanCollide = not disableExtras
+                    local pullStrength = disableExtras and 1 or ((1 - (dist / tornadoWindfield)) * windfieldStrength)
+                    obj.AssemblyLinearVelocity = -dir * pullStrength
+                end
+            end
+        end
+    end
+end
+
+local function tornadoLoop()
+    while enabled do
+        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            if not randomPathing then
+                tornadoPosition = root.Position
+            end
+            applyTornado(tornadoPosition)
+        end
+        task.wait(0.1)
+    end
+end
+
+local function wanderLoop()
+    while enabled do
+        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root and randomPathing then
+            local targetPos = root.Position + Vector3.new(math.random(-maxWanderDistance, maxWanderDistance), 0, math.random(-maxWanderDistance, maxWanderDistance))
+            if tornadoPosition then
+                local direction = targetPos - tornadoPosition
+                local distance = direction.Magnitude
+                local maxStep = tornadoMoveSpeed * 0.1
+                if distance > 0.01 then
+                    local moveStep = direction.Unit * math.min(distance, maxStep)
+                    tornadoPosition += moveStep
+                end
+            else
+                tornadoPosition = targetPos
+            end
+        end
+        task.wait(math.random(1, 30))
+    end
+end
+
+toggleBtn.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    toggleBtn.Text = enabled and "X" or "O"
+    if enabled then
+        consumedParts = {}
+        pickedUpByFunnel = {}
+        whitelistedParts = {}
+        task.spawn(tornadoLoop)
+        task.spawn(wanderLoop)
+    else
+        for part in pairs(consumedParts) do
+            if part and part:IsA("BasePart") then
+                part.AssemblyLinearVelocity = Vector3.zero
+                part.CanCollide = true
+            end
+        end
+        for part in pairs(pickedUpByFunnel) do
+            if part and part:IsA("BasePart") then
+                part.AssemblyLinearVelocity = Vector3.zero
+                part.CanCollide = true
+            end
+        end
+        for part in pairs(whitelistedParts) do
+            if part and part:IsA("BasePart") then
+                part.AssemblyLinearVelocity = Vector3.zero
+                part.CanCollide = true
+            end
+        end
+    end
+end)
