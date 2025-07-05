@@ -336,7 +336,7 @@ Toggle.TextWrapped = true
 
 -- Scripts:
 
-local function RRRXDKQ_fake_script() -- FlyGui.Script 
+local function ZVDREPQ_fake_script() -- FlyGui.Script 
 	local script = Instance.new('Script', FlyGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -347,8 +347,8 @@ local function RRRXDKQ_fake_script() -- FlyGui.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(RRRXDKQ_fake_script)()
-local function QXBMGB_fake_script() -- UnanchoredGui.Script 
+coroutine.wrap(ZVDREPQ_fake_script)()
+local function DXLF_fake_script() -- UnanchoredGui.Script 
 	local script = Instance.new('Script', UnanchoredGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -359,8 +359,8 @@ local function QXBMGB_fake_script() -- UnanchoredGui.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(QXBMGB_fake_script)()
-local function MZAA_fake_script() -- TornadoGui.Script 
+coroutine.wrap(DXLF_fake_script)()
+local function HLYVRB_fake_script() -- TornadoGui.Script 
 	local script = Instance.new('Script', TornadoGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -372,8 +372,8 @@ local function MZAA_fake_script() -- TornadoGui.Script
 	end)
 	
 end
-coroutine.wrap(MZAA_fake_script)()
-local function RUAOEF_fake_script() -- FlingGuiV2.Script 
+coroutine.wrap(HLYVRB_fake_script)()
+local function LXDW_fake_script() -- FlingGuiV2.Script 
 	local script = Instance.new('Script', FlingGuiV2)
 
 	-- Put this LocalScript inside your GUI button
@@ -384,8 +384,8 @@ local function RUAOEF_fake_script() -- FlingGuiV2.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(RUAOEF_fake_script)()
-local function MBCJ_fake_script() -- FlingGuiV1.Script 
+coroutine.wrap(LXDW_fake_script)()
+local function HEEL_fake_script() -- FlingGuiV1.Script 
 	local script = Instance.new('Script', FlingGuiV1)
 
 	-- Put this LocalScript inside your GUI button
@@ -396,8 +396,8 @@ local function MBCJ_fake_script() -- FlingGuiV1.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(MBCJ_fake_script)()
-local function WQIE_fake_script() -- ToolReachGui.Script 
+coroutine.wrap(HEEL_fake_script)()
+local function THJGTJ_fake_script() -- ToolReachGui.Script 
 	local script = Instance.new('Script', ToolReachGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -408,8 +408,8 @@ local function WQIE_fake_script() -- ToolReachGui.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(WQIE_fake_script)()
-local function DDLFV_fake_script() -- LockOn.Script 
+coroutine.wrap(THJGTJ_fake_script)()
+local function NFCONZM_fake_script() -- LockOn.Script 
 	local script = Instance.new('Script', LockOn)
 
 	-- Put this LocalScript inside your GUI button
@@ -420,8 +420,8 @@ local function DDLFV_fake_script() -- LockOn.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(DDLFV_fake_script)()
-local function DTBGJ_fake_script() -- TpToolGiver.Script 
+coroutine.wrap(NFCONZM_fake_script)()
+local function LVMHNL_fake_script() -- TpToolGiver.Script 
 	local script = Instance.new('Script', TpToolGiver)
 
 	-- Put this LocalScript inside your GUI button
@@ -432,8 +432,8 @@ local function DTBGJ_fake_script() -- TpToolGiver.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(DTBGJ_fake_script)()
-local function EYEI_fake_script() -- RespawnButtons.Script 
+coroutine.wrap(LVMHNL_fake_script)()
+local function EIVU_fake_script() -- RespawnButtons.Script 
 	local script = Instance.new('Script', RespawnButtons)
 
 	-- Put this LocalScript inside your GUI button
@@ -444,75 +444,62 @@ local function EYEI_fake_script() -- RespawnButtons.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(EYEI_fake_script)()
-local function YPMIXNH_fake_script() -- Tab1.TAAAAB1 
-	local script = Instance.new('Script', Tab1)
+coroutine.wrap(EIVU_fake_script)()
+local function WSGT_fake_script() -- Tab1.Tab1Script 
+	local script = Instance.new('LocalScript', Tab1)
 
-	-- Put this LocalScript inside your GUI button
 	local button = script.Parent
+	local mainFrame = button.Parent
+	
+	local tab1Container = mainFrame:WaitForChild("Tab1Container")
+	local tab2Container = mainFrame:WaitForChild("Tab2Container")
+	local tab3Container = mainFrame:WaitForChild("Tab3Container")
 	
 	button.MouseButton1Click:Connect(function()
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab1Container.Visible = true
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab1Container.Interactable = true
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab2Container.Visible = false
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab2Container.Interactable = false
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab3Container.Visible = false
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab3Container.Interactable = false -- Replace this with your custom code
-		-- Your code goes here:
+		tab1Container.Visible = true
+		tab2Container.Visible = false
+		tab3Container.Visible = false
 	end)
+	
 end
-coroutine.wrap(YPMIXNH_fake_script)()
-local function MXTSA_fake_script() -- Tab3.taaaab3 
-	local script = Instance.new('Script', Tab3)
+coroutine.wrap(WSGT_fake_script)()
+local function LJMHVSC_fake_script() -- Tab3.Tab3Script 
+	local script = Instance.new('LocalScript', Tab3)
 
-	-- Put this LocalScript inside your GUI button
 	local button = script.Parent
+	local mainFrame = button.Parent
+	
+	local tab1Container = mainFrame:WaitForChild("Tab1Container")
+	local tab2Container = mainFrame:WaitForChild("Tab2Container")
+	local tab3Container = mainFrame:WaitForChild("Tab3Container")
 	
 	button.MouseButton1Click:Connect(function()
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab3Container.Visible = true
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab3Container.Interactable = true
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab2Container.Visible = false
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab2Container.Interactable = false
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab1Container.Visible = false
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab1Container.Interactable = false -- Replace this with your custom code
-		-- Your code goes here:
+		tab1Container.Visible = false
+		tab2Container.Visible = false
+		tab3Container.Visible = true
 	end)
+	
 end
-coroutine.wrap(MXTSA_fake_script)()
-local function FBXK_fake_script() -- Tab2.taaaab2 
-	local script = Instance.new('Script', Tab2)
+coroutine.wrap(LJMHVSC_fake_script)()
+local function MUQMRS_fake_script() -- Tab2.Tab2Script 
+	local script = Instance.new('LocalScript', Tab2)
 
-	-- Put this LocalScript inside your GUI button
 	local button = script.Parent
+	local mainFrame = button.Parent
+	
+	local tab1Container = mainFrame:WaitForChild("Tab1Container")
+	local tab2Container = mainFrame:WaitForChild("Tab2Container")
+	local tab3Container = mainFrame:WaitForChild("Tab3Container")
 	
 	button.MouseButton1Click:Connect(function()
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab2Container.Visible = true
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab2Container.Interactable = true
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab1Container.Visible = false
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab1Container.Interactable = false
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab3Container.Visible = false
-	
-		Game.Players.LocalPlayer.PlayerGui.JLadminGui.mainframe.Tab3Container.Interactable = false -- Replace this with your custom code
-		-- Your code goes here:
+		tab1Container.Visible = false
+		tab2Container.Visible = true
+		tab3Container.Visible = false
 	end)
+	
 end
-coroutine.wrap(FBXK_fake_script)()
-local function RGXZX_fake_script() -- JLAdminGuiV1.RBGoutlineCode 
+coroutine.wrap(MUQMRS_fake_script)()
+local function KWSFJKN_fake_script() -- JLAdminGuiV1.RBGoutlineCode 
 	local script = Instance.new('LocalScript', JLAdminGuiV1)
 
 	local gui = script.Parent
@@ -528,8 +515,8 @@ local function RGXZX_fake_script() -- JLAdminGuiV1.RBGoutlineCode
 	end
 	
 end
-coroutine.wrap(RGXZX_fake_script)()
-local function OZDGDV_fake_script() -- DestroyGui.Script 
+coroutine.wrap(KWSFJKN_fake_script)()
+local function HYEGA_fake_script() -- DestroyGui.Script 
 	local script = Instance.new('Script', DestroyGui)
 
 	local button = script.Parent
@@ -542,8 +529,8 @@ local function OZDGDV_fake_script() -- DestroyGui.Script
 	end)
 	
 end
-coroutine.wrap(OZDGDV_fake_script)()
-local function FIGC_fake_script() -- AdonisBypass.Script 
+coroutine.wrap(HYEGA_fake_script)()
+local function PYUROT_fake_script() -- AdonisBypass.Script 
 	local script = Instance.new('Script', AdonisBypass)
 
 	-- Put this LocalScript inside your GUI button
@@ -554,8 +541,8 @@ local function FIGC_fake_script() -- AdonisBypass.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(FIGC_fake_script)()
-local function HQXRZP_fake_script() -- MainFrame.LocalScript 
+coroutine.wrap(PYUROT_fake_script)()
+local function ZICHIKF_fake_script() -- MainFrame.LocalScript 
 	local script = Instance.new('LocalScript', MainFrame)
 
 	local UIS = game:GetService('UserInputService')
@@ -593,8 +580,8 @@ local function HQXRZP_fake_script() -- MainFrame.LocalScript
 		end
 	end)
 end
-coroutine.wrap(HQXRZP_fake_script)()
-local function YLVNKOW_fake_script() -- Toggle.ToggleGuI 
+coroutine.wrap(ZICHIKF_fake_script)()
+local function RMZYVQ_fake_script() -- Toggle.ToggleGuI 
 	local script = Instance.new('LocalScript', Toggle)
 
 	-- Put this LocalScript inside the toggle button
@@ -610,8 +597,8 @@ local function YLVNKOW_fake_script() -- Toggle.ToggleGuI
 	end)
 	
 end
-coroutine.wrap(YLVNKOW_fake_script)()
-local function UKVEPF_fake_script() -- Toggle.Drag 
+coroutine.wrap(RMZYVQ_fake_script)()
+local function YCLHZIO_fake_script() -- Toggle.Drag 
 	local script = Instance.new('LocalScript', Toggle)
 
 	local UIS = game:GetService('UserInputService')
@@ -649,4 +636,4 @@ local function UKVEPF_fake_script() -- Toggle.Drag
 		end
 	end)
 end
-coroutine.wrap(UKVEPF_fake_script)()
+coroutine.wrap(YCLHZIO_fake_script)()
