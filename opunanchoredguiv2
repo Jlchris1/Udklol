@@ -1,14 +1,13 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
 
 local blackHoleActive = false
 local toggleState = false
 local targetPlayer = nil
-local pickupRadius = math.huge
 local switchDelay = 0.13
 local processedParts = {}
 local initiallyAnchoredParts = {}
+local anchoredOnce = false -- track if the 10-sec anchor timer has run once
 
 local localPlayer = Players.LocalPlayer
 local targetPosition = Vector3.new(0, 0, 0)
@@ -32,18 +31,11 @@ local Attachment1 = setupPlayer()
 local function isNPC(character)
     if not character or not character:IsA("Model") then return false end
 
-    -- If character has a Humanoid and isn't a player character, it's NPC
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if humanoid and not Players:GetPlayerFromCharacter(character) then
         return true
     end
 
-    -- Extra checks for NPC-like models:
-    -- If it has any descendants that are BaseParts and NOT a player's character, treat as NPC
-    -- and must not have a player attached
-    -- This helps catch NPCs with nonstandard humanoid setup
-
-    -- Check if it has at least 1 BasePart
     local hasParts = false
     for _, desc in ipairs(character:GetDescendants()) do
         if desc:IsA("BasePart") then
@@ -57,6 +49,15 @@ local function isNPC(character)
     end
 
     return false
+end
+
+local function disableCollisionsForCharacter(character)
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
 end
 
 local function ForcePart(v)
@@ -107,7 +108,6 @@ local function clearProcessedParts()
             if part:FindFirstChild("AlignPosition") then part:FindFirstChild("AlignPosition"):Destroy() end
             if part:FindFirstChild("Torque") then part:FindFirstChild("Torque"):Destroy() end
             part.CanCollide = true
-            -- Unanchor only if part was NOT originally anchored before toggling on
             if not initiallyAnchoredParts[part] then
                 part.Anchored = false
             else
@@ -117,14 +117,14 @@ local function clearProcessedParts()
     end
     processedParts = {}
     initiallyAnchoredParts = {}
+    anchoredOnce = false
 end
 
--- This function anchors all qualifying parts immediately,
--- waits 10 seconds, then unanchors all at once.
--- If toggle is disabled early, the wait is interrupted and all unanchor immediately.
+-- Anchor all relevant parts and NPC parts once for 10 seconds, then unanchor them all at once
 local function anchorAndDelayedUnanchorParts()
     unanchorTimerRunning = true
-    -- Gather all qualifying unanchored parts
+
+    -- Collect unanchored parts to anchor
     local candidateParts = {}
     for _, v in ipairs(Workspace:GetDescendants()) do
         if v:IsA("BasePart")
@@ -139,21 +139,28 @@ local function anchorAndDelayedUnanchorParts()
         end
     end
 
-    -- Anchor these parts immediately, mark them as newly anchored
+    -- Anchor parts and disable their collisions
     initiallyAnchoredParts = {}
     for _, part in ipairs(candidateParts) do
-        initiallyAnchoredParts[part] = false -- means newly anchored
+        initiallyAnchoredParts[part] = false
         part.Anchored = true
+        part.CanCollide = false
     end
 
-    -- Wait 10 seconds or until toggle disables
+    -- Also disable collisions for all NPC characters
+    for _, npcCandidate in ipairs(Workspace:GetChildren()) do
+        if isNPC(npcCandidate) then
+            disableCollisionsForCharacter(npcCandidate)
+        end
+    end
+
+    -- Wait 10 seconds or until toggle disabled
     local startTime = tick()
     while blackHoleActive and tick() - startTime < 10 do
         wait(0.1)
     end
 
-    -- If toggle disabled early, unanchor immediately now
-    -- If toggle still active after 10s, unanchor now too
+    -- Unanchor parts and apply ForcePart
     for _, part in ipairs(candidateParts) do
         if part and part.Parent and initiallyAnchoredParts[part] == false then
             part.Anchored = false
@@ -162,20 +169,20 @@ local function anchorAndDelayedUnanchorParts()
     end
 
     unanchorTimerRunning = false
+    anchoredOnce = true
 end
 
 local descendantAddedConn
 
 local function processWorkspaceParts()
-    -- Clear previous connection if any
+    -- Disconnect previous connection if any
     if descendantAddedConn then
         descendantAddedConn:Disconnect()
         descendantAddedConn = nil
     end
 
     if blackHoleActive then
-        -- Start anchor + delayed unanchor coroutine
-        if not unanchorTimerRunning then
+        if not unanchorTimerRunning and not anchoredOnce then
             unanchorCoroutine = coroutine.create(anchorAndDelayedUnanchorParts)
             coroutine.resume(unanchorCoroutine)
         end
@@ -221,6 +228,7 @@ local function toggleBlackHole()
         local newAttachment = Instance.new("Attachment", localPlayer.Character.HumanoidRootPart)
         Attachment1:Destroy()
         Attachment1 = newAttachment
+        anchoredOnce = false
         processWorkspaceParts()
         spawn(function()
             while blackHoleActive do
@@ -232,16 +240,19 @@ local function toggleBlackHole()
             end
         end)
     else
-        -- If toggle disabled, interrupt unanchor wait and immediately unanchor all anchored parts
+        -- Disable toggle, unanchor immediately
         blackHoleActive = false
-
-        -- If coroutine is running, resume and end it early
-        if unanchorTimerRunning and coroutine.status(unanchorCoroutine) == "suspended" then
-            -- Force the coroutine to end by setting blackHoleActive false and wait 0 so it can finish
-            -- No direct way to force coroutine stop; so we just rely on blackHoleActive flag checked inside
-            coroutine.resume(unanchorCoroutine)
+        if unanchorTimerRunning and unanchorCoroutine then
+            -- Cancel the wait and unanchor immediately
+            unanchorTimerRunning = false
+            -- Immediately unanchor parts marked
+            for part, anchored in pairs(initiallyAnchoredParts) do
+                if part and part.Parent and anchored == false then
+                    part.Anchored = false
+                    ForcePart(part)
+                end
+            end
         end
-
         clearProcessedParts()
     end
 end
@@ -252,6 +263,7 @@ local function toggleTargetSelected()
         local newAttachment = Instance.new("Attachment", localPlayer.Character.HumanoidRootPart)
         Attachment1:Destroy()
         Attachment1 = newAttachment
+        anchoredOnce = false
         processWorkspaceParts()
         spawn(function()
             while blackHoleActive do
@@ -268,13 +280,16 @@ local function toggleTargetSelected()
             end
         end)
     else
-        -- If toggle disabled, interrupt unanchor wait and immediately unanchor all anchored parts
         blackHoleActive = false
-
-        if unanchorTimerRunning and coroutine.status(unanchorCoroutine) == "suspended" then
-            coroutine.resume(unanchorCoroutine)
+        if unanchorTimerRunning and unanchorCoroutine then
+            unanchorTimerRunning = false
+            for part, anchored in pairs(initiallyAnchoredParts) do
+                if part and part.Parent and anchored == false then
+                    part.Anchored = false
+                    ForcePart(part)
+                end
+            end
         end
-
         clearProcessedParts()
     end
 end
@@ -323,10 +338,14 @@ window:Toggle("Continuous Loop Check", false, function(Value)
         spawn(function()
             while loopCheckActive do
                 if blackHoleActive then
-                    if toggleState then
-                        processWorkspaceParts()
-                    else
-                        toggleTargetSelected()
+                    -- Only check for new parts or unanchored parts that were anchored
+                    for _, v in ipairs(Workspace:GetDescendants()) do
+                        if v:IsA("BasePart") then
+                            -- Detect parts that changed from anchored to unanchored, process them
+                            if not v.Anchored and not processedParts[v] then
+                                ForcePart(v)
+                            end
+                        end
                     end
                 end
                 wait(0.5)
