@@ -1,5 +1,8 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+local localPlayer = Players.LocalPlayer
 
 local blackHoleActive = false
 local toggleState = false
@@ -7,27 +10,28 @@ local targetPlayer = nil
 local switchDelay = 0.13
 local processedParts = {}
 local initiallyAnchoredParts = {}
-local anchoredOnce = false -- track if the 10-sec anchor timer has run once
-
-local localPlayer = Players.LocalPlayer
-local targetPosition = Vector3.new(0, 0, 0)
-
+local anchoredOnce = false
 local unanchorTimerRunning = false
 local unanchorCoroutine
 
+local noclipConnection
+
+local Attachment1 = nil
+
+-- Setup initial Attachment
 local function setupPlayer()
     local Folder = Instance.new("Folder", Workspace)
     local Part = Instance.new("Part", Folder)
-    local Attachment1 = Instance.new("Attachment", Part)
     Part.Anchored = true
     Part.CanCollide = false
     Part.Transparency = 1
-    return Attachment1
+    local Attachment = Instance.new("Attachment", Part)
+    return Attachment
 end
 
-local Attachment1 = setupPlayer()
+Attachment1 = setupPlayer()
 
--- Improved NPC detection
+-- Detect if a character is an NPC (has Humanoid but not a player character)
 local function isNPC(character)
     if not character or not character:IsA("Model") then return false end
 
@@ -35,27 +39,60 @@ local function isNPC(character)
     if humanoid and not Players:GetPlayerFromCharacter(character) then
         return true
     end
-
-    local hasParts = false
-    for _, desc in ipairs(character:GetDescendants()) do
-        if desc:IsA("BasePart") then
-            hasParts = true
-            break
-        end
-    end
-
-    if hasParts and not Players:GetPlayerFromCharacter(character) then
-        return true
-    end
-
     return false
 end
 
-local function disableCollisionsForCharacter(character)
+-- Enable or disable collisions on a character's parts
+local function setCharacterCollision(character, canCollide)
     if not character then return end
     for _, part in ipairs(character:GetDescendants()) do
         if part:IsA("BasePart") then
-            part.CanCollide = false
+            part.CanCollide = canCollide
+        end
+    end
+end
+
+-- Enable noclip for local player but keep collisions with their own parts ON
+local function enableLocalPlayerNoclip(enable)
+    if enable then
+        -- Disconnect previous connection if any
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+
+        noclipConnection = RunService.Stepped:Connect(function()
+            local character = localPlayer.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                for _, part in ipairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        -- Only disable collisions with world geometry, keep collisions with player's parts
+                        -- So set CanCollide = false only for parts not belonging to the character
+                        -- But here we want the local player's parts to keep CanCollide = true
+                        -- So nothing changes for player's own parts here
+
+                        -- Also, to noclip through the world, we temporarily disable collision on HumanoidRootPart with world geometry
+                        -- The easiest way: force HumanoidRootPart.CanCollide = false
+                        -- But keep all other character parts CanCollide = true to prevent phasing inside themselves
+
+                        if part.Name == "HumanoidRootPart" then
+                            part.CanCollide = false
+                        else
+                            part.CanCollide = true
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+        -- Reset collisions on local player parts
+        local character = localPlayer.Character
+        if character then
+            setCharacterCollision(character, true)
         end
     end
 end
@@ -81,7 +118,8 @@ local function ForcePart(v)
         if v:FindFirstChild("Attachment") then v:FindFirstChild("Attachment"):Destroy() end
         if v:FindFirstChild("AlignPosition") then v:FindFirstChild("AlignPosition"):Destroy() end
         if v:FindFirstChild("Torque") then v:FindFirstChild("Torque"):Destroy() end
-        v.CanCollide = false
+
+        v.CanCollide = false -- parts affected by ForcePart should not collide with anything
 
         local Torque = Instance.new("Torque", v)
         Torque.Torque = Vector3.new(1e6, 1e6, 1e6)
@@ -120,11 +158,23 @@ local function clearProcessedParts()
     anchoredOnce = false
 end
 
--- Anchor all relevant parts and NPC parts once for 10 seconds, then unanchor them all at once
+local function disableCollisionsForCharacterButNotWorldCollision(character)
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            -- To prevent collision with world but allow collisions with other parts:
+            -- We can set CanCollide = true but set CollisionGroup to a group that ignores world collision
+            -- Since Roblox collision groups cannot be defined here, a workaround is to disable CanCollide and selectively re-enable on parts standing on.
+            -- For simplicity, set CanCollide = true for all parts now (per your request) and rely on noclip for player for world.
+            -- So just keep CanCollide = true for NPCs
+            part.CanCollide = true
+        end
+    end
+end
+
 local function anchorAndDelayedUnanchorParts()
     unanchorTimerRunning = true
 
-    -- Collect unanchored parts to anchor
     local candidateParts = {}
     for _, v in ipairs(Workspace:GetDescendants()) do
         if v:IsA("BasePart")
@@ -139,7 +189,6 @@ local function anchorAndDelayedUnanchorParts()
         end
     end
 
-    -- Anchor parts and disable their collisions
     initiallyAnchoredParts = {}
     for _, part in ipairs(candidateParts) do
         initiallyAnchoredParts[part] = false
@@ -147,20 +196,28 @@ local function anchorAndDelayedUnanchorParts()
         part.CanCollide = false
     end
 
-    -- Also disable collisions for all NPC characters
+    -- Enable collisions for NPC characters
     for _, npcCandidate in ipairs(Workspace:GetChildren()) do
         if isNPC(npcCandidate) then
-            disableCollisionsForCharacter(npcCandidate)
+            disableCollisionsForCharacterButNotWorldCollision(npcCandidate)
         end
     end
 
-    -- Wait 10 seconds or until toggle disabled
+    -- Disable collisions for local player parts except keep CanCollide true for all parts of the local player
+    local character = localPlayer.Character
+    if character then
+        setCharacterCollision(character, true)
+    end
+
+    -- Enable noclip for local player (so they don't collide with world)
+    enableLocalPlayerNoclip(true)
+
     local startTime = tick()
     while blackHoleActive and tick() - startTime < 10 do
         wait(0.1)
     end
 
-    -- Unanchor parts and apply ForcePart
+    -- After 10 seconds unanchor parts marked earlier and apply ForcePart
     for _, part in ipairs(candidateParts) do
         if part and part.Parent and initiallyAnchoredParts[part] == false then
             part.Anchored = false
@@ -175,7 +232,6 @@ end
 local descendantAddedConn
 
 local function processWorkspaceParts()
-    -- Disconnect previous connection if any
     if descendantAddedConn then
         descendantAddedConn:Disconnect()
         descendantAddedConn = nil
@@ -226,7 +282,7 @@ local function toggleBlackHole()
     blackHoleActive = toggleState
     if blackHoleActive then
         local newAttachment = Instance.new("Attachment", localPlayer.Character.HumanoidRootPart)
-        Attachment1:Destroy()
+        if Attachment1 then Attachment1:Destroy() end
         Attachment1 = newAttachment
         anchoredOnce = false
         processWorkspaceParts()
@@ -240,12 +296,10 @@ local function toggleBlackHole()
             end
         end)
     else
-        -- Disable toggle, unanchor immediately
         blackHoleActive = false
+        enableLocalPlayerNoclip(false) -- disable noclip
         if unanchorTimerRunning and unanchorCoroutine then
-            -- Cancel the wait and unanchor immediately
             unanchorTimerRunning = false
-            -- Immediately unanchor parts marked
             for part, anchored in pairs(initiallyAnchoredParts) do
                 if part and part.Parent and anchored == false then
                     part.Anchored = false
@@ -261,7 +315,7 @@ local function toggleTargetSelected()
     blackHoleActive = toggleState
     if blackHoleActive then
         local newAttachment = Instance.new("Attachment", localPlayer.Character.HumanoidRootPart)
-        Attachment1:Destroy()
+        if Attachment1 then Attachment1:Destroy() end
         Attachment1 = newAttachment
         anchoredOnce = false
         processWorkspaceParts()
@@ -281,6 +335,7 @@ local function toggleTargetSelected()
         end)
     else
         blackHoleActive = false
+        enableLocalPlayerNoclip(false) -- disable noclip
         if unanchorTimerRunning and unanchorCoroutine then
             unanchorTimerRunning = false
             for part, anchored in pairs(initiallyAnchoredParts) do
@@ -298,7 +353,7 @@ local function onCharacterAdded(character)
     if blackHoleActive then
         local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
         local newAttachment = Instance.new("Attachment", humanoidRootPart)
-        Attachment1:Destroy()
+        if Attachment1 then Attachment1:Destroy() end
         Attachment1 = newAttachment
         processedParts = {}
         processWorkspaceParts()
@@ -338,13 +393,9 @@ window:Toggle("Continuous Loop Check", false, function(Value)
         spawn(function()
             while loopCheckActive do
                 if blackHoleActive then
-                    -- Only check for new parts or unanchored parts that were anchored
                     for _, v in ipairs(Workspace:GetDescendants()) do
-                        if v:IsA("BasePart") then
-                            -- Detect parts that changed from anchored to unanchored, process them
-                            if not v.Anchored and not processedParts[v] then
-                                ForcePart(v)
-                            end
+                        if v:IsA("BasePart") and not v.Anchored and not processedParts[v] then
+                            ForcePart(v)
                         end
                     end
                 end
