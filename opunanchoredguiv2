@@ -1,0 +1,336 @@
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+local blackHoleActive = false
+local toggleState = false
+local targetPlayer = nil
+local pickupRadius = math.huge
+local switchDelay = 0.13
+local processedParts = {}
+local initiallyAnchoredParts = {}
+
+local localPlayer = Players.LocalPlayer
+local targetPosition = Vector3.new(0, 0, 0)
+
+local unanchorTimerRunning = false
+local unanchorCoroutine
+
+local function setupPlayer()
+    local Folder = Instance.new("Folder", Workspace)
+    local Part = Instance.new("Part", Folder)
+    local Attachment1 = Instance.new("Attachment", Part)
+    Part.Anchored = true
+    Part.CanCollide = false
+    Part.Transparency = 1
+    return Attachment1
+end
+
+local Attachment1 = setupPlayer()
+
+-- Improved NPC detection
+local function isNPC(character)
+    if not character or not character:IsA("Model") then return false end
+
+    -- If character has a Humanoid and isn't a player character, it's NPC
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid and not Players:GetPlayerFromCharacter(character) then
+        return true
+    end
+
+    -- Extra checks for NPC-like models:
+    -- If it has any descendants that are BaseParts and NOT a player's character, treat as NPC
+    -- and must not have a player attached
+    -- This helps catch NPCs with nonstandard humanoid setup
+
+    -- Check if it has at least 1 BasePart
+    local hasParts = false
+    for _, desc in ipairs(character:GetDescendants()) do
+        if desc:IsA("BasePart") then
+            hasParts = true
+            break
+        end
+    end
+
+    if hasParts and not Players:GetPlayerFromCharacter(character) then
+        return true
+    end
+
+    return false
+end
+
+local function ForcePart(v)
+    if v:IsA("BasePart")
+        and not v.Anchored
+        and v.Name ~= "Handle"
+        and not v:IsDescendantOf(localPlayer.Character)
+        and (
+            (v.Parent:FindFirstChildOfClass("Humanoid") and isNPC(v.Parent))
+            or (not v.Parent:FindFirstChildOfClass("Humanoid") and not v.Parent:FindFirstChild("Head"))
+        ) then
+
+        if processedParts[v] then return end
+        processedParts[v] = true
+
+        for _, x in next, v:GetChildren() do
+            if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro") or x:IsA("BodyPosition") or x:IsA("BodyThrust") or x:IsA("BodyVelocity") or x:IsA("RocketPropulsion") then
+                x:Destroy()
+            end
+        end
+        if v:FindFirstChild("Attachment") then v:FindFirstChild("Attachment"):Destroy() end
+        if v:FindFirstChild("AlignPosition") then v:FindFirstChild("AlignPosition"):Destroy() end
+        if v:FindFirstChild("Torque") then v:FindFirstChild("Torque"):Destroy() end
+        v.CanCollide = false
+
+        local Torque = Instance.new("Torque", v)
+        Torque.Torque = Vector3.new(1e6, 1e6, 1e6)
+        local AlignPosition = Instance.new("AlignPosition", v)
+        local Attachment2 = Instance.new("Attachment", v)
+        Torque.Attachment0 = Attachment2
+        AlignPosition.MaxForce = math.huge
+        AlignPosition.MaxVelocity = math.huge
+        AlignPosition.Responsiveness = 500
+        AlignPosition.Attachment0 = Attachment2
+        AlignPosition.Attachment1 = Attachment1
+    end
+end
+
+local function clearProcessedParts()
+    for part, _ in pairs(processedParts) do
+        if part and part.Parent then
+            for _, x in next, part:GetChildren() do
+                if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro") or x:IsA("BodyPosition") or x:IsA("BodyThrust") or x:IsA("BodyVelocity") or x:IsA("RocketPropulsion") then
+                    x:Destroy()
+                end
+            end
+            if part:FindFirstChild("Attachment") then part:FindFirstChild("Attachment"):Destroy() end
+            if part:FindFirstChild("AlignPosition") then part:FindFirstChild("AlignPosition"):Destroy() end
+            if part:FindFirstChild("Torque") then part:FindFirstChild("Torque"):Destroy() end
+            part.CanCollide = true
+            -- Unanchor only if part was NOT originally anchored before toggling on
+            if not initiallyAnchoredParts[part] then
+                part.Anchored = false
+            else
+                part.Anchored = true
+            end
+        end
+    end
+    processedParts = {}
+    initiallyAnchoredParts = {}
+end
+
+-- This function anchors all qualifying parts immediately,
+-- waits 10 seconds, then unanchors all at once.
+-- If toggle is disabled early, the wait is interrupted and all unanchor immediately.
+local function anchorAndDelayedUnanchorParts()
+    unanchorTimerRunning = true
+    -- Gather all qualifying unanchored parts
+    local candidateParts = {}
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart")
+            and not v.Anchored
+            and v.Name ~= "Handle"
+            and not v:IsDescendantOf(localPlayer.Character)
+            and (
+                (v.Parent:FindFirstChildOfClass("Humanoid") and isNPC(v.Parent))
+                or (not v.Parent:FindFirstChildOfClass("Humanoid") and not v.Parent:FindFirstChild("Head"))
+            ) then
+            table.insert(candidateParts, v)
+        end
+    end
+
+    -- Anchor these parts immediately, mark them as newly anchored
+    initiallyAnchoredParts = {}
+    for _, part in ipairs(candidateParts) do
+        initiallyAnchoredParts[part] = false -- means newly anchored
+        part.Anchored = true
+    end
+
+    -- Wait 10 seconds or until toggle disables
+    local startTime = tick()
+    while blackHoleActive and tick() - startTime < 10 do
+        wait(0.1)
+    end
+
+    -- If toggle disabled early, unanchor immediately now
+    -- If toggle still active after 10s, unanchor now too
+    for _, part in ipairs(candidateParts) do
+        if part and part.Parent and initiallyAnchoredParts[part] == false then
+            part.Anchored = false
+            ForcePart(part)
+        end
+    end
+
+    unanchorTimerRunning = false
+end
+
+local descendantAddedConn
+
+local function processWorkspaceParts()
+    -- Clear previous connection if any
+    if descendantAddedConn then
+        descendantAddedConn:Disconnect()
+        descendantAddedConn = nil
+    end
+
+    if blackHoleActive then
+        -- Start anchor + delayed unanchor coroutine
+        if not unanchorTimerRunning then
+            unanchorCoroutine = coroutine.create(anchorAndDelayedUnanchorParts)
+            coroutine.resume(unanchorCoroutine)
+        end
+
+        descendantAddedConn = Workspace.DescendantAdded:Connect(function(v)
+            if blackHoleActive then
+                if v:IsA("BasePart") and not v.Anchored then
+                    ForcePart(v)
+                end
+            end
+        end)
+    end
+end
+
+local function getRandomPlayer()
+    local players = Players:GetPlayers()
+    local validPlayers = {}
+    for _, player in pairs(players) do
+        if player ~= localPlayer and (not player:FindFirstChild("Whitelisted") or not player.Whitelisted.Value) then
+            table.insert(validPlayers, player)
+        end
+    end
+    if #validPlayers > 0 then
+        return validPlayers[math.random(1, #validPlayers)]
+    end
+    return nil
+end
+
+local function getSelectedPlayers()
+    local players = Players:GetPlayers()
+    local selectedPlayers = {}
+    for _, player in pairs(players) do
+        if player ~= localPlayer and player:FindFirstChild("Selected") and player.Selected.Value then
+            table.insert(selectedPlayers, player)
+        end
+    end
+    return selectedPlayers
+end
+
+local function toggleBlackHole()
+    blackHoleActive = toggleState
+    if blackHoleActive then
+        local newAttachment = Instance.new("Attachment", localPlayer.Character.HumanoidRootPart)
+        Attachment1:Destroy()
+        Attachment1 = newAttachment
+        processWorkspaceParts()
+        spawn(function()
+            while blackHoleActive do
+                targetPlayer = getRandomPlayer()
+                if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    Attachment1.WorldCFrame = CFrame.new(targetPlayer.Character.HumanoidRootPart.Position)
+                end
+                wait(switchDelay)
+            end
+        end)
+    else
+        -- If toggle disabled, interrupt unanchor wait and immediately unanchor all anchored parts
+        blackHoleActive = false
+
+        -- If coroutine is running, resume and end it early
+        if unanchorTimerRunning and coroutine.status(unanchorCoroutine) == "suspended" then
+            -- Force the coroutine to end by setting blackHoleActive false and wait 0 so it can finish
+            -- No direct way to force coroutine stop; so we just rely on blackHoleActive flag checked inside
+            coroutine.resume(unanchorCoroutine)
+        end
+
+        clearProcessedParts()
+    end
+end
+
+local function toggleTargetSelected()
+    blackHoleActive = toggleState
+    if blackHoleActive then
+        local newAttachment = Instance.new("Attachment", localPlayer.Character.HumanoidRootPart)
+        Attachment1:Destroy()
+        Attachment1 = newAttachment
+        processWorkspaceParts()
+        spawn(function()
+            while blackHoleActive do
+                local selectedPlayers = getSelectedPlayers()
+                if #selectedPlayers > 0 then
+                    targetPlayer = selectedPlayers[math.random(1, #selectedPlayers)]
+                else
+                    targetPlayer = nil
+                end
+                if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    Attachment1.WorldCFrame = CFrame.new(targetPlayer.Character.HumanoidRootPart.Position)
+                end
+                wait(switchDelay)
+            end
+        end)
+    else
+        -- If toggle disabled, interrupt unanchor wait and immediately unanchor all anchored parts
+        blackHoleActive = false
+
+        if unanchorTimerRunning and coroutine.status(unanchorCoroutine) == "suspended" then
+            coroutine.resume(unanchorCoroutine)
+        end
+
+        clearProcessedParts()
+    end
+end
+
+local function onCharacterAdded(character)
+    if blackHoleActive then
+        local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        local newAttachment = Instance.new("Attachment", humanoidRootPart)
+        Attachment1:Destroy()
+        Attachment1 = newAttachment
+        processedParts = {}
+        processWorkspaceParts()
+    end
+end
+
+localPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/miroeramaa/TurtleLib/main/TurtleUiLib.lua"))()
+local window = library:Window("made by ÆS productions")
+
+window:Toggle("Unanchored Target All", false, function(Value)
+    toggleState = Value
+    blackHoleActive = Value
+    toggleBlackHole()
+end)
+
+window:Toggle("Target Selected Players", false, function(Value)
+    toggleState = Value
+    blackHoleActive = Value
+    toggleTargetSelected()
+end)
+
+window:Button("Load Player List Script", function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Playerlistv6"))()
+end)
+
+window:Button("telekinesis/fix target", function()
+    loadstring(game:HttpGet(('https://raw.githubusercontent.com/SAZXHUB/Control-update/main/README.md'), true))()
+end)
+
+local loopCheckActive = false
+
+window:Toggle("Continuous Loop Check", false, function(Value)
+    loopCheckActive = Value
+    if loopCheckActive then
+        spawn(function()
+            while loopCheckActive do
+                if blackHoleActive then
+                    if toggleState then
+                        processWorkspaceParts()
+                    else
+                        toggleTargetSelected()
+                    end
+                end
+                wait(0.5)
+            end
+        end)
+    end
+end)
