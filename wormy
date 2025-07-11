@@ -1,7 +1,7 @@
 local syn = getgenv().syn
 getgenv().syn = false
 
-local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()local Window = OrionLib:MakeWindow({Name = "JLhub", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})local Tab = Window:MakeTab({
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/jensonhirst/Orion/main/source')))()local Window = OrionLib:MakeWindow({Name = "JLhub", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})local Tab = Window:MakeTab({
     Name = "real op",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
@@ -95,6 +95,29 @@ end
     Callback = function()
               _G.toggle = false
       end    
+}) Tab:AddButton({
+	Name = "Hitbox Aura",
+	Callback = function()
+      		local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local localPlayer = Players.LocalPlayer
+local remoteEvent = ReplicatedStorage:WaitForChild("RemoteEvent")
+
+while true do
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= localPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local args = {
+                "DamageManager.damage",
+                player.Character.Head
+            }
+            remoteEvent:FireServer(unpack(args))
+        end
+    end
+    wait() -- Adjust frequency as needed
+end
+
+  	end    
 }) local Tab = Window:MakeTab({
     Name = "farm",
     Icon = "rbxassetid://4483345998",
@@ -255,6 +278,33 @@ game:GetService("ReplicatedStorage").RemoteEvent:FireServer(unpack(args))
 
 end
       end    
+})local Tab = Window:MakeTab({
+	Name = "niggaSUCKdick.com",
+	Icon = "rbxassetid://4483345998",
+	PremiumOnly = false
+}) Tab:AddButton({
+	Name = "sir your computer has virus, pls give credit card info for fix",
+	Callback = function()
+      		_G.toggle = true
+
+while _G.toggle do
+wait()
+local mechanicsFolder = workspace:WaitForChild("ActiveMap"):WaitForChild("Lab"):WaitForChild("Mechanics")
+
+for _, tempComputer in ipairs(mechanicsFolder:GetChildren()) do
+    if tempComputer:IsA("Model") and tempComputer:FindFirstChild("Remote") then
+        local args = { "Failed" }
+        tempComputer.Remote:FireServer(unpack(args))
+    end
+end
+
+end
+  	end    
+}) Tab:AddButton({
+	Name = "Sir, your computer has been fixed. (So it was no scam after all?)",
+	Callback = function()
+      		_G.toggle = false
+  	end    
 })
 
 getgenv().syn = syn
