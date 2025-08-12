@@ -234,6 +234,11 @@ RunService.RenderStepped:Connect(function(dt)
                 part.CanCollide = true
             end
         end
+
+        -- Reset humanoid state to Running so player can move again
+        if humanoid:GetState() == Enum.HumanoidStateType.Physics then
+            humanoid:ChangeState(Enum.HumanoidStateType.Running)
+        end
     end
 end)
 
