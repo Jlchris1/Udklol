@@ -70,10 +70,7 @@ local airAccel = 12
 local idleAnimId = "rbxassetid://180435571"
 local idleAnimTrack
 
-local fakePlatform
 local currentVel = Vector3.new(0, 0, 0)
-
--- Keep track of the last facing direction to prevent jitter or snap after bumping
 local lastLookVector = hrp.CFrame.LookVector
 
 local function playFrozenIdle()
@@ -93,24 +90,6 @@ local function stopFrozenIdle()
     if idleAnimTrack then
         idleAnimTrack:Stop()
         idleAnimTrack = nil
-    end
-end
-
-local function createPlatform()
-    if fakePlatform and fakePlatform.Parent then return end
-    fakePlatform = Instance.new("Part")
-    fakePlatform.Size = Vector3.new(4, 0.1, 4)
-    fakePlatform.Transparency = 1
-    fakePlatform.Anchored = true
-    fakePlatform.CanCollide = true
-    fakePlatform.Name = "FloatPlatform"
-    fakePlatform.Parent = workspace
-end
-
-local function removePlatform()
-    if fakePlatform then
-        fakePlatform:Destroy()
-        fakePlatform = nil
     end
 end
 
@@ -158,7 +137,7 @@ RunService.RenderStepped:Connect(function(dt)
     tpwalkSpeed = tonumber(tpSpeedBox.Text) or tpwalkSpeed
 
     if floating and hrp and humanoid then
-        -- Handle vertical float movement
+        -- Update vertical targetY live
         if upHeld then
             targetY = targetY + floatSpeed * dt
         elseif downHeld then
@@ -181,7 +160,10 @@ RunService.RenderStepped:Connect(function(dt)
         currentVelXZ = currentVelXZ:Lerp(desiredVelXZ, t)
         currentVel = Vector3.new(currentVelXZ.X, 0, currentVelXZ.Z)
 
-        -- Apply horizontal velocity but no vertical velocity
+        -- Disable default gravity by setting Humanoid.PlatformStand to true
+        humanoid.PlatformStand = true
+
+        -- Manually control horizontal velocity (no vertical velocity)
         hrp.Velocity = Vector3.new(currentVel.X, 0, currentVel.Z)
 
         -- Update rotation only when moving, otherwise keep last facing direction stable
@@ -193,20 +175,21 @@ RunService.RenderStepped:Connect(function(dt)
             newLookVector = lastLookVector
         end
 
-        -- Teleport walking with rotation based on look vector
+        -- Teleport walking with rotation based on look vector and keep vertical position locked to targetY
         if moving and moveDir.Magnitude > 0 then
             local currentPos = hrp.Position
-            hrp.CFrame = CFrame.new(currentPos + moveDir * tpwalkSpeed, currentPos + newLookVector)
+            local horizontalPos = Vector3.new(currentPos.X, targetY, currentPos.Z)
+            local newPos = horizontalPos + moveDir * tpwalkSpeed
+            hrp.CFrame = CFrame.new(newPos, newPos + newLookVector)
+        else
+            local pos = hrp.Position
+            local newPos = Vector3.new(pos.X, targetY, pos.Z)
+            hrp.CFrame = CFrame.new(newPos, newPos + newLookVector)
         end
-
-        -- Lock vertical position while preserving horizontal rotation without jitter
-        local pos = hrp.Position
-        local newPos = Vector3.new(pos.X, targetY, pos.Z)
-        hrp.CFrame = CFrame.new(newPos, newPos + newLookVector)
-
-        -- Maintain invisible platform under feet
-        createPlatform()
-        fakePlatform.Position = Vector3.new(newPos.X, targetY - 3, newPos.Z)
+    else
+        -- Restore normal gravity and control when not floating
+        humanoid.PlatformStand = false
+        currentVel = Vector3.new(0, 0, 0)
     end
 end)
 
@@ -234,9 +217,9 @@ end)
 
 btnDisable.MouseButton1Click:Connect(function()
     floating = false
-    removePlatform()
     humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
     stopFrozenIdle()
+    humanoid.PlatformStand = false
     currentVel = Vector3.new(0, 0, 0)
-    lastLookVector = hrp.CFrame.LookVector -- reset facing direction to current orientation
+    lastLookVector = hrp.CFrame.LookVector
 end)
