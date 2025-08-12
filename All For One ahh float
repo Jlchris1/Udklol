@@ -1,0 +1,257 @@
+-- LocalScript in StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+local humanoid = character:WaitForChild("Humanoid")
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+player.CharacterAdded:Connect(function(char)
+    character = char
+    humanoid = char:WaitForChild("Humanoid")
+    hrp = char:WaitForChild("HumanoidRootPart")
+end)
+
+-- UI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false
+
+local function makeButton(name, posY, text)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.new(0, 80, 0, 40)
+    btn.Position = UDim2.new(1, -90, 0, posY)
+    btn.AnchorPoint = Vector2.new(0, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Text = text
+    btn.Parent = screenGui
+    return btn
+end
+
+-- Buttons
+local btnUp = makeButton("Up", 20, "Up")
+local btnDown = makeButton("Down", 70, "Down")
+local btnDisable = makeButton("Disable", 120, "Disable Float")
+
+-- Float speed textbox
+local speedBox = Instance.new("TextBox")          -- Float vertical speed
+speedBox.Size = UDim2.new(0, 80, 0, 40)
+speedBox.Position = UDim2.new(1, -90, 0, 170)
+speedBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+speedBox.TextColor3 = Color3.new(1, 1, 1)
+speedBox.PlaceholderText = "Float Speed"
+speedBox.Text = "5"
+speedBox.ClearTextOnFocus = false
+speedBox.Parent = screenGui
+
+-- TPwalk speed textbox (below float speed)
+local tpSpeedBox = Instance.new("TextBox")          -- TPwalk speed
+tpSpeedBox.Size = UDim2.new(0, 80, 0, 25)
+tpSpeedBox.Position = UDim2.new(1, -90, 0, 220)
+tpSpeedBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+tpSpeedBox.TextColor3 = Color3.new(1, 1, 1)
+tpSpeedBox.PlaceholderText = "TPwalk Speed"
+tpSpeedBox.Text = "0.23"
+tpSpeedBox.ClearTextOnFocus = false
+tpSpeedBox.Font = Enum.Font.SourceSans
+tpSpeedBox.TextSize = 18
+tpSpeedBox.Parent = screenGui
+
+-- State
+local floating = false
+local upHeld = false
+local downHeld = false
+local targetY = hrp.Position.Y
+
+local floatSpeed = tonumber(speedBox.Text) or 5
+local tpwalkSpeed = tonumber(tpSpeedBox.Text) or 0.23
+
+local moveSpeed = 20    -- horizontal move speed while floating (studs/sec)
+local airAccel = 12     -- horizontal acceleration
+
+local idleAnimId = "rbxassetid://180435571"
+local idleAnimTrack
+
+local fakePlatform
+local currentVel = Vector3.new(0, 0, 0)
+
+-- Freeze animations for menacing stillness
+local function freezeAnimations()
+    if humanoid then
+        for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+            track:AdjustSpeed(0)
+        end
+    end
+end
+
+local function resumeAnimations()
+    if humanoid then
+        for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+            track:AdjustSpeed(1)
+        end
+    end
+end
+
+local function playMenacingIdle()
+    if not humanoid then return end
+    if idleAnimTrack then
+        idleAnimTrack:Stop()
+        idleAnimTrack = nil
+    end
+    local anim = Instance.new("Animation")
+    anim.AnimationId = idleAnimId
+    idleAnimTrack = humanoid:LoadAnimation(anim)
+    idleAnimTrack.Looped = true
+    idleAnimTrack:Play()
+    idleAnimTrack:AdjustSpeed(0)
+end
+
+local function createPlatform()
+    if fakePlatform and fakePlatform.Parent then return end
+    fakePlatform = Instance.new("Part")
+    fakePlatform.Size = Vector3.new(4, 0.1, 4)
+    fakePlatform.Transparency = 1
+    fakePlatform.Anchored = true
+    fakePlatform.CanCollide = true
+    fakePlatform.Name = "FloatPlatform"
+    fakePlatform.Parent = workspace
+end
+
+local function removePlatform()
+    if fakePlatform then
+        fakePlatform:Destroy()
+        fakePlatform = nil
+    end
+end
+
+-- TPwalk state detection (WSAD + mobile)
+local moving = false
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.W
+    or input.KeyCode == Enum.KeyCode.A
+    or input.KeyCode == Enum.KeyCode.S
+    or input.KeyCode == Enum.KeyCode.D then
+        moving = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gp)
+    if input.KeyCode == Enum.KeyCode.W
+    or input.KeyCode == Enum.KeyCode.A
+    or input.KeyCode == Enum.KeyCode.S
+    or input.KeyCode == Enum.KeyCode.D then
+        local keysDown = UserInputService:IsKeyDown(Enum.KeyCode.W)
+            or UserInputService:IsKeyDown(Enum.KeyCode.A)
+            or UserInputService:IsKeyDown(Enum.KeyCode.S)
+            or UserInputService:IsKeyDown(Enum.KeyCode.D)
+        moving = keysDown
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    local moveVec = humanoid and humanoid.MoveDirection or Vector3.new()
+    if moveVec.Magnitude > 0 then
+        moving = true
+    elseif not (
+        UserInputService:IsKeyDown(Enum.KeyCode.W)
+        or UserInputService:IsKeyDown(Enum.KeyCode.A)
+        or UserInputService:IsKeyDown(Enum.KeyCode.S)
+        or UserInputService:IsKeyDown(Enum.KeyCode.D)
+    ) then
+        moving = false
+    end
+end)
+
+-- Main loop
+RunService.RenderStepped:Connect(function(dt)
+    floatSpeed = tonumber(speedBox.Text) or floatSpeed
+    tpwalkSpeed = tonumber(tpSpeedBox.Text) or tpwalkSpeed
+
+    if floating and hrp and humanoid then
+        -- Vertical float movement
+        if upHeld then
+            targetY = targetY + floatSpeed * dt
+        elseif downHeld then
+            targetY = targetY - floatSpeed * dt
+        end
+
+        -- Horizontal float movement smoothing
+        local moveDir = Vector3.new()
+        local camCF = workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new()
+        local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+        if forward.Magnitude > 0 then forward = forward.Unit end
+        local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z)
+        if right.Magnitude > 0 then right = right.Unit end
+
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + forward end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - forward end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - right end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + right end
+
+        local desiredVel = Vector3.new()
+        if moveDir.Magnitude > 0 then
+            desiredVel = moveDir.Unit * moveSpeed
+        end
+
+        local currentVelXZ = Vector3.new(currentVel.X, 0, currentVel.Z)
+        local desiredVelXZ = Vector3.new(desiredVel.X, 0, desiredVel.Z)
+        local t = math.clamp(airAccel * dt, 0, 1)
+        currentVelXZ = currentVelXZ:Lerp(desiredVelXZ, t)
+
+        currentVel = Vector3.new(currentVelXZ.X, 0, currentVelXZ.Z)
+
+        -- Apply horizontal velocity with vertical velocity zeroed (manual Y control)
+        hrp.Velocity = Vector3.new(currentVel.X, 0, currentVel.Z)
+
+        -- Teleport walking only if moving
+        if moving then
+            hrp.CFrame = hrp.CFrame + (hrp.CFrame.LookVector * tpwalkSpeed)
+        end
+
+        -- Lock vertical position manually
+        local pos = hrp.Position
+        local newPos = Vector3.new(pos.X, targetY, pos.Z)
+        hrp.CFrame = CFrame.new(newPos, newPos + hrp.CFrame.LookVector)
+
+        -- Maintain invisible platform under feet
+        createPlatform()
+        fakePlatform.Position = Vector3.new(newPos.X, targetY - 3, newPos.Z)
+
+        freezeAnimations()
+    end
+end)
+
+-- Button events
+btnUp.MouseButton1Down:Connect(function()
+    floating = true
+    freezeAnimations()
+    playMenacingIdle()
+    upHeld = true
+    targetY = hrp.Position.Y
+end)
+btnUp.MouseButton1Up:Connect(function() upHeld = false end)
+
+btnDown.MouseButton1Down:Connect(function()
+    floating = true
+    freezeAnimations()
+    playMenacingIdle()
+    downHeld = true
+    targetY = hrp.Position.Y
+end)
+btnDown.MouseButton1Up:Connect(function() downHeld = false end)
+
+btnDisable.MouseButton1Click:Connect(function()
+    floating = false
+    removePlatform()
+    resumeAnimations()
+    if idleAnimTrack then idleAnimTrack:Stop() end
+    currentVel = Vector3.new(0, 0, 0)
+end)
