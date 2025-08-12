@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -72,6 +73,7 @@ local idleAnimTrack
 
 local currentVel = Vector3.new(0, 0, 0)
 local lastLookVector = hrp.CFrame.LookVector
+local originalGravity = Workspace.Gravity
 
 local function playFrozenIdle()
     if idleAnimTrack then
@@ -137,14 +139,13 @@ RunService.RenderStepped:Connect(function(dt)
     tpwalkSpeed = tonumber(tpSpeedBox.Text) or tpwalkSpeed
 
     if floating and hrp and humanoid then
-        -- Update vertical targetY live
+        -- Update vertical position live during float
         if upHeld then
             targetY = targetY + floatSpeed * dt
         elseif downHeld then
             targetY = targetY - floatSpeed * dt
         end
 
-        -- Get move direction normalized
         local moveDir = humanoid.MoveDirection
         if moveDir.Magnitude > 0 then
             moveDir = moveDir.Unit
@@ -152,7 +153,6 @@ RunService.RenderStepped:Connect(function(dt)
             moveDir = Vector3.new()
         end
 
-        -- Smooth horizontal velocity interpolation
         local desiredVel = moveDir * moveSpeed
         local currentVelXZ = Vector3.new(currentVel.X, 0, currentVel.Z)
         local desiredVelXZ = Vector3.new(desiredVel.X, 0, desiredVel.Z)
@@ -160,13 +160,9 @@ RunService.RenderStepped:Connect(function(dt)
         currentVelXZ = currentVelXZ:Lerp(desiredVelXZ, t)
         currentVel = Vector3.new(currentVelXZ.X, 0, currentVelXZ.Z)
 
-        -- Disable default gravity by setting Humanoid.PlatformStand to true
         humanoid.PlatformStand = true
-
-        -- Manually control horizontal velocity (no vertical velocity)
         hrp.Velocity = Vector3.new(currentVel.X, 0, currentVel.Z)
 
-        -- Update rotation only when moving, otherwise keep last facing direction stable
         local newLookVector
         if moving and moveDir.Magnitude > 0 then
             newLookVector = moveDir
@@ -175,7 +171,6 @@ RunService.RenderStepped:Connect(function(dt)
             newLookVector = lastLookVector
         end
 
-        -- Teleport walking with rotation based on look vector and keep vertical position locked to targetY
         if moving and moveDir.Magnitude > 0 then
             local currentPos = hrp.Position
             local horizontalPos = Vector3.new(currentPos.X, targetY, currentPos.Z)
@@ -187,14 +182,24 @@ RunService.RenderStepped:Connect(function(dt)
             hrp.CFrame = CFrame.new(newPos, newPos + newLookVector)
         end
     else
-        -- Restore normal gravity and control when not floating
         humanoid.PlatformStand = false
         currentVel = Vector3.new(0, 0, 0)
     end
 end)
 
+-- Loop to constantly reset velocity to zero while floating
+coroutine.wrap(function()
+    while true do
+        RunService.Heartbeat:Wait()
+        if floating and hrp then
+            hrp.Velocity = Vector3.new(0, 0, 0)
+        end
+    end
+end)()
+
 btnUp.MouseButton1Down:Connect(function()
     floating = true
+    Workspace.Gravity = 0
     upHeld = true
     targetY = hrp.Position.Y
     humanoid:ChangeState(Enum.HumanoidStateType.Physics)
@@ -206,6 +211,7 @@ end)
 
 btnDown.MouseButton1Down:Connect(function()
     floating = true
+    Workspace.Gravity = 0
     downHeld = true
     targetY = hrp.Position.Y
     humanoid:ChangeState(Enum.HumanoidStateType.Physics)
@@ -217,6 +223,7 @@ end)
 
 btnDisable.MouseButton1Click:Connect(function()
     floating = false
+    Workspace.Gravity = originalGravity
     humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
     stopFrozenIdle()
     humanoid.PlatformStand = false
