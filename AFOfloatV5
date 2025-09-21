@@ -1,0 +1,310 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+local lastPosition = nil
+local originalSpawn = workspace:GetAttribute("OriginalSpawn") or nil
+
+-- Save original spawn point if not saved yet
+if not originalSpawn then
+    local spawnLocation = workspace:FindFirstChildOfClass("SpawnLocation")
+    if spawnLocation then
+        originalSpawn = spawnLocation.CFrame
+        workspace:SetAttribute("OriginalSpawn", originalSpawn)
+    end
+end
+
+local function setupCharacter(char)
+    character = char
+    humanoid = char:WaitForChild("Humanoid")
+    hrp = char:WaitForChild("HumanoidRootPart")
+    if lastPosition then
+        hrp.CFrame = CFrame.new(lastPosition)
+    end
+end
+
+player.CharacterAdded:Connect(setupCharacter)
+if character then setupCharacter(character) end
+
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FloatGui"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+
+local function makeButton(name, posY, text)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.new(0, 60, 0, 25) -- smaller buttons
+    btn.Position = UDim2.new(1, -70, 0, posY)
+    btn.AnchorPoint = Vector2.new(0, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Text = text
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 16
+    btn.Parent = screenGui
+    return btn
+end
+
+local btnUp = makeButton("Up", 40, "Up")
+local btnDown = makeButton("Down", 70, "Down")
+local btnDisable = makeButton("Disable", 100, "Disable")
+local btnSpawnToggle = makeButton("SpawnToggle", 130, "Spawn: OFF")
+
+local speedBox = Instance.new("TextBox")
+speedBox.Size = UDim2.new(0, 60, 0, 25)
+speedBox.Position = UDim2.new(1, -140, 0, 40) -- to the left of Up button
+speedBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+speedBox.TextColor3 = Color3.new(1, 1, 1)
+speedBox.PlaceholderText = "Float Spd"
+speedBox.Text = "5"
+speedBox.ClearTextOnFocus = false
+speedBox.Font = Enum.Font.SourceSansBold
+speedBox.TextSize = 14
+speedBox.Parent = screenGui
+
+local tpSpeedBox = Instance.new("TextBox")
+tpSpeedBox.Size = UDim2.new(0, 60, 0, 25)
+tpSpeedBox.Position = UDim2.new(1, -70, 0, 160)
+tpSpeedBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+tpSpeedBox.TextColor3 = Color3.new(1, 1, 1)
+tpSpeedBox.PlaceholderText = "TP Spd"
+tpSpeedBox.Text = "0.23"
+tpSpeedBox.ClearTextOnFocus = false
+tpSpeedBox.Font = Enum.Font.SourceSansBold
+tpSpeedBox.TextSize = 14
+tpSpeedBox.Parent = screenGui
+
+-- Variables
+local floating = false
+local upHeld = false
+local downHeld = false
+local targetY = 0
+local spawnToggle = false
+
+local floatSpeed = tonumber(speedBox.Text) or 5
+local tpwalkSpeed = tonumber(tpSpeedBox.Text) or 0.23
+
+local moveSpeed = 20
+local airAccel = 12
+
+local idleAnimId = "rbxassetid://180435571"
+local idleAnimTrack
+
+local currentVel = Vector3.new(0, 0, 0)
+local lastLookVector = Vector3.new(0, 0, -1)
+
+local originalGravity = workspace.Gravity
+
+-- Animation handlers
+local function playFrozenIdle()
+    if idleAnimTrack then
+        idleAnimTrack:Stop()
+        idleAnimTrack = nil
+    end
+    local anim = Instance.new("Animation")
+    anim.AnimationId = idleAnimId
+    idleAnimTrack = humanoid:LoadAnimation(anim)
+    idleAnimTrack.Looped = true
+    idleAnimTrack:Play()
+    idleAnimTrack:AdjustSpeed(0)
+end
+
+local function stopFrozenIdle()
+    if idleAnimTrack then
+        idleAnimTrack:Stop()
+        idleAnimTrack = nil
+    end
+end
+
+-- Movement detection
+local moving = false
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.W
+    or input.KeyCode == Enum.KeyCode.A
+    or input.KeyCode == Enum.KeyCode.S
+    or input.KeyCode == Enum.KeyCode.D then
+        moving = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gp)
+    if input.KeyCode == Enum.KeyCode.W
+    or input.KeyCode == Enum.KeyCode.A
+    or input.KeyCode == Enum.KeyCode.S
+    or input.KeyCode == Enum.KeyCode.D then
+        local keysDown = UserInputService:IsKeyDown(Enum.KeyCode.W)
+            or UserInputService:IsKeyDown(Enum.KeyCode.A)
+            or UserInputService:IsKeyDown(Enum.KeyCode.S)
+            or UserInputService:IsKeyDown(Enum.KeyCode.D)
+        moving = keysDown
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    local moveVec = humanoid and humanoid.MoveDirection or Vector3.new()
+    if moveVec.Magnitude > 0 then
+        moving = true
+    elseif not (
+        UserInputService:IsKeyDown(Enum.KeyCode.W)
+        or UserInputService:IsKeyDown(Enum.KeyCode.A)
+        or UserInputService:IsKeyDown(Enum.KeyCode.S)
+        or UserInputService:IsKeyDown(Enum.KeyCode.D)
+    ) then
+        moving = false
+    end
+end)
+
+-- Velocity reset loop
+spawn(function()
+    while true do
+        if floating and hrp then
+            hrp.Velocity = Vector3.new(0, 0, 0)
+        end
+        wait()
+    end
+end)
+
+RunService.RenderStepped:Connect(function(dt)
+    floatSpeed = tonumber(speedBox.Text) or floatSpeed
+    tpwalkSpeed = tonumber(tpSpeedBox.Text) or tpwalkSpeed
+
+    if floating and hrp and humanoid then
+        workspace.Gravity = 0
+
+        if targetY == 0 then
+            targetY = hrp.Position.Y
+        end
+
+        if upHeld then
+            targetY = targetY + floatSpeed * dt
+        elseif downHeld then
+            targetY = targetY - floatSpeed * dt
+        end
+
+        local moveDir = humanoid.MoveDirection
+        if moveDir.Magnitude > 0 then
+            moveDir = moveDir.Unit
+        else
+            moveDir = Vector3.new()
+        end
+
+        local desiredVel = moveDir * moveSpeed
+        local currentVelXZ = Vector3.new(currentVel.X, 0, currentVel.Z)
+        local desiredVelXZ = Vector3.new(desiredVel.X, 0, desiredVel.Z)
+        local t = math.clamp(airAccel * dt, 0, 1)
+        currentVelXZ = currentVelXZ:Lerp(desiredVelXZ, t)
+        currentVel = Vector3.new(currentVelXZ.X, 0, currentVelXZ.Z)
+
+        hrp.Velocity = Vector3.new(currentVel.X, 0, currentVel.Z)
+
+        local cam = workspace.CurrentCamera
+        local camCF = cam.CFrame
+
+        local camLookVector = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+        if camLookVector.Magnitude > 0 then
+            camLookVector = camLookVector.Unit
+        else
+            camLookVector = lastLookVector
+        end
+
+        lastLookVector = camLookVector
+        local newLookVector = lastLookVector
+
+        if moving and moveDir.Magnitude > 0 then
+            local currentPos = hrp.Position
+            hrp.CFrame = CFrame.new(currentPos + moveDir * tpwalkSpeed, currentPos + newLookVector)
+        else
+            local pos = hrp.Position
+            hrp.CFrame = CFrame.new(pos, pos + newLookVector)
+        end
+
+        local pos = hrp.Position
+        local newPos = Vector3.new(pos.X, targetY, pos.Z)
+        hrp.CFrame = CFrame.new(newPos, newPos + newLookVector)
+
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    else
+        workspace.Gravity = originalGravity
+        targetY = 0
+
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+
+        if humanoid:GetState() == Enum.HumanoidStateType.Physics then
+            humanoid:ChangeState(Enum.HumanoidStateType.Running)
+        end
+    end
+end)
+
+-- Save last position on humanoid.Died
+humanoid.Died:Connect(function()
+    if hrp then
+        lastPosition = hrp.Position
+    end
+end)
+
+-- Button events
+btnUp.MouseButton1Down:Connect(function()
+    floating = true
+    upHeld = true
+    targetY = hrp.Position.Y
+    humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+    playFrozenIdle()
+end)
+btnUp.MouseButton1Up:Connect(function()
+    upHeld = false
+end)
+
+btnDown.MouseButton1Down:Connect(function()
+    floating = true
+    downHeld = true
+    targetY = hrp.Position.Y
+    humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+    playFrozenIdle()
+end)
+btnDown.MouseButton1Up:Connect(function()
+    downHeld = false
+end)
+
+btnDisable.MouseButton1Click:Connect(function()
+    floating = false
+    stopFrozenIdle()
+end)
+
+btnSpawnToggle.MouseButton1Click:Connect(function()
+    spawnToggle = not spawnToggle
+    if spawnToggle then
+        btnSpawnToggle.Text = "Spawn: ON"
+        if hrp then
+            local spawnLocation = workspace:FindFirstChildOfClass("SpawnLocation")
+            if spawnLocation then
+                spawnLocation.CFrame = hrp.CFrame
+            end
+        end
+    else
+        btnSpawnToggle.Text = "Spawn: OFF"
+        if originalSpawn then
+            local spawnLocation = workspace:FindFirstChildOfClass("SpawnLocation")
+            if spawnLocation then
+                spawnLocation.CFrame = originalSpawn
+            end
+        end
+    end
+end)
