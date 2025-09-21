@@ -1,3 +1,6 @@
+-- Full LocalScript: Floating + reliable local respawn-at-last-death toggle
+-- Place this LocalScript in StarterPlayerScripts
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -7,31 +10,12 @@ local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local hrp = character:WaitForChild("HumanoidRootPart")
 
-local lastPosition = nil
-local originalSpawn = workspace:GetAttribute("OriginalSpawn") or nil
+local lastPosition = nil           -- last death position
+local spawnPart = nil              -- our local SpawnLocation (if created)
+local previousRespawnLocation = nil -- saved Player.RespawnLocation to restore later
+local humanoidDiedConn = nil
 
--- Save original spawn point if not saved yet
-if not originalSpawn then
-    local spawnLocation = workspace:FindFirstChildOfClass("SpawnLocation")
-    if spawnLocation then
-        originalSpawn = spawnLocation.CFrame
-        workspace:SetAttribute("OriginalSpawn", originalSpawn)
-    end
-end
-
-local function setupCharacter(char)
-    character = char
-    humanoid = char:WaitForChild("Humanoid")
-    hrp = char:WaitForChild("HumanoidRootPart")
-    if lastPosition then
-        hrp.CFrame = CFrame.new(lastPosition)
-    end
-end
-
-player.CharacterAdded:Connect(setupCharacter)
-if character then setupCharacter(character) end
-
--- GUI Setup
+-- GUI Setup (smaller buttons, speed box left of Up/Down, buttons placed higher)
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "FloatGui"
 screenGui.Parent = player:WaitForChild("PlayerGui")
@@ -41,8 +25,8 @@ screenGui.IgnoreGuiInset = true
 local function makeButton(name, posY, text)
     local btn = Instance.new("TextButton")
     btn.Name = name
-    btn.Size = UDim2.new(0, 60, 0, 25) -- smaller buttons
-    btn.Position = UDim2.new(1, -70, 0, posY)
+    btn.Size = UDim2.new(0, 60, 0, 26) -- smaller
+    btn.Position = UDim2.new(1, -70, 0, posY) -- right side
     btn.AnchorPoint = Vector2.new(0, 0)
     btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     btn.TextColor3 = Color3.new(1, 1, 1)
@@ -53,14 +37,14 @@ local function makeButton(name, posY, text)
     return btn
 end
 
-local btnUp = makeButton("Up", 40, "Up")
-local btnDown = makeButton("Down", 70, "Down")
+local btnUp = makeButton("Up", 20, "Up")
+local btnDown = makeButton("Down", 60, "Down")
 local btnDisable = makeButton("Disable", 100, "Disable")
-local btnSpawnToggle = makeButton("SpawnToggle", 130, "Spawn: OFF")
+local btnSpawnToggle = makeButton("SpawnToggle", 140, "Spawn: OFF")
 
 local speedBox = Instance.new("TextBox")
-speedBox.Size = UDim2.new(0, 60, 0, 25)
-speedBox.Position = UDim2.new(1, -140, 0, 40) -- to the left of Up button
+speedBox.Size = UDim2.new(0, 60, 0, 26)
+speedBox.Position = UDim2.new(1, -140, 0, 20) -- left of Up button
 speedBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 speedBox.TextColor3 = Color3.new(1, 1, 1)
 speedBox.PlaceholderText = "Float Spd"
@@ -71,8 +55,8 @@ speedBox.TextSize = 14
 speedBox.Parent = screenGui
 
 local tpSpeedBox = Instance.new("TextBox")
-tpSpeedBox.Size = UDim2.new(0, 60, 0, 25)
-tpSpeedBox.Position = UDim2.new(1, -70, 0, 160)
+tpSpeedBox.Size = UDim2.new(0, 60, 0, 26)
+tpSpeedBox.Position = UDim2.new(1, -140, 0, 60) -- left of Down button
 tpSpeedBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 tpSpeedBox.TextColor3 = Color3.new(1, 1, 1)
 tpSpeedBox.PlaceholderText = "TP Spd"
@@ -82,7 +66,7 @@ tpSpeedBox.Font = Enum.Font.SourceSansBold
 tpSpeedBox.TextSize = 14
 tpSpeedBox.Parent = screenGui
 
--- Variables
+-- Variables for movement/float
 local floating = false
 local upHeld = false
 local downHeld = false
@@ -103,18 +87,62 @@ local lastLookVector = Vector3.new(0, 0, -1)
 
 local originalGravity = workspace.Gravity
 
+-- Helpers: create/update/destroy local spawn location
+local function createOrUpdateLocalSpawn(pos)
+    if not pos then return end
+    -- ensure previousRespawnLocation is saved (only the first time we create a local spawn)
+    if previousRespawnLocation == nil then
+        previousRespawnLocation = player.RespawnLocation
+    end
+
+    if not spawnPart or not spawnPart.Parent then
+        spawnPart = Instance.new("SpawnLocation")
+        spawnPart.Name = ("_LocalSpawn_%d"):format(player.UserId)
+        spawnPart.Size = Vector3.new(2, 1, 2)
+        spawnPart.Anchored = true
+        spawnPart.CanCollide = false
+        spawnPart.Transparency = 1
+        spawnPart.Locked = true
+        spawnPart.Neutral = true
+        spawnPart.Parent = workspace
+    end
+
+    -- put spawn slightly above ground to avoid being stuck in floor (add 1.5 studs)
+    spawnPart.CFrame = CFrame.new(pos) + Vector3.new(0, 1.5, 0)
+
+    -- tell the player to use this spawn for respawn
+    pcall(function()
+        player.RespawnLocation = spawnPart
+    end)
+end
+
+local function removeLocalSpawnAndRestore()
+    -- restore previous respawn location (could be nil)
+    pcall(function()
+        player.RespawnLocation = previousRespawnLocation
+    end)
+    previousRespawnLocation = nil
+
+    if spawnPart and spawnPart.Parent then
+        spawnPart:Destroy()
+        spawnPart = nil
+    end
+end
+
 -- Animation handlers
 local function playFrozenIdle()
     if idleAnimTrack then
         idleAnimTrack:Stop()
         idleAnimTrack = nil
     end
-    local anim = Instance.new("Animation")
-    anim.AnimationId = idleAnimId
-    idleAnimTrack = humanoid:LoadAnimation(anim)
-    idleAnimTrack.Looped = true
-    idleAnimTrack:Play()
-    idleAnimTrack:AdjustSpeed(0)
+    if humanoid and humanoid.Parent then
+        local anim = Instance.new("Animation")
+        anim.AnimationId = idleAnimId
+        idleAnimTrack = humanoid:LoadAnimation(anim)
+        idleAnimTrack.Looped = true
+        idleAnimTrack:Play()
+        idleAnimTrack:AdjustSpeed(0)
+    end
 end
 
 local function stopFrozenIdle()
@@ -126,7 +154,6 @@ end
 
 -- Movement detection
 local moving = false
-
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.W
@@ -247,25 +274,57 @@ RunService.RenderStepped:Connect(function(dt)
             end
         end
 
-        if humanoid:GetState() == Enum.HumanoidStateType.Physics then
+        if humanoid and humanoid:GetState() == Enum.HumanoidStateType.Physics then
             humanoid:ChangeState(Enum.HumanoidStateType.Running)
         end
     end
 end)
 
--- Save last position on humanoid.Died
-humanoid.Died:Connect(function()
-    if hrp then
-        lastPosition = hrp.Position
+-- Setup character (rebind humanoid.Died and teleport on respawn if needed)
+local function setupCharacter(char)
+    -- disconnect previous died connection
+    if humanoidDiedConn then
+        humanoidDiedConn:Disconnect()
+        humanoidDiedConn = nil
     end
-end)
 
--- Button events
+    character = char
+    humanoid = char:WaitForChild("Humanoid")
+    hrp = char:WaitForChild("HumanoidRootPart")
+
+    -- if we have lastPosition + spawnToggle ON, make sure the newly added character ends up at lastPosition
+    if spawnToggle and lastPosition then
+        -- small delay to allow the character to fully initialize, then teleport
+        spawn(function()
+            wait(0.05)
+            if char and char.Parent and char:FindFirstChild("HumanoidRootPart") then
+                char.HumanoidRootPart.CFrame = CFrame.new(lastPosition) + Vector3.new(0, 1.5, 0)
+            end
+        end)
+    end
+
+    -- rebind died event for this humanoid
+    humanoidDiedConn = humanoid.Died:Connect(function()
+        if hrp then
+            lastPosition = hrp.Position
+        end
+
+        -- if spawn toggle is ON, update/create our local spawn immediately so Player.RespawnLocation points to it before respawn occurs
+        if spawnToggle and lastPosition then
+            createOrUpdateLocalSpawn(lastPosition)
+        end
+    end)
+end
+
+player.CharacterAdded:Connect(setupCharacter)
+if character then setupCharacter(character) end
+
+-- Button events (floating)
 btnUp.MouseButton1Down:Connect(function()
     floating = true
     upHeld = true
-    targetY = hrp.Position.Y
-    humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+    if hrp then targetY = hrp.Position.Y end
+    if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Physics) end
     playFrozenIdle()
 end)
 btnUp.MouseButton1Up:Connect(function()
@@ -275,8 +334,8 @@ end)
 btnDown.MouseButton1Down:Connect(function()
     floating = true
     downHeld = true
-    targetY = hrp.Position.Y
-    humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+    if hrp then targetY = hrp.Position.Y end
+    if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Physics) end
     playFrozenIdle()
 end)
 btnDown.MouseButton1Up:Connect(function()
@@ -288,23 +347,33 @@ btnDisable.MouseButton1Click:Connect(function()
     stopFrozenIdle()
 end)
 
+-- Spawn toggle: when ON -> ensure player respawns at last death; when OFF -> stop and restore world respawn
 btnSpawnToggle.MouseButton1Click:Connect(function()
     spawnToggle = not spawnToggle
     if spawnToggle then
         btnSpawnToggle.Text = "Spawn: ON"
-        if hrp then
-            local spawnLocation = workspace:FindFirstChildOfClass("SpawnLocation")
-            if spawnLocation then
-                spawnLocation.CFrame = hrp.CFrame
-            end
+        -- create/update local spawn immediately using lastPosition (or current HRP pos if no death yet)
+        local desiredPos = lastPosition or (hrp and hrp.Position) or nil
+        if desiredPos then
+            createOrUpdateLocalSpawn(desiredPos)
+        else
+            -- fallback to current HRP position a moment later if none available right now
+            spawn(function()
+                wait(0.05)
+                if hrp then
+                    createOrUpdateLocalSpawn(hrp.Position)
+                end
+            end)
         end
     else
         btnSpawnToggle.Text = "Spawn: OFF"
-        if originalSpawn then
-            local spawnLocation = workspace:FindFirstChildOfClass("SpawnLocation")
-            if spawnLocation then
-                spawnLocation.CFrame = originalSpawn
-            end
-        end
+        -- restore player's previous respawn location and remove our local spawn
+        removeLocalSpawnAndRestore()
     end
 end)
+
+-- Ensure that if the player dies while the toggle is ON we update the spawn (this is extra safety in case humanoid.Died binding missed)
+-- (Note: setupCharacter already binds humanoid.Died, but we also handle the current humanoid here)
+if humanoid then
+    -- already bound in setupCharacter, nothing to do - kept here for clarity
+end
