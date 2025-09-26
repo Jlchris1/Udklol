@@ -1,4 +1,4 @@
--- Full LocalScript: Floating with full reset and reliable local respawn toggle
+-- Full LocalScript: Floating + reliable local respawn-at-last-death toggle
 -- Place this LocalScript in StarterPlayerScripts
 
 local Players = game:GetService("Players")
@@ -10,23 +10,13 @@ local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local hrp = character:WaitForChild("HumanoidRootPart")
 
-local lastPosition = nil           -- last death position
-local spawnPart = nil              -- our local SpawnLocation (if created)
-local previousRespawnLocation = nil -- saved Player.RespawnLocation to restore later
+local lastPosition = nil
+local spawnPart = nil
+local previousRespawnLocation = nil
 local humanoidDiedConn = nil
 
--- Save original properties for reset
-local originalProperties = {
-    Gravity = workspace.Gravity,
-    CanCollide = {},
-    HumanoidState = humanoid:GetState(),
-}
-
-for _, part in pairs(character:GetDescendants()) do
-    if part:IsA("BasePart") then
-        originalProperties.CanCollide[part] = part.CanCollide
-    end
-end
+-- Track original collision states
+local originalCollisions = {}
 
 -- GUI Setup
 local screenGui = Instance.new("ScreenGui")
@@ -100,7 +90,7 @@ local lastLookVector = Vector3.new(0, 0, -1)
 
 local originalGravity = workspace.Gravity
 
--- Helpers: create/update/destroy local spawn location
+-- Helpers
 local function createOrUpdateLocalSpawn(pos)
     if not pos then return end
     if previousRespawnLocation == nil then
@@ -134,7 +124,7 @@ local function removeLocalSpawnAndRestore()
     end
 end
 
--- Animation handlers
+-- Animations
 local function playFrozenIdle()
     if idleAnimTrack then
         idleAnimTrack:Stop()
@@ -157,7 +147,7 @@ local function stopFrozenIdle()
     end
 end
 
--- Movement detection
+-- Movement state
 local moving = false
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
@@ -196,85 +186,101 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Float movement loop
-local floatLoopConn = nil
+-- Velocity reset loop
+task.spawn(function()
+    while true do
+        if floating and hrp then
+            hrp.Velocity = Vector3.new(0, 0, 0)
+        end
+        task.wait()
+    end
+end)
 
-local function startFloatLoop()
-    floatLoopConn = RunService.RenderStepped:Connect(function(dt)
-        floatSpeed = tonumber(speedBox.Text) or floatSpeed
-        tpwalkSpeed = tonumber(tpSpeedBox.Text) or tpwalkSpeed
+-- Float logic
+RunService.RenderStepped:Connect(function(dt)
+    floatSpeed = tonumber(speedBox.Text) or floatSpeed
+    tpwalkSpeed = tonumber(tpSpeedBox.Text) or tpwalkSpeed
 
-        if floating and hrp and humanoid then
-            workspace.Gravity = 0
+    if floating and hrp and humanoid then
+        workspace.Gravity = 0
 
-            if targetY == 0 then
-                targetY = hrp.Position.Y
-            end
+        if targetY == 0 then
+            targetY = hrp.Position.Y
+        end
 
-            if upHeld then
-                targetY = targetY + floatSpeed * dt
-            elseif downHeld then
-                targetY = targetY - floatSpeed * dt
-            end
+        if upHeld then
+            targetY = targetY + floatSpeed * dt
+        elseif downHeld then
+            targetY = targetY - floatSpeed * dt
+        end
 
-            local moveDir = humanoid.MoveDirection
-            if moveDir.Magnitude > 0 then
-                moveDir = moveDir.Unit
-            else
-                moveDir = Vector3.new()
-            end
+        local moveDir = humanoid.MoveDirection
+        if moveDir.Magnitude > 0 then
+            moveDir = moveDir.Unit
+        else
+            moveDir = Vector3.new()
+        end
 
-            local desiredVel = moveDir * moveSpeed
-            local currentVelXZ = Vector3.new(currentVel.X, 0, currentVel.Z)
-            local desiredVelXZ = Vector3.new(desiredVel.X, 0, desiredVel.Z)
-            local t = math.clamp(airAccel * dt, 0, 1)
-            currentVelXZ = currentVelXZ:Lerp(desiredVelXZ, t)
-            currentVel = Vector3.new(currentVelXZ.X, 0, currentVelXZ.Z)
+        local desiredVel = moveDir * moveSpeed
+        local currentVelXZ = Vector3.new(currentVel.X, 0, currentVel.Z)
+        local desiredVelXZ = Vector3.new(desiredVel.X, 0, desiredVel.Z)
+        local t = math.clamp(airAccel * dt, 0, 1)
+        currentVelXZ = currentVelXZ:Lerp(desiredVelXZ, t)
+        currentVel = Vector3.new(currentVelXZ.X, 0, currentVelXZ.Z)
 
-            hrp.Velocity = Vector3.new(currentVel.X, 0, currentVel.Z)
+        hrp.Velocity = Vector3.new(currentVel.X, 0, currentVel.Z)
 
-            local cam = workspace.CurrentCamera
-            local camCF = cam.CFrame
-            local camLookVector = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
-            if camLookVector.Magnitude > 0 then
-                camLookVector = camLookVector.Unit
-            else
-                camLookVector = lastLookVector
-            end
+        local cam = workspace.CurrentCamera
+        local camCF = cam.CFrame
+        local camLookVector = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+        if camLookVector.Magnitude > 0 then
+            camLookVector = camLookVector.Unit
+        else
+            camLookVector = lastLookVector
+        end
+        lastLookVector = camLookVector
 
-            lastLookVector = camLookVector
-            local newLookVector = lastLookVector
-
-            if moving and moveDir.Magnitude > 0 then
-                local currentPos = hrp.Position
-                hrp.CFrame = CFrame.new(currentPos + moveDir * tpwalkSpeed, currentPos + newLookVector)
-            else
-                local pos = hrp.Position
-                hrp.CFrame = CFrame.new(pos, pos + newLookVector)
-            end
-
+        local newLookVector = lastLookVector
+        if moving and moveDir.Magnitude > 0 then
+            local currentPos = hrp.Position
+            hrp.CFrame = CFrame.new(currentPos + moveDir * tpwalkSpeed, currentPos + newLookVector)
+        else
             local pos = hrp.Position
-            local newPos = Vector3.new(pos.X, targetY, pos.Z)
-            hrp.CFrame = CFrame.new(newPos, newPos + newLookVector)
+            hrp.CFrame = CFrame.new(pos, pos + newLookVector)
+        end
 
-            -- Disable collisions for every part
-            for _, part in pairs(character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
+        local pos = hrp.Position
+        local newPos = Vector3.new(pos.X, targetY, pos.Z)
+        hrp.CFrame = CFrame.new(newPos, newPos + newLookVector)
+
+        -- Save original CanCollide states once
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                if originalCollisions[part] == nil then
+                    originalCollisions[part] = part.CanCollide
                 end
+                part.CanCollide = false
             end
         end
-    end)
-end
+    else
+        workspace.Gravity = originalGravity
+        targetY = 0
 
-local function stopFloatLoop()
-    if floatLoopConn then
-        floatLoopConn:Disconnect()
-        floatLoopConn = nil
+        -- Restore original CanCollide states
+        for part, state in pairs(originalCollisions) do
+            if part and part.Parent then
+                part.CanCollide = state
+            end
+        end
+        originalCollisions = {}
+
+        if humanoid and humanoid:GetState() == Enum.HumanoidStateType.Physics then
+            humanoid:ChangeState(Enum.HumanoidStateType.Running)
+        end
     end
-end
+end)
 
--- Setup character
+-- Character setup
 local function setupCharacter(char)
     if humanoidDiedConn then
         humanoidDiedConn:Disconnect()
@@ -285,12 +291,11 @@ local function setupCharacter(char)
     humanoid = char:WaitForChild("Humanoid")
     hrp = char:WaitForChild("HumanoidRootPart")
 
-    -- teleport to last death pos if spawnToggle is ON
     if spawnToggle and lastPosition then
-        spawn(function()
-            wait(0.05)
+        task.spawn(function()
+            task.wait(0.05)
             if char and char.Parent and char:FindFirstChild("HumanoidRootPart") then
-                char.HumanoidRootPart.CFrame = CFrame.new(lastPosition) + Vector3.new(0,1.5,0)
+                char.HumanoidRootPart.CFrame = CFrame.new(lastPosition) + Vector3.new(0, 1.5, 0)
             end
         end)
     end
@@ -315,7 +320,6 @@ btnUp.MouseButton1Down:Connect(function()
     if hrp then targetY = hrp.Position.Y end
     if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Physics) end
     playFrozenIdle()
-    startFloatLoop()
 end)
 btnUp.MouseButton1Up:Connect(function()
     upHeld = false
@@ -327,7 +331,6 @@ btnDown.MouseButton1Down:Connect(function()
     if hrp then targetY = hrp.Position.Y end
     if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Physics) end
     playFrozenIdle()
-    startFloatLoop()
 end)
 btnDown.MouseButton1Up:Connect(function()
     downHeld = false
@@ -336,23 +339,8 @@ end)
 btnDisable.MouseButton1Click:Connect(function()
     floating = false
     stopFrozenIdle()
-    stopFloatLoop()
-
-    -- Reset gravity
-    workspace.Gravity = originalProperties.Gravity
-    -- Reset humanoid state
-    if humanoid and humanoid.Parent then
-        humanoid:ChangeState(originalProperties.HumanoidState)
-    end
-    -- Reset CanCollide for all parts
-    for part, collide in pairs(originalProperties.CanCollide) do
-        if part and part.Parent then
-            part.CanCollide = collide
-        end
-    end
 end)
 
--- Spawn toggle
 btnSpawnToggle.MouseButton1Click:Connect(function()
     spawnToggle = not spawnToggle
     if spawnToggle then
@@ -361,8 +349,8 @@ btnSpawnToggle.MouseButton1Click:Connect(function()
         if desiredPos then
             createOrUpdateLocalSpawn(desiredPos)
         else
-            spawn(function()
-                wait(0.05)
+            task.spawn(function()
+                task.wait(0.05)
                 if hrp then
                     createOrUpdateLocalSpawn(hrp.Position)
                 end
