@@ -1,9 +1,12 @@
--- Soft golden sky with gentle sun rays and light blur
+-- Golden sky with gentle sun rays, dreamy blur, and strong shadows
 local Lighting = game:GetService("Lighting")
 
--- Ambient Lighting
-Lighting.Ambient = Color3.fromRGB(255, 210, 150)
-Lighting.OutdoorAmbient = Color3.fromRGB(255, 190, 120)
+-- Ambient and shadow settings
+Lighting.Ambient = Color3.fromRGB(100, 80, 50) -- darker indoor shadows
+Lighting.OutdoorAmbient = Color3.fromRGB(180, 140, 90) -- warm outdoor light
+Lighting.Brightness = 1.2
+Lighting.ClockTime = 14 -- afternoon
+Lighting.ShadowSoftness = 0.2 -- sharper shadows
 
 -- Sky
 local Sky = Instance.new("Sky")
@@ -15,7 +18,7 @@ Sky.Parent = Lighting
 -- Bloom effect (soft)
 local Bloom = Instance.new("BloomEffect")
 Bloom.Name = "SoftGoldenBloom"
-Bloom.Intensity = 0.8  -- slightly lower
+Bloom.Intensity = 0.8
 Bloom.Size = 10
 Bloom.Threshold = 0.85
 Bloom.Enabled = true
@@ -28,23 +31,21 @@ SunRays.Spread = 0.3
 SunRays.Enabled = true
 SunRays.Parent = Lighting
 
--- Depth of Field (light blur effect)
+-- Depth of Field (dreamy blur)
 local DOF = Instance.new("DepthOfFieldEffect")
-DOF.Name = "LightBlur"
-DOF.FocusDistance = 50  -- focal point distance
-DOF.InFocusRadius = 50  -- objects within this distance stay sharp
-DOF.NearIntensity = 0.1  -- subtle blur
-DOF.FarIntensity = 0.1
+DOF.Name = "DreamyBlur"
+DOF.FocusDistance = 50
+DOF.InFocusRadius = 30
+DOF.NearIntensity = 0.25
+DOF.FarIntensity = 0.25
 DOF.Enabled = true
 DOF.Parent = Lighting
 
--- Lighting properties for warmth
+-- Fog and color shift for warmth
 Lighting.ColorShift_Bottom = Color3.fromRGB(255, 200, 130)
 Lighting.ColorShift_Top = Color3.fromRGB(255, 230, 180)
-Lighting.ClockTime = 14
-Lighting.Brightness = 1.1
 Lighting.FogColor = Color3.fromRGB(255, 210, 160)
 Lighting.FogStart = 0
 Lighting.FogEnd = 700
 
-print("Soft golden sky with gentle sun rays and light blur applied!")
+print("Golden sky with dreamy blur and strong shadows applied!")
