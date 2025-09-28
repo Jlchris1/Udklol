@@ -1,0 +1,47 @@
+-- 🌤️ Full Environment Reset Script
+-- Place this in ServerScriptService or run after the rainstorm script
+
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+
+-- 🕹️ Reset basic lighting properties to default Roblox values
+Lighting.FogStart = 0
+Lighting.FogEnd = 100000
+Lighting.Brightness = 2
+Lighting.ClockTime = 14
+Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+Lighting.EnvironmentDiffuseScale = 1
+Lighting.EnvironmentSpecularScale = 1
+Lighting.GlobalShadows = true
+
+-- 🔄 Remove all custom sky, clouds, atmosphere, and effects added by rainstorm script
+for _, obj in pairs(Lighting:GetChildren()) do
+    if obj:IsA("Sky") 
+    or obj:IsA("Clouds") 
+    or obj:IsA("Atmosphere") 
+    or obj:IsA("BloomEffect") 
+    or obj:IsA("BlurEffect") 
+    or obj:IsA("ColorCorrectionEffect") then
+        obj:Destroy()
+    end
+end
+
+-- 💧 Reset all BaseParts reflectance back to 0
+for _, part in pairs(Workspace:GetDescendants()) do
+    if part:IsA("BasePart") then
+        part.Reflectance = 0
+    end
+end
+
+-- 🌧️ Remove rain emitter parts and sounds
+for _, obj in pairs(Workspace:GetChildren()) do
+    if obj.Name == "RainEmitter" then
+        obj:Destroy()
+    elseif obj:IsA("Sound") and obj.SoundId == "rbxassetid://911882737" then
+        obj:Destroy()
+    end
+end
+
+-- ✅ Cancel any ongoing loops that might have been spawned
+-- Note: Original loops run in a task.spawn; if it's still running, server restart or script reload is safest
+print("Environment reset complete.")
