@@ -1,0 +1,31 @@
+-- Script to reset Lighting to default Roblox settings
+local Lighting = game:GetService("Lighting")
+
+-- Remove custom Sky
+local sky = Lighting:FindFirstChild("SoftGoldenSky") or Lighting:FindFirstChild("GoldenSky")
+if sky then
+    sky:Destroy()
+end
+
+-- Remove custom effects
+local effects = {"SoftGoldenBloom", "SoftGoldenBloom", "SunRaysEffect", "DreamyBlur", "LightBlur"}
+for _, effectName in pairs(effects) do
+    local effect = Lighting:FindFirstChild(effectName)
+    if effect then
+        effect:Destroy()
+    end
+end
+
+-- Reset Lighting properties to Roblox defaults
+Lighting.Ambient = Color3.fromRGB(128, 128, 128)
+Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+Lighting.Brightness = 2
+Lighting.ClockTime = 14
+Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
+Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0)
+Lighting.FogColor = Color3.fromRGB(0, 0, 0)
+Lighting.FogStart = 0
+Lighting.FogEnd = 100000 -- default max
+Lighting.ShadowSoftness = 0.5
+
+print("Lighting reset to default Roblox settings!")
