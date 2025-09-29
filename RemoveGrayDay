@@ -1,0 +1,28 @@
+-- 🔄 Reset Lighting / Fog / Atmosphere / Skybox Script
+-- Place this in StarterPlayerScripts (LocalScript) or ServerScriptService (Script)
+
+local Lighting = game:GetService("Lighting")
+
+-- 🌫️ Reset Fog to default
+Lighting.FogStart = 100000 -- Default: essentially "no fog"
+Lighting.FogEnd = 100000   -- (You can also set FogStart = 0, FogEnd = 100000)
+Lighting.FogColor = Color3.fromRGB(255, 255, 255) -- Default white/clear fog
+
+-- ☁️ Remove Atmosphere if it exists
+local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+if atmosphere then
+    atmosphere:Destroy()
+end
+
+-- 🌌 Remove Skybox if it exists
+local sky = Lighting:FindFirstChildOfClass("Sky")
+if sky then
+    sky:Destroy()
+end
+
+-- ☀️ Reset other lighting settings
+Lighting.Brightness = 2               -- Default brightness
+Lighting.ClockTime = 14               -- Noon
+Lighting.ExposureCompensation = 0     -- Neutral exposure
+Lighting.Ambient = Color3.fromRGB(127, 127, 127) -- Default ambient
+Lighting.OutdoorAmbient = Color3.fromRGB(127, 127, 127) -- Default outdoor ambient
