@@ -21,11 +21,9 @@ local function updateCharacter()
     hrp = char:WaitForChild("HumanoidRootPart")
 end
 
-updateCharacter()
-
 --// Function to teleport player to floor
 local function teleportToFloor()
-    if hrp then
+    if hrp and toggled then
         hrp.CFrame = targetFloor.CFrame + Vector3.new(0,5,0)
     end
 end
@@ -49,6 +47,10 @@ toggleButton.MouseButton1Click:Connect(function()
     if toggled then
         toggleButton.Text = "Auto TP/Collect: ON"
         toggleButton.BackgroundColor3 = Color3.fromRGB(60,200,60)
+        -- Teleport immediately when enabled
+        if hrp then
+            teleportToFloor()
+        end
     else
         toggleButton.Text = "Auto TP/Collect: OFF"
         toggleButton.BackgroundColor3 = Color3.fromRGB(40,40,40)
@@ -72,8 +74,13 @@ end)
 player.CharacterAdded:Connect(function(newChar)
     char = newChar
     hrp = char:WaitForChild("HumanoidRootPart")
-    teleportToFloor()
+    if toggled then
+        teleportToFloor()
+    end
 end)
 
---// Teleport immediately if character exists
-teleportToFloor()
+--// Teleport immediately if character exists and toggle is ON
+updateCharacter()
+if toggled then
+    teleportToFloor()
+end
