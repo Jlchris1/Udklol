@@ -13,17 +13,21 @@ local targetFloor = workspace:WaitForChild("Folders"):WaitForChild("Map"):WaitFo
 
 --// Variables
 local toggled = false
+local char, hrp
 
---// Function to get current HRP
-local function getHRP()
-    local char = player.Character or player.CharacterAdded:Wait()
-    local hrp = char:WaitForChild("HumanoidRootPart")
-    return char, hrp
+--// Function to update character and HRP
+local function updateCharacter()
+    char = player.Character or player.CharacterAdded:Wait()
+    hrp = char:WaitForChild("HumanoidRootPart")
 end
 
+updateCharacter()
+
 --// Function to teleport player to floor
-local function teleportToFloor(hrp)
-    hrp.CFrame = targetFloor.CFrame + Vector3.new(0,5,0)
+local function teleportToFloor()
+    if hrp then
+        hrp.CFrame = targetFloor.CFrame + Vector3.new(0,5,0)
+    end
 end
 
 --// Create Toggle Button
@@ -54,25 +58,22 @@ end)
 --// Auto-collect loop (every 0.5s)
 task.spawn(function()
     while task.wait(0.5) do
-        if toggled then
-            local char, hrp = getHRP()
-            if not hrp then continue end
-
+        if toggled and hrp then
             for _, obj in ipairs(workspace:GetDescendants()) do
                 if obj:IsA("MeshPart") and (obj.Name == "Crystal" or obj.Name == "BigCoin" or obj.Name == "Coin") then
-                    obj.CFrame = hrp.CFrame -- Teleport exactly to HRP's 0,0,0
+                    obj.CFrame = hrp.CFrame -- Exactly center of HRP
                 end
             end
         end
     end
 end)
 
---// Auto-teleport to floor on respawn
-player.CharacterAdded:Connect(function(char)
-    local hrp = char:WaitForChild("HumanoidRootPart")
-    teleportToFloor(hrp)
+--// Update character and teleport to floor on respawn
+player.CharacterAdded:Connect(function(newChar)
+    char = newChar
+    hrp = char:WaitForChild("HumanoidRootPart")
+    teleportToFloor()
 end)
 
 --// Teleport immediately if character exists
-local char, hrp = getHRP()
-teleportToFloor(hrp)
+teleportToFloor()
