@@ -1,6 +1,5 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
@@ -12,31 +11,28 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 
 -- Button
 local button = Instance.new("TextButton")
-button.Size = UDim2.new(0, 120, 0, 35)
+button.Size = UDim2.new(0, 150, 0, 35)
 button.Position = UDim2.new(0, 20, 0, 20)
-button.Text = "Void Teleport"
+button.Text = "Start Void Hover"
 button.TextScaled = true
 button.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 button.TextColor3 = Color3.fromRGB(255, 255, 255)
 button.Parent = screenGui
 
 -- Variables
-local originalCFrame = nil
 local platform = nil
-local hovering = false
 local loopConnection = nil
 local targetY = -2000
+local hovering = false
 
 -- Set void height to NaN
 Workspace.FallenPartsDestroyHeight = 0/0
 
--- Helper: disable collisions for parts below NaN (all except platform)
-local function disableVoidCollisions()
+-- Helper: restore collisions for all parts
+local function restoreCollisions()
     for _, part in ipairs(Workspace:GetDescendants()) do
         if part:IsA("BasePart") then
-            if platform and part ~= platform then
-                part.CanCollide = false
-            end
+            part.CanCollide = true
         end
     end
 end
@@ -47,7 +43,7 @@ button.MouseButton1Click:Connect(function()
 
     if not hovering then
         -- Start hover
-        originalCFrame = hrp.CFrame
+        hovering = true
 
         -- Create platform at -2000
         platform = Instance.new("Part")
@@ -61,8 +57,6 @@ button.MouseButton1Click:Connect(function()
         platform.Name = "VoidPlatform"
         platform.Parent = Workspace
 
-        disableVoidCollisions()
-
         -- Start loop teleport
         loopConnection = RunService.Heartbeat:Connect(function()
             if hrp and platform then
@@ -70,31 +64,29 @@ button.MouseButton1Click:Connect(function()
             end
         end)
 
-        hovering = true
-        button.Text = "Return"
+        button.Text = "Stop Hover (Reset)"
     else
-        -- Stop loop teleport and return
+        -- Stop loop teleport and reset player
         if loopConnection then
             loopConnection:Disconnect()
             loopConnection = nil
         end
 
-        if platform then
-            platform.CanCollide = false
+        if player.Character then
+            -- Reset local player
+            player:LoadCharacter()
         end
 
-        -- Tween back to original position
-        local returnTween = TweenService:Create(hrp, TweenInfo.new(2, Enum.EasingStyle.Quad), {CFrame = originalCFrame})
-        returnTween:Play()
-
-        returnTween.Completed:Connect(function()
-            if platform then
-                platform:Destroy()
-                platform = nil
-            end
-        end)
-
         hovering = false
-        button.Text = "Void Teleport"
+        button.Text = "Start Void Hover"
     end
+end)
+
+-- Restore collisions when player dies or respawns
+player.CharacterAdded:Connect(function(char)
+    restoreCollisions()
+end)
+
+player.CharacterRemoving:Connect(function(char)
+    restoreCollisions()
 end)
