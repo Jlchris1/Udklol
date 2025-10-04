@@ -60,7 +60,7 @@ task.spawn(function()
     while task.wait(0.5) do
         if toggled and hrp then
             for _, obj in ipairs(workspace:GetDescendants()) do
-                if obj:IsA("MeshPart") and (obj.Name == "Crystal" or obj.Name == "BigCoin" or obj.Name == "Coin") then
+                if obj:IsA("MeshPart") and (obj.Name == "Crystal" or obj.Name == "BigCoin" or obj.Name == "Coin") or obj.Name == "SmallCoin") then
                     obj.CFrame = hrp.CFrame -- Exactly center of HRP
                 end
             end
