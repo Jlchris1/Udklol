@@ -1,0 +1,78 @@
+--// LocalScript
+local player = game.Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+--// Create ScreenGui
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoTPCollectGui"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+--// Target respawn floor
+local targetFloor = workspace:WaitForChild("Folders"):WaitForChild("Map"):WaitForChild("Lobby"):WaitForChild("Elevator"):WaitForChild("Floor")
+
+--// Variables
+local toggled = false
+
+--// Function to get current HRP
+local function getHRP()
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    return char, hrp
+end
+
+--// Function to teleport player to floor
+local function teleportToFloor(hrp)
+    hrp.CFrame = targetFloor.CFrame + Vector3.new(0,5,0)
+end
+
+--// Create Toggle Button
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 140, 0, 40)
+toggleButton.Position = UDim2.new(0.5, -70, 0, 10) -- top center
+toggleButton.AnchorPoint = Vector2.new(0.5, 0)
+toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Text = "Auto TP/Collect: OFF"
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 16
+toggleButton.ZIndex = 10
+toggleButton.Parent = gui
+
+--// Toggle function
+toggleButton.MouseButton1Click:Connect(function()
+    toggled = not toggled
+    if toggled then
+        toggleButton.Text = "Auto TP/Collect: ON"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(60,200,60)
+    else
+        toggleButton.Text = "Auto TP/Collect: OFF"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    end
+end)
+
+--// Auto-collect loop (every 0.5s)
+task.spawn(function()
+    while task.wait(0.5) do
+        if toggled then
+            local char, hrp = getHRP()
+            if not hrp then continue end
+
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("MeshPart") and (obj.Name == "Crystal" or obj.Name == "BigCoin" or obj.Name == "Coin") then
+                    obj.CFrame = hrp.CFrame + Vector3.new(math.random(-2,2), math.random(2,5), math.random(-2,2))
+                end
+            end
+        end
+    end
+end)
+
+--// Auto-teleport to floor on respawn
+player.CharacterAdded:Connect(function(char)
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    teleportToFloor(hrp)
+end)
+
+--// Teleport immediately if character exists
+local char, hrp = getHRP()
+teleportToFloor(hrp)
