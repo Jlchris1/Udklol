@@ -37,15 +37,12 @@ local function restoreCollisions()
     end
 end
 
-button.MouseButton1Click:Connect(function()
+-- Helper: start hover
+local function startHover()
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
 
-    if not hovering then
-        -- Start hover
-        hovering = true
-
-        -- Create platform at -2000
+    if not platform then
         platform = Instance.new("Part")
         platform.Size = Vector3.new(100, 1, 100)
         platform.Anchored = true
@@ -56,35 +53,47 @@ button.MouseButton1Click:Connect(function()
         platform.Transparency = 0.3
         platform.Name = "VoidPlatform"
         platform.Parent = Workspace
+    end
 
-        -- Start loop teleport
-        loopConnection = RunService.Heartbeat:Connect(function()
-            if hrp and platform then
-                hrp.CFrame = CFrame.new(platform.Position.X, targetY, platform.Position.Z)
-            end
-        end)
+    loopConnection = RunService.Heartbeat:Connect(function()
+        if hrp and platform then
+            hrp.CFrame = CFrame.new(platform.Position.X, targetY, platform.Position.Z)
+        end
+    end)
 
-        button.Text = "Stop Hover (Reset)"
+    hovering = true
+    button.Text = "Stop Hover (Reset)"
+end
+
+-- Helper: stop hover and reset
+local function stopHover()
+    if loopConnection then
+        loopConnection:Disconnect()
+        loopConnection = nil
+    end
+
+    hovering = false
+    button.Text = "Start Void Hover"
+
+    -- Reset character
+    player:LoadCharacter()
+end
+
+-- Button click
+button.MouseButton1Click:Connect(function()
+    if hovering then
+        stopHover()
     else
-        -- Stop loop teleport and reset player
-        if loopConnection then
-            loopConnection:Disconnect()
-            loopConnection = nil
-        end
-
-        if player.Character then
-            -- Reset local player
-            player:LoadCharacter()
-        end
-
-        hovering = false
-        button.Text = "Start Void Hover"
+        startHover()
     end
 end)
 
--- Restore collisions when player dies or respawns
+-- Reconnect hover after respawn
 player.CharacterAdded:Connect(function(char)
     restoreCollisions()
+    -- Reset hovering state so button works again
+    hovering = false
+    button.Text = "Start Void Hover"
 end)
 
 player.CharacterRemoving:Connect(function(char)
