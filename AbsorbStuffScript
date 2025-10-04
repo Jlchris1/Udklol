@@ -1,12 +1,13 @@
---// Part Puller — smooth slow-approach behavior
+--// Part Puller — improved UI & hide-toggle
 --// - Enable/Disable pull
 --// - TouchOnly toggle (only parts with TouchInterest when ON)
---// - TextBox to set radius (blank or <=0 = unlimited)
+--// - Radius textbox (blank/<=0 = unlimited)
 --// - Never affects player characters or anything whose ancestor has Humanoid/HumanoidRootPart
 --// - Turns off collisions while pulling and restores them when pull is disabled
---// - Objects slow down as they near the target to avoid spazzing and float cleanly
-
--- Place this LocalScript in StarterPlayerScripts
+--// - Smooth slowdown as parts approach
+--// - Small hide-toggle in top-left that hides the rest of the GUI (the hide toggle remains visible)
+--// - Ensures ResetOnSpawn/ResetOnRespawn are set to false (if available)
+--// Place this LocalScript in StarterPlayerScripts
 
 local Players       = game:GetService("Players")
 local TweenService  = game:GetService("TweenService")
@@ -16,44 +17,68 @@ local player = Players.LocalPlayer
 local char   = player.Character or player.CharacterAdded:Wait()
 local root   = char:WaitForChild("HumanoidRootPart")
 
--- GUI (compact & mobile friendly)
+-- ScreenGui
 local gui = Instance.new("ScreenGui")
 gui.Name = "PartPullerGui"
-gui.ResetOnSpawn = false
+gui.ResetOnSpawn = false -- ensure it won't reset on respawn/spawn
 gui.IgnoreGuiInset = true
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = player:WaitForChild("PlayerGui")
+-- try set ResetOnRespawn if it exists (compatibility)
+pcall(function() gui.ResetOnRespawn = false end)
 
+-- Background frame (container)
 local frame = Instance.new("Frame")
+frame.Name = "Container"
 frame.Size = UDim2.new(0, 190, 0, 100)
 frame.Position = UDim2.new(0.5, -95, 0, 10)
 frame.BackgroundColor3 = Color3.fromRGB(28,28,28)
-frame.BackgroundTransparency = 0.05
+frame.BackgroundTransparency = 0.03
 frame.Active = true
 frame.Draggable = true
+frame.ClipsDescendants = false -- ensure children are visible
+frame.ZIndex = 1
 frame.Parent = gui
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0,8)
 
+-- Make sure the frame won't cover/hide its buttons (use higher ZIndex for children)
+local function setHighZ(obj, z)
+    obj.ZIndex = z
+    for _,v in ipairs(obj:GetChildren()) do
+        if v:IsA("GuiObject") then setHighZ(v, z) end
+    end
+end
+
+-- Enable button (child of frame)
 local enableBtn = Instance.new("TextButton")
+enableBtn.Name = "EnableBtn"
+enableBtn.Parent = frame
 enableBtn.Size = UDim2.new(1, -10, 0, 30)
 enableBtn.Position = UDim2.new(0, 5, 0, 5)
 enableBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
 enableBtn.TextColor3 = Color3.new(1,1,1)
 enableBtn.TextScaled = true
 enableBtn.Text = "Pull: OFF"
-enableBtn.Parent = frame
+enableBtn.AutoButtonColor = true
+enableBtn.ZIndex = 5
 Instance.new("UICorner", enableBtn)
 
 local touchBtn = Instance.new("TextButton")
+touchBtn.Name = "TouchBtn"
+touchBtn.Parent = frame
 touchBtn.Size = UDim2.new(1, -10, 0, 25)
 touchBtn.Position = UDim2.new(0, 5, 0, 40)
 touchBtn.BackgroundColor3 = Color3.fromRGB(45,45,45)
 touchBtn.TextColor3 = Color3.new(1,1,1)
 touchBtn.TextScaled = true
 touchBtn.Text = "TouchOnly: OFF"
-touchBtn.Parent = frame
+touchBtn.AutoButtonColor = true
+touchBtn.ZIndex = 5
 Instance.new("UICorner", touchBtn)
 
 local radiusBox = Instance.new("TextBox")
+radiusBox.Name = "RadiusBox"
+radiusBox.Parent = frame
 radiusBox.Size = UDim2.new(1, -10, 0, 20)
 radiusBox.Position = UDim2.new(0, 5, 0, 70)
 radiusBox.BackgroundColor3 = Color3.fromRGB(36,36,36)
@@ -61,10 +86,24 @@ radiusBox.PlaceholderText = "Radius (studs) — blank = unlimited"
 radiusBox.TextColor3 = Color3.new(1,1,1)
 radiusBox.Text = ""
 radiusBox.ClearTextOnFocus = false
-radiusBox.Parent = frame
+radiusBox.ZIndex = 5
 Instance.new("UICorner", radiusBox)
 
--- states
+-- Hide toggle (top-left) — separate sibling so it always stays visible
+local hideToggle = Instance.new("TextButton")
+hideToggle.Name = "HideToggle"
+hideToggle.Parent = gui
+hideToggle.Size = UDim2.new(0, 36, 0, 28)
+hideToggle.Position = UDim2.new(0, 6, 0, 6) -- top-left corner with small margin
+hideToggle.BackgroundColor3 = Color3.fromRGB(30,30,30)
+hideToggle.TextColor3 = Color3.new(1,1,1)
+hideToggle.TextScaled = true
+hideToggle.Text = "—" -- a simple hide icon
+hideToggle.AutoButtonColor = true
+hideToggle.ZIndex = 50
+Instance.new("UICorner", hideToggle)
+
+-- States
 local pullingEnabled = false
 local touchOnly = false
 local pullRadius = math.huge -- unlimited by default
@@ -74,65 +113,75 @@ local modifiedParts = {}
 
 -- helpers
 local function isInAnyPlayerCharacter(part)
-	for _, pl in ipairs(Players:GetPlayers()) do
-		local c = pl.Character
-		if c and part:IsDescendantOf(c) then
-			return true
-		end
-	end
-	return false
+    for _, pl in ipairs(Players:GetPlayers()) do
+        local c = pl.Character
+        if c and part:IsDescendantOf(c) then
+            return true
+        end
+    end
+    return false
 end
 
 local function ancestorHasHumanoidOrHPR(part)
-	local cur = part
-	while cur and cur.Parent do
-		if cur:FindFirstChildOfClass("Humanoid") then return true end
-		if cur:FindFirstChild("HumanoidRootPart") then return true end
-		cur = cur.Parent
-	end
-	return false
+    local cur = part
+    while cur and cur.Parent do
+        if cur:FindFirstChildOfClass("Humanoid") then return true end
+        if cur:FindFirstChild("HumanoidRootPart") then return true end
+        cur = cur.Parent
+    end
+    return false
 end
 
 local function parseRadiusBox()
-	local t = radiusBox.Text
-	local n = tonumber(t)
-	if not n or n <= 0 then
-		pullRadius = math.huge
-	else
-		pullRadius = math.clamp(n, 1, 5000)
-	end
+    local t = radiusBox.Text
+    local n = tonumber(t)
+    if not n or n <= 0 then
+        pullRadius = math.huge
+    else
+        pullRadius = math.clamp(n, 1, 5000)
+    end
 end
 
 -- UI events
 enableBtn.MouseButton1Click:Connect(function()
-	pullingEnabled = not pullingEnabled
-	enableBtn.Text = "Pull: " .. (pullingEnabled and "ON" or "OFF")
-	enableBtn.BackgroundColor3 = pullingEnabled and Color3.fromRGB(0,170,0) or Color3.fromRGB(40,40,40)
+    pullingEnabled = not pullingEnabled
+    enableBtn.Text = "Pull: " .. (pullingEnabled and "ON" or "OFF")
+    enableBtn.BackgroundColor3 = pullingEnabled and Color3.fromRGB(0,170,0) or Color3.fromRGB(40,40,40)
 
-	if not pullingEnabled then
-		-- restore CanCollide for modified parts
-		for p,orig in pairs(modifiedParts) do
-			if p and p.Parent and p:IsA("BasePart") then
-				p.CanCollide = orig
-			end
-		end
-		table.clear(modifiedParts)
-	end
+    if not pullingEnabled then
+        -- restore CanCollide for modified parts
+        for p,orig in pairs(modifiedParts) do
+            if p and p.Parent and p:IsA("BasePart") then
+                p.CanCollide = orig
+            end
+        end
+        table.clear(modifiedParts)
+    end
 end)
 
 touchBtn.MouseButton1Click:Connect(function()
-	touchOnly = not touchOnly
-	touchBtn.Text = "TouchOnly: " .. (touchOnly and "ON" or "OFF")
-	touchBtn.BackgroundColor3 = touchOnly and Color3.fromRGB(0,120,255) or Color3.fromRGB(45,45,45)
+    touchOnly = not touchOnly
+    touchBtn.Text = "TouchOnly: " .. (touchOnly and "ON" or "OFF")
+    touchBtn.BackgroundColor3 = touchOnly and Color3.fromRGB(0,120,255) or Color3.fromRGB(45,45,45)
 end)
 
 radiusBox.FocusLost:Connect(function()
-	parseRadiusBox()
-	if pullRadius == math.huge then
-		radiusBox.Text = ""
-	else
-		radiusBox.Text = tostring(pullRadius)
-	end
+    parseRadiusBox()
+    if pullRadius == math.huge then
+        radiusBox.Text = ""
+    else
+        radiusBox.Text = tostring(pullRadius)
+    end
+end)
+
+-- hideToggle logic: toggles visibility of the frame contents but not itself
+local hidden = false
+hideToggle.MouseButton1Click:Connect(function()
+    hidden = not hidden
+    -- hide only the frame (container) — hideToggle remains visible
+    frame.Visible = not hidden
+    -- change icon to indicate state
+    hideToggle.Text = hidden and "+" or "—"
 end)
 
 -- pull behavior parameters
@@ -143,77 +192,81 @@ local SNAP_DISTANCE = 0.9     -- when closer than this, stop velocity and nudge 
 
 -- safe pull function with smooth slowdown
 local function pullPart(part)
-	if not pullingEnabled then return end
-	if not part or not part:IsA("BasePart") then return end
-	if part.Anchored then return end
-	if not part:IsDescendantOf(workspace) then return end
+    if not pullingEnabled then return end
+    if not part or not part:IsA("BasePart") then return end
+    if part.Anchored then return end
+    if not part:IsDescendantOf(workspace) then return end
 
-	-- ignore players and anything under a humanoid/HPR
-	if isInAnyPlayerCharacter(part) then return end
-	if ancestorHasHumanoidOrHPR(part) then return end
+    -- ignore players and anything under a humanoid/HPR
+    if isInAnyPlayerCharacter(part) then return end
+    if ancestorHasHumanoidOrHPR(part) then return end
 
-	-- touchOnly filter
-	if touchOnly then
-		if not part:FindFirstChildOfClass("TouchInterest") and not part:FindFirstChildOfClass("TouchTransmitter") then
-			return
-		end
-	end
+    -- touchOnly filter
+    if touchOnly then
+        if not part:FindFirstChildOfClass("TouchInterest") and not part:FindFirstChildOfClass("TouchTransmitter") then
+            return
+        end
+    end
 
-	-- distance check against configured radius
-	local targetPos = root.Position + Vector3.new(0, 2, 0)
-	local delta = targetPos - part.Position
-	local dist = delta.Magnitude
-	if dist > pullRadius then return end
+    -- distance check against configured radius
+    local targetPos = root.Position + Vector3.new(0, 2, 0)
+    local delta = targetPos - part.Position
+    local dist = delta.Magnitude
+    if dist > pullRadius then return end
 
-	-- disable collisions and record original
-	if not modifiedParts[part] then
-		modifiedParts[part] = part.CanCollide
-		part.CanCollide = false
-	end
+    -- disable collisions and record original
+    if not modifiedParts[part] then
+        modifiedParts[part] = part.CanCollide
+        part.CanCollide = false
+    end
 
-	-- if extremely close, stop velocity and gently tween into place to avoid micro-oscillation
-	if dist <= SNAP_DISTANCE then
-		-- stop motion
-		pcall(function() part.AssemblyLinearVelocity = Vector3.new(0,0,0) end)
-		-- quick gentle tween to exact target to "collect" it
-		local ti = TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-		pcall(function()
-			TweenService:Create(part, ti, {Position = targetPos}):Play()
-		end)
-		return
-	end
+    -- if extremely close, stop velocity and gently tween into place to avoid micro-oscillation
+    if dist <= SNAP_DISTANCE then
+        pcall(function() part.AssemblyLinearVelocity = Vector3.new(0,0,0) end)
+        local ti = TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        pcall(function()
+            TweenService:Create(part, ti, {Position = targetPos}):Play()
+        end)
+        return
+    end
 
-	-- compute speed scaled by distance: full speed when far, scaled down inside SLOW_START
-	local speed
-	if dist > SLOW_START then
-		speed = MAX_SPEED
-	else
-		-- linear scale, clamp to MIN_SPEED..MAX_SPEED
-		speed = math.clamp((dist / SLOW_START) * MAX_SPEED, MIN_SPEED, MAX_SPEED)
-	end
+    -- compute speed scaled by distance: full speed when far, scaled down inside SLOW_START
+    local speed
+    if dist > SLOW_START then
+        speed = MAX_SPEED
+    else
+        speed = math.clamp((dist / SLOW_START) * MAX_SPEED, MIN_SPEED, MAX_SPEED)
+    end
 
-	-- set assembly velocity toward target (safe pcall)
-	if delta.Magnitude > 0 then
-		local dir = delta.Unit
-		pcall(function()
-			part.AssemblyLinearVelocity = dir * speed
-		end)
-	end
+    -- set assembly velocity toward target
+    if delta.Magnitude > 0 then
+        local dir = delta.Unit
+        pcall(function()
+            part.AssemblyLinearVelocity = dir * speed
+        end)
+    end
 end
+
+-- ensure UI Z ordering so buttons aren't visually hidden behind the frame
+setHighZ(frame, 2)
+setHighZ(enableBtn, 6)
+setHighZ(touchBtn, 6)
+setHighZ(radiusBox, 6)
+hideToggle.ZIndex = 60
 
 -- main loop
 RunService.Heartbeat:Connect(function()
-	-- refresh char/root if needed
-	if not char or not char.Parent then
-		char = player.Character or player.CharacterAdded:Wait()
-		root = char:WaitForChild("HumanoidRootPart")
-	end
+    -- refresh char/root if needed
+    if not char or not char.Parent then
+        char = player.Character or player.CharacterAdded:Wait()
+        root = char:WaitForChild("HumanoidRootPart")
+    end
 
-	if not pullingEnabled then return end
+    if not pullingEnabled then return end
 
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("BasePart") and not obj.Anchored then
-			pcall(pullPart, obj)
-		end
-	end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj.Anchored then
+            pcall(pullPart, obj)
+        end
+    end
 end)
