@@ -1,0 +1,66 @@
+--// Slow Tween Hover Platform GUI Script
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+
+-- Create GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "HoverGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Button (top-left small)
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 120, 0, 35)
+button.Position = UDim2.new(0, 20, 0, 20)
+button.Text = "Tween Hover"
+button.TextScaled = true
+button.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+button.TextColor3 = Color3.fromRGB(255, 255, 255)
+button.Parent = screenGui
+
+button.MouseButton1Click:Connect(function()
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+
+    -- Save original position
+    local originalCFrame = hrp.CFrame
+
+    -- Detect void height and target
+    local voidHeight = Workspace.FallenPartsDestroyHeight
+    local targetY = voidHeight + 4
+    local targetPos = Vector3.new(hrp.Position.X, targetY, hrp.Position.Z)
+
+    -- Create platform
+    local platform = Instance.new("Part")
+    platform.Size = Vector3.new(100, 1, 100)
+    platform.Anchored = true
+    platform.CanCollide = true
+    platform.Position = Vector3.new(targetPos.X, targetY - 0.5, targetPos.Z)
+    platform.Color = Color3.fromRGB(60, 60, 60)
+    platform.Material = Enum.Material.Neon
+    platform.Transparency = 0.3
+    platform.Name = "HoverPlatform"
+    platform.Parent = Workspace
+
+    -- Tween to target position (6 seconds for slower movement)
+    local tweenInfo = TweenInfo.new(6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local tweenGoal = {CFrame = CFrame.new(targetPos)}
+    local tween = TweenService:Create(hrp, tweenInfo, tweenGoal)
+    tween:Play()
+
+    -- Wait 7 seconds total, then return
+    task.delay(7, function()
+        -- Tween back to original position (slower return as well)
+        local returnTween = TweenService:Create(hrp, TweenInfo.new(2, Enum.EasingStyle.Quad), {CFrame = originalCFrame})
+        returnTween:Play()
+
+        -- Destroy platform after tween finishes
+        returnTween.Completed:Connect(function()
+            if platform then
+                platform:Destroy()
+            end
+        end)
+    end)
+end)
