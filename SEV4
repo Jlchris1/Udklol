@@ -1,0 +1,131 @@
+--// LocalScript
+local player = game.Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+--// Create ScreenGui
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoTPCollectGui"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+--// Lobby Elevator Floor
+local targetFloor = workspace:WaitForChild("Folders"):WaitForChild("Map"):WaitForChild("Lobby"):WaitForChild("Elevator"):WaitForChild("Floor")
+--// Elevator Roof for AF teleport
+local elevatorRoof = workspace:WaitForChild("Folders"):WaitForChild("Map"):WaitForChild("Elevator"):WaitForChild("Roof")
+
+--// Variables
+local toggled = false
+local afToggled = false
+local char, hrp
+
+--// Function to update character and HRP
+local function updateCharacter()
+    char = player.Character or player.CharacterAdded:Wait()
+    hrp = char:WaitForChild("HumanoidRootPart")
+end
+updateCharacter()
+
+--// Teleport player to floor
+local function teleportToFloor()
+    if hrp and toggled then
+        hrp.CFrame = targetFloor.CFrame + Vector3.new(0, 5, 0)
+    end
+end
+
+--// Create Auto TP/Collect toggle button
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 160, 0, 40)
+toggleButton.Position = UDim2.new(0.5, -80, 0, 10)
+toggleButton.AnchorPoint = Vector2.new(0.5, 0)
+toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Text = "Auto TP/Collect: OFF"
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 16
+toggleButton.ZIndex = 10
+toggleButton.Parent = gui
+
+--// Create AF toggle button
+local afButton = Instance.new("TextButton")
+afButton.Size = UDim2.new(0, 160, 0, 40)
+afButton.Position = UDim2.new(0.5, -80, 0, 60)
+afButton.AnchorPoint = Vector2.new(0.5, 0)
+afButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+afButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+afButton.Text = "AF: OFF"
+afButton.Font = Enum.Font.SourceSansBold
+afButton.TextSize = 16
+afButton.ZIndex = 10
+afButton.Parent = gui
+
+--// Toggle functions
+toggleButton.MouseButton1Click:Connect(function()
+    toggled = not toggled
+    if toggled then
+        toggleButton.Text = "Auto TP/Collect: ON"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(60,200,60)
+        if hrp then
+            teleportToFloor()
+        end
+    else
+        toggleButton.Text = "Auto TP/Collect: OFF"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    end
+end)
+
+afButton.MouseButton1Click:Connect(function()
+    afToggled = not afToggled
+    if afToggled then
+        afButton.Text = "AF: ON"
+        afButton.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+    else
+        afButton.Text = "AF: OFF"
+        afButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    end
+end)
+
+--// Auto-collect loop (every 0.5s)
+task.spawn(function()
+    while task.wait(0.5) do
+        if toggled and hrp then
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("MeshPart") and (obj.Name == "Crystal" or obj.Name == "BigCoin" or obj.Name == "Coin" or obj.Name == "SmallCoin") then
+                    obj.CFrame = hrp.CFrame
+                end
+            end
+        end
+    end
+end)
+
+--// AF Void deletion function
+local function deleteVoidParts()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Name == "Void" then
+            obj:Destroy()
+        end
+    end
+end
+
+--// Handle respawn
+player.CharacterAdded:Connect(function(newChar)
+    char = newChar
+    hrp = char:WaitForChild("HumanoidRootPart")
+    
+    if toggled then
+        teleportToFloor()
+    end
+
+    if afToggled then
+        task.delay(5, function()
+            if hrp and hrp.Parent then
+                deleteVoidParts()
+                hrp.CFrame = elevatorRoof.CFrame + Vector3.new(0,5,0)
+            end
+        end)
+    end
+end)
+
+--// Teleport immediately if character exists and toggle is ON
+if toggled then
+    teleportToFloor()
+end
