@@ -1,4 +1,4 @@
---// LocalScript (Cubix proximity -> looping platform teleport + 45s delayed lobby elevator TP)
+--// LocalScript (Cubix proximity -> loop platform TP with respawn handling)
 local player = game.Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -12,8 +12,7 @@ gui.Parent = playerGui
 local mapFolder = workspace:WaitForChild("Folders"):WaitForChild("Map")
 local lobby = mapFolder:WaitForChild("Lobby")
 local lobbyElevator = lobby:WaitForChild("Elevator")
-local mapElevator = mapFolder:WaitForChild("Elevator")
-local targetFloor = lobbyElevator:WaitForChild("Floor") -- teleport after respawn
+local targetFloor = lobbyElevator:WaitForChild("Floor") -- teleport destination for all cases
 
 --// Cubix (proximity origin)
 local cubixCFrame = CFrame.new(
@@ -24,7 +23,7 @@ local cubixCFrame = CFrame.new(
 )
 local cubixPos = cubixCFrame.Position
 
---// Destination teleport location (platform)
+--// Destination teleport location (platform above map)
 local destCFrame = CFrame.new(
     -2.62722956e-14, 100.447121, -150.850006,
     -9.06215829e-23, 1.37676302e-13, -1,
@@ -47,6 +46,7 @@ local platform
 local platformName = "CubixPlatform"
 local char, hrp
 local previouslyInRange = false
+local countdownTask = nil -- stores delayed teleport task
 
 --// Helpers
 local function updateCharacter()
@@ -55,8 +55,8 @@ local function updateCharacter()
 end
 updateCharacter()
 
-local function teleportToFloor()
-    if hrp and toggled then
+local function teleportToLobbyElevator()
+    if hrp and hrp.Parent then
         hrp.CFrame = targetFloor.CFrame + Vector3.new(0, 5, 0)
     end
 end
@@ -92,7 +92,7 @@ toggleButton.MouseButton1Click:Connect(function()
     if toggled then
         toggleButton.Text = "Auto TP/Collect: ON"
         toggleButton.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
-        teleportToFloor()
+        teleportToLobbyElevator()
     else
         toggleButton.Text = "Auto TP/Collect: OFF"
         toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
@@ -154,7 +154,7 @@ end
 --// Teleport to platform
 local function teleportPlayerToDest()
     if hrp and hrp.Parent then
-        hrp.CFrame = destCFrame * CFrame.new(0, -5, 0) -- lowered 5 studs to avoid ceiling
+        hrp.CFrame = destCFrame * CFrame.new(0, -5, 0)
     end
 end
 
@@ -174,9 +174,7 @@ task.spawn(function()
         if not hrp then
             updateCharacter()
         end
-        if not hrp then
-            continue
-        end
+        if not hrp then continue end
 
         local dist = (hrp.Position - cubixPos).Magnitude
         local inRange = dist <= 25
@@ -184,13 +182,15 @@ task.spawn(function()
         if skyPlatformEnabled and inRange and not previouslyInRange then
             ensurePlatformExists()
             teleportPlayerToDest()
-            startPlatformLoop()
 
-            -- After 45 seconds, teleport to lobby elevator
-            task.delay(45, function()
-                if hrp and hrp.Parent then
-                    hrp.CFrame = targetFloor.CFrame + Vector3.new(0, 5, 0)
-                end
+            -- Cancel previous countdown
+            if countdownTask then
+                task.cancel(countdownTask)
+            end
+
+            -- Start 2-minute countdown to teleport to lobby elevator
+            countdownTask = task.delay(120, function()
+                teleportToLobbyElevator()
             end)
         end
 
@@ -202,7 +202,23 @@ end)
 player.CharacterAdded:Connect(function(newChar)
     char = newChar
     hrp = char:WaitForChild("HumanoidRootPart")
+
     if toggled then
-        teleportToFloor()
+        -- Wait until Auto TP/Collect teleports player to lobby elevator
+        local function waitForLobbyElevator()
+            while hrp and hrp.Parent do
+                local dist = (hrp.Position - targetFloor.Position).Magnitude
+                if dist <= 5 then
+                    break
+                end
+                task.wait(0.25)
+            end
+        end
+
+        task.spawn(function()
+            waitForLobbyElevator()
+            task.wait(2) -- wait 2 seconds after arrival
+            startPlatformLoop()
+        end)
     end
 end)
