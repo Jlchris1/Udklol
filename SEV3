@@ -1,4 +1,4 @@
---// LocalScript (Cubix proximity -> looping platform teleport + 15min cooldown)
+--// LocalScript (Cubix proximity -> looping platform teleport + 45s delayed lobby elevator TP)
 local player = game.Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -13,7 +13,7 @@ local mapFolder = workspace:WaitForChild("Folders"):WaitForChild("Map")
 local lobby = mapFolder:WaitForChild("Lobby")
 local lobbyElevator = lobby:WaitForChild("Elevator")
 local mapElevator = mapFolder:WaitForChild("Elevator")
-local targetFloor = lobbyElevator:WaitForChild("Floor")
+local targetFloor = lobbyElevator:WaitForChild("Floor") -- teleport after respawn
 
 --// Cubix (proximity origin)
 local cubixCFrame = CFrame.new(
@@ -24,9 +24,9 @@ local cubixCFrame = CFrame.new(
 )
 local cubixPos = cubixCFrame.Position
 
---// Destination teleport location (lowered Y to avoid ceiling)
+--// Destination teleport location (platform)
 local destCFrame = CFrame.new(
-    -2.62722956e-14, 100.447121, -150.850006,  -- lowered from 104.447121 to 100
+    -2.62722956e-14, 100.447121, -150.850006,
     -9.06215829e-23, 1.37676302e-13, -1,
     -5.90900449e-08, 1, 1.37676302e-13,
     1, 5.90900449e-08, 8.044678e-21
@@ -47,7 +47,6 @@ local platform
 local platformName = "CubixPlatform"
 local char, hrp
 local previouslyInRange = false
-local cooldownActive = false
 
 --// Helpers
 local function updateCharacter()
@@ -145,7 +144,6 @@ local function ensurePlatformExists()
     p.BottomSurface = Enum.SurfaceType.Smooth
     p.BrickColor = BrickColor.new("Bright blue")
 
-    -- Place platform a few studs below HRP (leg-level)
     local legOffset = Vector3.new(0, -3, 0)
     p.CFrame = hprCeilingCFrame + legOffset
     p.Parent = workspace
@@ -153,10 +151,10 @@ local function ensurePlatformExists()
     return platform
 end
 
---// Teleport to destination (lowered Y)
+--// Teleport to platform
 local function teleportPlayerToDest()
     if hrp and hrp.Parent then
-        hrp.CFrame = destCFrame * CFrame.new(0, -5, 0)  -- lowered 5 studs to avoid ceiling
+        hrp.CFrame = destCFrame * CFrame.new(0, -5, 0) -- lowered 5 studs to avoid ceiling
     end
 end
 
@@ -166,17 +164,6 @@ local function startPlatformLoop()
         while skyPlatformEnabled and platform and platform.Parent and hrp and hrp.Parent do
             hrp.CFrame = platform.CFrame + Vector3.new(0, 5, 0)
             task.wait(1)
-        end
-    end)
-end
-
---// Cooldown (15 minutes)
-local function startCooldown()
-    cooldownActive = true
-    task.delay(15 * 60, function()
-        cooldownActive = false
-        if player.Character and player.Character:FindFirstChild("Humanoid") then
-            player.Character:FindFirstChild("Humanoid"):TakeDamage(1000)
         end
     end)
 end
@@ -194,11 +181,17 @@ task.spawn(function()
         local dist = (hrp.Position - cubixPos).Magnitude
         local inRange = dist <= 25
 
-        if skyPlatformEnabled and inRange and not previouslyInRange and not cooldownActive then
+        if skyPlatformEnabled and inRange and not previouslyInRange then
             ensurePlatformExists()
             teleportPlayerToDest()
             startPlatformLoop()
-            startCooldown()
+
+            -- After 45 seconds, teleport to lobby elevator
+            task.delay(45, function()
+                if hrp and hrp.Parent then
+                    hrp.CFrame = targetFloor.CFrame + Vector3.new(0, 5, 0)
+                end
+            end)
         end
 
         previouslyInRange = inRange
