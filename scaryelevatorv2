@@ -1,0 +1,186 @@
+--// LocalScript (updated)
+local player = game.Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+--// Create ScreenGui
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoTPCollectGui"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+--// Target respawn floor
+local mapFolder = workspace:WaitForChild("Folders"):WaitForChild("Map")
+local lobby = mapFolder:WaitForChild("Lobby")
+local targetElevator = lobby:WaitForChild("Elevator")
+local targetFloor = targetElevator:WaitForChild("Floor")
+local elevatorFolder = targetElevator -- << correct folder reference
+
+--// Variables
+local toggled = false
+local skyPlatformEnabled = false
+local platform
+local char, hrp
+
+-- Flag that becomes true when player is teleported to the floor (and will be cleared after timeout)
+local awaitingElevatorTrigger = false
+
+-- Helpers to update character/hrp
+local function updateCharacter()
+    char = player.Character or player.CharacterAdded:Wait()
+    hrp = char:WaitForChild("HumanoidRootPart")
+end
+updateCharacter()
+
+-- Teleport player to floor
+local function teleportToFloor()
+    if hrp and toggled then
+        hrp.CFrame = targetFloor.CFrame + Vector3.new(0, 5, 0)
+    end
+end
+
+-- Create UI buttons
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 160, 0, 40)
+toggleButton.Position = UDim2.new(0.5, -170, 0, 10)
+toggleButton.AnchorPoint = Vector2.new(0.5, 0)
+toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Text = "Auto TP/Collect: OFF"
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 16
+toggleButton.ZIndex = 10
+toggleButton.Parent = gui
+
+local platformToggle = Instance.new("TextButton")
+platformToggle.Size = UDim2.new(0, 160, 0, 40)
+platformToggle.Position = UDim2.new(0.5, 10, 0, 10)
+platformToggle.AnchorPoint = Vector2.new(0.5, 0)
+platformToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+platformToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+platformToggle.Text = "Sky Platform: OFF"
+platformToggle.Font = Enum.Font.SourceSansBold
+platformToggle.TextSize = 16
+platformToggle.ZIndex = 10
+platformToggle.Parent = gui
+
+-- Toggles
+toggleButton.MouseButton1Click:Connect(function()
+    toggled = not toggled
+    if toggled then
+        toggleButton.Text = "Auto TP/Collect: ON"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
+        teleportToFloor()
+    else
+        toggleButton.Text = "Auto TP/Collect: OFF"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    end
+end)
+
+platformToggle.MouseButton1Click:Connect(function()
+    skyPlatformEnabled = not skyPlatformEnabled
+    if skyPlatformEnabled then
+        platformToggle.Text = "Sky Platform: ON"
+        platformToggle.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+    else
+        platformToggle.Text = "Sky Platform: OFF"
+        platformToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        if platform then
+            platform:Destroy()
+            platform = nil
+        end
+    end
+end)
+
+-- Auto-collect loop (kept from your original)
+task.spawn(function()
+    while task.wait(0.5) do
+        if toggled and hrp then
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("MeshPart") then
+                    if (obj.Name == "Coin" or obj.Name == "BigCoin" or obj.Name == "SmallCoin" or obj.Name == "Crystal") then
+                        if obj:FindFirstChildOfClass("TouchTransmitter") or obj:FindFirstChildOfClass("TouchInterest") then
+                            obj.CFrame = hrp.CFrame
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- When the player's HRP touches the floor, mark that we're awaiting an elevator-trigger
+targetFloor.Touched:Connect(function(hit)
+    if not toggled then return end
+    if not hit or not hit.Parent then return end
+    if hit.Parent == char or (hit.Parent.Parent == char) then
+        -- Player touched the floor; set flag so next elevator-touch can spawn platform
+        awaitingElevatorTrigger = true
+        -- clear after 6 seconds to avoid unlimited window
+        task.delay(6, function()
+            awaitingElevatorTrigger = false
+        end)
+    end
+end)
+
+-- Function that creates platform and starts teleport loop
+local function spawnPlatformAndStartLoop()
+    if platform then return end
+    -- create platform 100 studs above floor
+    platform = Instance.new("Part")
+    platform.Size = Vector3.new(20, 1, 20)
+    platform.Anchored = true
+    platform.CanCollide = true
+    platform.Name = "SkyPlatform"
+    platform.BrickColor = BrickColor.new("Bright blue")
+    platform.CFrame = targetFloor.CFrame + Vector3.new(0, 100, 0)
+    platform.Parent = workspace
+
+    -- teleport loop (1s tick) — stops automatically if toggle turned off or platform removed
+    task.spawn(function()
+        while skyPlatformEnabled and platform and platform.Parent and hrp and hrp.Parent do
+            hrp.CFrame = platform.CFrame + Vector3.new(0, 5, 0)
+            task.wait(1)
+        end
+    end)
+end
+
+-- Elevator part touched handler
+local function onElevatorTouched(partThatTouched)
+    if not skyPlatformEnabled then return end
+    if not awaitingElevatorTrigger then return end -- only spawn if recently teleported to floor
+    if not partThatTouched or not partThatTouched.Parent then return end
+    if partThatTouched.Parent == char or (partThatTouched.Parent.Parent == char) then
+        spawnPlatformAndStartLoop()
+        awaitingElevatorTrigger = false -- consume the trigger
+    end
+end
+
+-- Connect touches for existing elevator parts and for future ones
+local function connectElevatorTouches()
+    for _, descendant in ipairs(elevatorFolder:GetDescendants()) do
+        if descendant:IsA("BasePart") then
+            descendant.Touched:Connect(onElevatorTouched)
+        end
+    end
+    -- handle parts added later
+    elevatorFolder.DescendantAdded:Connect(function(desc)
+        if desc:IsA("BasePart") then
+            desc.Touched:Connect(onElevatorTouched)
+        end
+    end)
+end
+connectElevatorTouches()
+
+-- Update character on respawn
+player.CharacterAdded:Connect(function(newChar)
+    char = newChar
+    hrp = char:WaitForChild("HumanoidRootPart")
+    if toggled then
+        teleportToFloor()
+    end
+end)
+
+-- initial teleport if toggled on start
+if toggled then
+    teleportToFloor()
+end
