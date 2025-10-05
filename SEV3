@@ -1,0 +1,215 @@
+--// LocalScript (Cubix proximity -> looping platform teleport + 15min cooldown)
+local player = game.Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+--// Create GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoTPCollectGui"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+--// Map references
+local mapFolder = workspace:WaitForChild("Folders"):WaitForChild("Map")
+local lobby = mapFolder:WaitForChild("Lobby")
+local lobbyElevator = lobby:WaitForChild("Elevator")
+local mapElevator = mapFolder:WaitForChild("Elevator")
+local targetFloor = lobbyElevator:WaitForChild("Floor")
+
+--// Cubix (proximity origin)
+local cubixCFrame = CFrame.new(
+    -81, 4.10000992, -2145.8999,
+    0.118410297, 0, 0.992964745,
+    0, 1, 0,
+    -0.992964745, 0, 0.118410297
+)
+local cubixPos = cubixCFrame.Position
+
+--// Destination teleport location (lowered Y to avoid ceiling)
+local destCFrame = CFrame.new(
+    -2.62722956e-14, 100.447121, -150.850006,  -- lowered from 104.447121 to 100
+    -9.06215829e-23, 1.37676302e-13, -1,
+    -5.90900449e-08, 1, 1.37676302e-13,
+    1, 5.90900449e-08, 8.044678e-21
+)
+
+--// HRP location when near ceiling (platform reference)
+local hprCeilingCFrame = CFrame.new(
+    -80.9930267, 18.7465038, -2145.90015,
+    0.000162215554, 1.04837603e-07, 1,
+    8.60646665e-09, 1, -1.04839003e-07,
+    -1, 8.62347349e-09, 0.000162215554
+)
+
+--// Variables
+local toggled = false
+local skyPlatformEnabled = false
+local platform
+local platformName = "CubixPlatform"
+local char, hrp
+local previouslyInRange = false
+local cooldownActive = false
+
+--// Helpers
+local function updateCharacter()
+    char = player.Character or player.CharacterAdded:Wait()
+    hrp = char:WaitForChild("HumanoidRootPart")
+end
+updateCharacter()
+
+local function teleportToFloor()
+    if hrp and toggled then
+        hrp.CFrame = targetFloor.CFrame + Vector3.new(0, 5, 0)
+    end
+end
+
+--// Create UI buttons
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 160, 0, 40)
+toggleButton.Position = UDim2.new(0.5, -170, 0, 10)
+toggleButton.AnchorPoint = Vector2.new(0.5, 0)
+toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Text = "Auto TP/Collect: OFF"
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 16
+toggleButton.ZIndex = 10
+toggleButton.Parent = gui
+
+local platformToggle = Instance.new("TextButton")
+platformToggle.Size = UDim2.new(0, 160, 0, 40)
+platformToggle.Position = UDim2.new(0.5, 10, 0, 10)
+platformToggle.AnchorPoint = Vector2.new(0.5, 0)
+platformToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+platformToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+platformToggle.Text = "Sky Platform: OFF"
+platformToggle.Font = Enum.Font.SourceSansBold
+platformToggle.TextSize = 16
+platformToggle.ZIndex = 10
+platformToggle.Parent = gui
+
+--// Toggles
+toggleButton.MouseButton1Click:Connect(function()
+    toggled = not toggled
+    if toggled then
+        toggleButton.Text = "Auto TP/Collect: ON"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
+        teleportToFloor()
+    else
+        toggleButton.Text = "Auto TP/Collect: OFF"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    end
+end)
+
+platformToggle.MouseButton1Click:Connect(function()
+    skyPlatformEnabled = not skyPlatformEnabled
+    if skyPlatformEnabled then
+        platformToggle.Text = "Sky Platform: ON"
+        platformToggle.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+    else
+        platformToggle.Text = "Sky Platform: OFF"
+        platformToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    end
+end)
+
+--// Auto-collect loop
+task.spawn(function()
+    while task.wait(0.5) do
+        if toggled and hrp then
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("MeshPart") then
+                    if (obj.Name == "Coin" or obj.Name == "BigCoin" or obj.Name == "SmallCoin" or obj.Name == "Crystal") then
+                        if obj:FindFirstChildOfClass("TouchTransmitter") or obj:FindFirstChildOfClass("TouchInterest") then
+                            obj.CFrame = hrp.CFrame
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+--// Ensure platform exists below HRP
+local function ensurePlatformExists()
+    local existing = workspace:FindFirstChild(platformName)
+    if existing and existing:IsA("BasePart") then
+        platform = existing
+        return platform
+    end
+
+    local p = Instance.new("Part")
+    p.Name = platformName
+    p.Size = Vector3.new(20, 1, 20)
+    p.Anchored = true
+    p.CanCollide = true
+    p.TopSurface = Enum.SurfaceType.Smooth
+    p.BottomSurface = Enum.SurfaceType.Smooth
+    p.BrickColor = BrickColor.new("Bright blue")
+
+    -- Place platform a few studs below HRP (leg-level)
+    local legOffset = Vector3.new(0, -3, 0)
+    p.CFrame = hprCeilingCFrame + legOffset
+    p.Parent = workspace
+    platform = p
+    return platform
+end
+
+--// Teleport to destination (lowered Y)
+local function teleportPlayerToDest()
+    if hrp and hrp.Parent then
+        hrp.CFrame = destCFrame * CFrame.new(0, -5, 0)  -- lowered 5 studs to avoid ceiling
+    end
+end
+
+--// Loop teleport to platform
+local function startPlatformLoop()
+    task.spawn(function()
+        while skyPlatformEnabled and platform and platform.Parent and hrp and hrp.Parent do
+            hrp.CFrame = platform.CFrame + Vector3.new(0, 5, 0)
+            task.wait(1)
+        end
+    end)
+end
+
+--// Cooldown (15 minutes)
+local function startCooldown()
+    cooldownActive = true
+    task.delay(15 * 60, function()
+        cooldownActive = false
+        if player.Character and player.Character:FindFirstChild("Humanoid") then
+            player.Character:FindFirstChild("Humanoid"):TakeDamage(1000)
+        end
+    end)
+end
+
+--// Proximity check
+task.spawn(function()
+    while task.wait(0.25) do
+        if not hrp then
+            updateCharacter()
+        end
+        if not hrp then
+            continue
+        end
+
+        local dist = (hrp.Position - cubixPos).Magnitude
+        local inRange = dist <= 25
+
+        if skyPlatformEnabled and inRange and not previouslyInRange and not cooldownActive then
+            ensurePlatformExists()
+            teleportPlayerToDest()
+            startPlatformLoop()
+            startCooldown()
+        end
+
+        previouslyInRange = inRange
+    end
+end)
+
+--// Handle respawn
+player.CharacterAdded:Connect(function(newChar)
+    char = newChar
+    hrp = char:WaitForChild("HumanoidRootPart")
+    if toggled then
+        teleportToFloor()
+    end
+end)
