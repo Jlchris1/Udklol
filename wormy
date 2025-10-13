@@ -118,6 +118,11 @@ while true do
 end
 
   	end    
+}) Tab:AddButton({
+	Name = "Kill Bot Wormy. (Need to be the nearest player to it)",
+	Callback = function()
+      		workspace.WormyBot.Humanoid.Health = 0
+  	end    
 }) local Tab = Window:MakeTab({
     Name = "farm",
     Icon = "rbxassetid://4483345998",
