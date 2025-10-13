@@ -1,0 +1,218 @@
+--// LocalScript (place in StarterPlayerScripts or StarterGui)
+local Players = game:GetService("Players")
+local workspace = game:GetService("Workspace")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+--// GUI creation (instant)
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoSystemGui"
+gui.ResetOnSpawn = false
+gui.Enabled = true
+gui.Parent = playerGui
+
+--// Core variables
+local char, hrp
+local autoCollect = false
+local autoFloor = false
+local autoRoof = false
+local uiVisible = true
+
+--// Update character
+local function updateCharacter()
+	char = player.Character or player.CharacterAdded:Wait()
+	hrp = char:WaitForChild("HumanoidRootPart")
+end
+if player.Character then updateCharacter() end
+
+--// Find map parts asynchronously (so GUI shows instantly)
+local targetFloor, elevatorRoof
+task.spawn(function()
+	while true do
+		local folders = workspace:FindFirstChild("Folders")
+		local map = folders and folders:FindFirstChild("Map")
+		if map then
+			local lobby = map:FindFirstChild("Lobby")
+			if lobby and lobby:FindFirstChild("Elevator") then
+				targetFloor = lobby.Elevator:FindFirstChild("Floor")
+			end
+			local mainElevator = map:FindFirstChild("Elevator")
+			if mainElevator then
+				if not targetFloor then
+					targetFloor = mainElevator:FindFirstChild("Floor")
+				end
+				elevatorRoof = mainElevator:FindFirstChild("Roof")
+			end
+		end
+		if targetFloor and elevatorRoof then break end
+		task.wait(0.25)
+	end
+end)
+
+--// Helper: delete "Void" parts
+local function deleteVoidParts()
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") and obj.Name == "Void" then
+			pcall(function() obj:Destroy() end)
+		end
+	end
+end
+
+--// Teleport to floor
+local function teleportToFloor()
+	if hrp and targetFloor then
+		hrp.CFrame = targetFloor.CFrame + Vector3.new(0, 5, 0)
+	end
+end
+
+--// Teleport to roof (after 3s delay)
+local function teleportToRoof()
+	if hrp and elevatorRoof then
+		task.wait(3)
+		deleteVoidParts()
+		hrp.CFrame = elevatorRoof.CFrame + Vector3.new(0, 5, 0)
+	end
+end
+
+--// --- UI CREATION ---
+
+-- small menu toggle (top-right)
+local uiToggle = Instance.new("TextButton")
+uiToggle.Size = UDim2.new(0, 36, 0, 28)
+uiToggle.Position = UDim2.new(1, -46, 0, 8)
+uiToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+uiToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+uiToggle.Text = "≡"
+uiToggle.Font = Enum.Font.SourceSansBold
+uiToggle.TextSize = 20
+uiToggle.ZIndex = 50
+uiToggle.Parent = gui
+
+-- Auto Collect toggle
+local collectButton = Instance.new("TextButton")
+collectButton.Size = UDim2.new(0, 160, 0, 30)
+collectButton.Position = UDim2.new(1, -180, 0, 8)
+collectButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+collectButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+collectButton.Text = "Auto Collect: OFF"
+collectButton.Font = Enum.Font.SourceSansBold
+collectButton.TextSize = 14
+collectButton.ZIndex = 45
+collectButton.Parent = gui
+
+-- Auto Floor TP toggle
+local floorButton = Instance.new("TextButton")
+floorButton.Size = UDim2.new(0, 160, 0, 30)
+floorButton.Position = UDim2.new(1, -180, 0, 46)
+floorButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+floorButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+floorButton.Text = "Auto Floor TP: OFF"
+floorButton.Font = Enum.Font.SourceSansBold
+floorButton.TextSize = 14
+floorButton.ZIndex = 45
+floorButton.Parent = gui
+
+-- Auto Roof TP toggle
+local roofButton = Instance.new("TextButton")
+roofButton.Size = UDim2.new(0, 160, 0, 30)
+roofButton.Position = UDim2.new(1, -180, 0, 84)
+roofButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+roofButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+roofButton.Text = "Auto Roof TP: OFF"
+roofButton.Font = Enum.Font.SourceSansBold
+roofButton.TextSize = 14
+roofButton.ZIndex = 45
+roofButton.Parent = gui
+
+--// Toggle visibility
+local function setUIVisible(state)
+	uiVisible = state
+	collectButton.Visible = state
+	floorButton.Visible = state
+	roofButton.Visible = state
+	uiToggle.BackgroundColor3 = state and Color3.fromRGB(40, 40, 40) or Color3.fromRGB(80, 80, 80)
+end
+
+uiToggle.MouseButton1Click:Connect(function()
+	setUIVisible(not uiVisible)
+end)
+
+--// Toggle handlers
+
+collectButton.MouseButton1Click:Connect(function()
+	autoCollect = not autoCollect
+	if autoCollect then
+		collectButton.Text = "Auto Collect: ON"
+		collectButton.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
+	else
+		collectButton.Text = "Auto Collect: OFF"
+		collectButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	end
+end)
+
+floorButton.MouseButton1Click:Connect(function()
+	autoFloor = not autoFloor
+	if autoFloor then
+		floorButton.Text = "Auto Floor TP: ON"
+		floorButton.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
+		teleportToFloor()
+	else
+		floorButton.Text = "Auto Floor TP: OFF"
+		floorButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	end
+end)
+
+roofButton.MouseButton1Click:Connect(function()
+	autoRoof = not autoRoof
+	if autoRoof then
+		roofButton.Text = "Auto Roof TP: ON"
+		roofButton.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+		task.spawn(function()
+			if autoFloor then
+				task.wait(3) -- waits 3s after floor teleport
+			end
+			teleportToRoof()
+		end)
+	else
+		roofButton.Text = "Auto Roof TP: OFF"
+		roofButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	end
+end)
+
+--// Auto collect loop
+task.spawn(function()
+	while task.wait(0.5) do
+		if autoCollect and hrp then
+			for _, obj in ipairs(workspace:GetDescendants()) do
+				if obj:IsA("MeshPart") then
+					local n = obj.Name
+					if n == "Crystal" or n == "BigCoin" or n == "Coin" or n == "SmallCoin" then
+						pcall(function()
+							obj.CFrame = hrp.CFrame
+						end)
+					end
+				end
+			end
+		end
+	end
+end)
+
+--// Handle respawn
+player.CharacterAdded:Connect(function(newChar)
+	char = newChar
+	hrp = char:WaitForChild("HumanoidRootPart")
+
+	task.delay(1, function()
+		if autoFloor then
+			teleportToFloor()
+		end
+		if autoRoof then
+			task.spawn(function()
+				if autoFloor then
+					task.wait(3)
+				end
+				teleportToRoof()
+			end)
+		end
+	end)
+end)
