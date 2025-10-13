@@ -1,0 +1,298 @@
+-- NPC Advanced Tools GUI with ScrollingFrame & proper loop toggles
+-- Place in StarterGui > LocalScript
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local PlayerGui = player:WaitForChild("PlayerGui")
+
+-- CONFIG
+local GUI_WIDTH = 280
+local VOID_Y = -500
+local TWEEN_TIME = 2
+local TWEEN_INFO = TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local LOOP_DELAY = 0.6
+
+-- ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "NPC_AdvancedTools"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = PlayerGui
+
+-- Main frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, GUI_WIDTH, 0, 34)
+MainFrame.Position = UDim2.new(1, - (GUI_WIDTH * 2) - 20, 0, 60)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+
+-- Toggle button
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(1,0,0,34)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(44,44,44)
+ToggleButton.BorderSizePixel = 0
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.TextSize = 15
+ToggleButton.TextColor3 = Color3.new(1,1,1)
+ToggleButton.Text = "⚙ NPC Tools"
+ToggleButton.Parent = MainFrame
+
+-- ScrollingFrame for content
+local ScrollFrame = Instance.new("ScrollingFrame")
+ScrollFrame.Size = UDim2.new(1,0,1, -34)
+ScrollFrame.Position = UDim2.new(0,0,0,34)
+ScrollFrame.BackgroundColor3 = Color3.fromRGB(32,32,32)
+ScrollFrame.BorderSizePixel = 0
+ScrollFrame.CanvasSize = UDim2.new(0,0,0,0)
+ScrollFrame.ScrollBarThickness = 8
+ScrollFrame.Visible = false
+ScrollFrame.Parent = MainFrame
+
+-- Layout
+local listLayout = Instance.new("UIListLayout")
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0,6)
+listLayout.Parent = ScrollFrame
+
+-- Helpers
+local function makeRow(text,width)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, -12, 0, 34)
+	frame.BackgroundTransparency = 1
+
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(width or 0.78,0,1,0)
+	btn.Position = UDim2.new(0,0,0,0)
+	btn.BackgroundColor3 = Color3.fromRGB(58,58,58)
+	btn.BorderSizePixel = 0
+	btn.Font = Enum.Font.Gotham
+	btn.TextSize = 14
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.Text = text
+	btn.Parent = frame
+
+	local loopBtn = Instance.new("TextButton")
+	loopBtn.Size = UDim2.new(0.18,0,1,0)
+	loopBtn.Position = UDim2.new(0.82,6,0,0)
+	loopBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	loopBtn.BorderSizePixel = 0
+	loopBtn.Font = Enum.Font.Gotham
+	loopBtn.TextSize = 12
+	loopBtn.TextColor3 = Color3.new(1,1,1)
+	loopBtn.Text = "Loop: Off"
+	loopBtn.Parent = frame
+
+	frame.Parent = ScrollFrame
+	return btn, loopBtn
+end
+
+local function makeTextRow(defaultText)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, -12, 0, 34)
+	frame.BackgroundTransparency = 1
+
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(0.7,0,1,0)
+	box.Position = UDim2.new(0,0,0,0)
+	box.Text = defaultText
+	box.BackgroundColor3 = Color3.fromRGB(50,50,50)
+	box.TextColor3 = Color3.new(1,1,1)
+	box.Font = Enum.Font.Gotham
+	box.TextSize = 14
+	box.ClearTextOnFocus = false
+	box.PlaceholderText = defaultText
+	box.Parent = frame
+
+	local loopBtn = Instance.new("TextButton")
+	loopBtn.Size = UDim2.new(0.3, -6,1,0)
+	loopBtn.Position = UDim2.new(0.7,6,0,0)
+	loopBtn.BackgroundColor3 = Color3.fromRGB(80,80,40)
+	loopBtn.Text = "Loop: Off"
+	loopBtn.Font = Enum.Font.Gotham
+	loopBtn.TextSize = 14
+	loopBtn.TextColor3 = Color3.new(1,1,1)
+	loopBtn.BorderSizePixel = 0
+	loopBtn.Parent = frame
+
+	frame.Parent = ScrollFrame
+	return box, loopBtn
+end
+
+-- LOOP STATE
+local loops = {}
+local loopRunners = {}
+
+-- NPC detection
+local function getNPCs()
+	local npcs = {}
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("Model") and Players:GetPlayerFromCharacter(obj)==nil then
+			if obj:FindFirstChildOfClass("Humanoid") or obj:FindFirstChild("HumanoidRootPart") then
+				table.insert(npcs,obj)
+			end
+		end
+	end
+	return npcs
+end
+
+local function iterateParts(npc, fn)
+	for _, p in ipairs(npc:GetDescendants()) do
+		if p:IsA("BasePart") then pcall(function() fn(p) end) end
+	end
+end
+
+-- FUNCTIONS
+local function safeTweenToVoid(npc)
+	local parts = {}
+	for _, p in ipairs(npc:GetDescendants()) do
+		if p:IsA("BasePart") then table.insert(parts,p) end
+	end
+	if #parts==0 then return end
+
+	local minY = math.huge
+	for _, p in ipairs(parts) do
+		local bottom = p.Position.Y - p.Size.Y/2
+		if bottom<minY then minY = bottom end
+	end
+	local shift = (-500 + 3) - minY
+
+	local collisions = {}
+	for _, p in ipairs(parts) do
+		collisions[p] = p.CanCollide
+		p.CanCollide = false
+	end
+
+	local tweens = {}
+	for _, p in ipairs(parts) do
+		local goal = {CFrame = p.CFrame + Vector3.new(0,shift,0)}
+		table.insert(tweens,TweenService:Create(p,TWEEN_INFO,goal))
+	end
+	for _, tw in ipairs(tweens) do pcall(function() tw:Play() end) end
+	task.wait(TWEEN_TIME + 0.05)
+	for _, p in ipairs(parts) do p.Velocity = Vector3.new(0,-200,0) end
+	task.delay(0.4,function()
+		for p,_ in pairs(collisions) do p.CanCollide = collisions[p] end
+	end)
+end
+
+local function setCurrentHPNaN(npc)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then pcall(function() hum.Health = 0/0 end) end
+end
+
+local function healTick(npc, amt)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then pcall(function() hum.Health = math.min(hum.MaxHealth or hum.Health, hum.Health + amt) end) end
+end
+
+local function setSpeed(npc,val)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then pcall(function() hum.WalkSpeed = val end) end
+end
+
+local function setJump(npc,val)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then pcall(function()
+		if hum.JumpPower ~= nil then hum.JumpPower = val else hum.JumpHeight = val end
+	end) end
+end
+
+-- ROWS
+local gravBox, gravLoopBtn = makeTextRow("Gravity Value")
+local speedBox, speedLoopBtn = makeTextRow("NPC Speed")
+local jumpBox, jumpLoopBtn = makeTextRow("NPC JumpPower")
+local tweenBtn, tweenLoopBtn = makeRow("Tween NPCs to Void")
+local infBtn, infLoopBtn = makeRow("Set Current HP = 0/0")
+local healBox, healBtn = makeTextRow("Heal per tick")
+local viewBtn, viewLoopBtn = makeRow("View NPCs Tracker")
+
+-- LOOP HELPER
+local function startLoop(key,func)
+	if loopRunners[key] then return end
+	loops[key]=true
+	local co = coroutine.create(function()
+		while loops[key] do
+			for _,npc in ipairs(getNPCs()) do pcall(function() func(npc) end) end
+			task.wait(LOOP_DELAY)
+		end
+		loopRunners[key]=nil
+	end)
+	loopRunners[key]=co
+	coroutine.resume(co)
+end
+local function stopLoop(key) loops[key]=false end
+
+-- LOOP BUTTONS
+local function attachLoopToggle(box,btn,key,func)
+	btn.MouseButton1Click:Connect(function()
+		loops[key]=not loops[key]
+		btn.Text="Loop: "..(loops[key] and "On" or "Off")
+		if loops[key] then startLoop(key,function(npc)
+			local val=tonumber(box.Text)
+			if val then func(npc,val) end
+		end)
+		else stopLoop(key) end
+	end)
+	box.FocusLost:Connect(function(enterPressed)
+		local val = tonumber(box.Text)
+		if val then
+			for _,npc in ipairs(getNPCs()) do func(npc,val) end
+		end
+	end)
+end
+
+attachLoopToggle(gravBox,gravLoopBtn,"gravity",function(_,v) workspace.Gravity=v end)
+attachLoopToggle(speedBox,speedLoopBtn,"speed",setSpeed)
+attachLoopToggle(jumpBox,jumpLoopBtn,"jump",setJump)
+
+-- OTHER BUTTONS
+tweenBtn.MouseButton1Click:Connect(function() for _,npc in ipairs(getNPCs()) do safeTweenToVoid(npc) end end)
+infBtn.MouseButton1Click:Connect(function() for _,npc in ipairs(getNPCs()) do setCurrentHPNaN(npc) end end)
+healBtn.MouseButton1Click:Connect(function() local amt=tonumber(healBox.Text) or 0 for _,npc in ipairs(getNPCs()) do healTick(npc,amt) end end)
+viewBtn.MouseButton1Click:Connect(function() for _,npc in ipairs(getNPCs()) do
+	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
+	if hrp and not hrp:FindFirstChild("NPCTracker") then
+		local gui = Instance.new("BillboardGui")
+		gui.Name="NPCTracker"
+		gui.Size=UDim2.new(0,220,0,60)
+		gui.StudsOffset=Vector3.new(0,4,0)
+		gui.AlwaysOnTop=true
+		gui.Parent=hrp
+		local label = Instance.new("TextLabel",gui)
+		label.Size=UDim2.new(1,-6,1,-6)
+		label.Position=UDim2.new(0,3,0,3)
+		label.BackgroundTransparency=1
+		label.TextColor3=Color3.new(1,1,1)
+		label.Font=Enum.Font.Code
+		label.TextScaled=true
+		RunService.Heartbeat:Connect(function()
+			if hrp.Parent then
+				local hum = npc:FindFirstChildOfClass("Humanoid")
+				local hp = hum and hum.Health or 0
+				local ws = hum and (hum.WalkSpeed or 0) or 0
+				local jp = hum and (hum.JumpPower or hum.JumpHeight or 0) or 0
+				local dist = 0
+				if player.Character and player.Character.PrimaryPart then
+					dist = (hrp.Position - player.Character.PrimaryPart.Position).Magnitude
+				end
+				label.Text=string.format("%s\nHP: %.1f | Speed: %.1f | JP: %.1f\nDist: %.1f studs",npc.Name,hp,ws,jp,dist)
+			end
+		end)
+	end
+end end)
+
+-- TOGGLE GUI
+local open=false
+ToggleButton.MouseButton1Click:Connect(function()
+	open=not open
+	ScrollFrame.Visible=open
+	local size=open and UDim2.new(0,GUI_WIDTH,0,400) or UDim2.new(0,GUI_WIDTH,0,34)
+	TweenService:Create(MainFrame,TweenInfo.new(0.22,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),{Size=size}):Play()
+end)
+
+print("[NPC_AdvancedTools] Loaded. Use ⚙ toggle to open GUI.")
