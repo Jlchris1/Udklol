@@ -1,0 +1,207 @@
+-- NPC Utility GUI (Part 3 - Safe Tool Handling + Behendigheid Method)
+-- LocalScript, place in StarterGui
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local PlayerGui = player:WaitForChild("PlayerGui")
+
+-- CONFIG
+local GUI_WIDTH = 260
+local TOGGLE_WIDTH = 120
+local LOOP_DELAY = 0.1
+
+-- ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "NPCUtilityGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = PlayerGui
+
+-- Main Frame (Left Side)
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, GUI_WIDTH, 0, 34)
+MainFrame.Position = UDim2.new(0, 10, 0, 80)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+
+-- Small Toggle Bar
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0, TOGGLE_WIDTH, 1, 0)
+ToggleButton.Position = UDim2.new(0, 0, 0, 0)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(44, 44, 44)
+ToggleButton.BorderSizePixel = 0
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.TextSize = 15
+ToggleButton.TextColor3 = Color3.new(1, 1, 1)
+ToggleButton.Text = "☰ NPC Util"
+ToggleButton.Parent = MainFrame
+
+-- Options Container
+local Options = Instance.new("Frame")
+Options.Size = UDim2.new(1, 0, 0, 220)
+Options.Position = UDim2.new(0, 0, 0, 34)
+Options.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+Options.BorderSizePixel = 0
+Options.Visible = false
+Options.Parent = MainFrame
+
+-- Helper GUI builders
+local function makeRow(y)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, -12, 0, 34)
+	row.Position = UDim2.new(0, 6, 0, y)
+	row.BackgroundTransparency = 1
+	row.Parent = Options
+	return row
+end
+
+local function makeToggle(parent, text)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, 0, 1, 0)
+	btn.BackgroundColor3 = Color3.fromRGB(58, 58, 58)
+	btn.BorderSizePixel = 0
+	btn.Font = Enum.Font.Gotham
+	btn.TextSize = 14
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.Text = text .. " : Off"
+	btn.Parent = parent
+	return btn
+end
+
+-- Detect NPCs only (not players)
+local function getNPCs()
+	local npcs = {}
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
+			local hum = obj:FindFirstChildOfClass("Humanoid")
+			local hasPart = obj:FindFirstChildWhichIsA("BasePart")
+			if hum or hasPart then
+				table.insert(npcs, obj)
+			end
+		end
+	end
+	return npcs
+end
+
+-- Iterate only base parts, ignoring tool parts
+local function iterateBaseParts(npc, fn)
+	for _, part in ipairs(npc:GetDescendants()) do
+		if part:IsA("BasePart") and not part:IsDescendantOf(npc:FindFirstChildWhichIsA("Tool")) then
+			pcall(function() fn(part) end)
+		end
+	end
+end
+
+-- Actions
+local function getRidNPC(npc)
+	-- Teleports NPC far away (ignoring tools)
+	local targetPos = Vector3.new(9e37, 9e37, 9e37)
+	iterateBaseParts(npc, function(p)
+		p.CFrame = CFrame.new(targetPos)
+	end)
+	task.delay(0.2, function()
+		iterateBaseParts(npc, function(p)
+			p.Anchored = true
+		end)
+	end)
+end
+
+local function removeNPCTools(npc)
+	for _, tool in ipairs(npc:GetChildren()) do
+		if tool:IsA("Tool") then
+			tool:Destroy()
+		end
+	end
+end
+
+local function spasmNPC(npc)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then hum.PlatformStand = true end
+
+	-- Violent random rotation, ignoring tools
+	iterateBaseParts(npc, function(p)
+		local randRot = CFrame.Angles(
+			math.random() * math.pi * 6 - 3 * math.pi,
+			math.random() * math.pi * 6 - 3 * math.pi,
+			math.random() * math.pi * 6 - 3 * math.pi
+		)
+		p.CFrame = p.CFrame * randRot
+	end)
+end
+
+local function behendigheidKill(npc)
+	local head = npc:FindFirstChild("Head")
+	if head then
+		for _, a in ipairs(head:GetChildren()) do
+			if a:IsA("Attachment") then
+				a:Destroy()
+			end
+		end
+		head:Destroy()
+	end
+end
+
+-- GUI Layout
+local y = 6
+local getRidRow = makeRow(y) y = y + 40
+local removeToolsRow = makeRow(y) y = y + 40
+local spasmRow = makeRow(y) y = y + 40
+local behendigheidRow = makeRow(y) y = y + 40
+
+local GetRidBtn = makeToggle(getRidRow, "Get rid of NPCs")
+local RemoveToolsBtn = makeToggle(removeToolsRow, "Remove NPC Tools")
+local SpasmBtn = makeToggle(spasmRow, "Spasm NPCs")
+local KillBehendigheidBtn = makeToggle(behendigheidRow, "Kill All NPCs (Behendigheid)")
+
+-- Loop Runner
+local function startLoop(flagName, action)
+	coroutine.wrap(function()
+		while _G[flagName] do
+			for _, npc in ipairs(getNPCs()) do
+				pcall(function() action(npc) end)
+			end
+			task.wait(LOOP_DELAY)
+		end
+	end)()
+end
+
+-- Button Logic
+GetRidBtn.MouseButton1Click:Connect(function()
+	_G["getRidLoop"] = not _G["getRidLoop"]
+	GetRidBtn.Text = "Get rid of NPCs : " .. (_G["getRidLoop"] and "On" or "Off")
+	if _G["getRidLoop"] then startLoop("getRidLoop", getRidNPC) end
+end)
+
+RemoveToolsBtn.MouseButton1Click:Connect(function()
+	_G["removeToolsLoop"] = not _G["removeToolsLoop"]
+	RemoveToolsBtn.Text = "Remove NPC Tools : " .. (_G["removeToolsLoop"] and "On" or "Off")
+	if _G["removeToolsLoop"] then startLoop("removeToolsLoop", removeNPCTools) end
+end)
+
+SpasmBtn.MouseButton1Click:Connect(function()
+	_G["spasmLoop"] = not _G["spasmLoop"]
+	SpasmBtn.Text = "Spasm NPCs : " .. (_G["spasmLoop"] and "On" or "Off")
+	if _G["spasmLoop"] then startLoop("spasmLoop", spasmNPC) end
+end)
+
+KillBehendigheidBtn.MouseButton1Click:Connect(function()
+	_G["behendigheidLoop"] = not _G["behendigheidLoop"]
+	KillBehendigheidBtn.Text = "Kill All NPCs (Behendigheid) : " .. (_G["behendigheidLoop"] and "On" or "Off")
+	if _G["behendigheidLoop"] then startLoop("behendigheidLoop", behendigheidKill) end
+end)
+
+-- GUI Open/Close Toggle
+local open = false
+ToggleButton.MouseButton1Click:Connect(function()
+	open = not open
+	local targetSize = open and UDim2.new(0, GUI_WIDTH, 0, 220) or UDim2.new(0, GUI_WIDTH, 0, 34)
+	TweenService:Create(MainFrame, TweenInfo.new(0.22, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = targetSize}):Play()
+	task.wait(0.08)
+	Options.Visible = open
+end)
+
+print("[NPCUtilityGUI v3.4] Loaded - Safe against tools, violent spasm ready.")
