@@ -123,6 +123,18 @@ end
 	Callback = function()
       		workspace.WormyBot.Humanoid.Health = 0
   	end    
+}) Tab:AddButton({
+	Name = "Send Bot Wormy to the void",
+	Callback = function()
+      		local wormyBotRoot = workspace:FindFirstChild("WormyBot")
+
+if wormyBotRoot and wormyBotRoot:FindFirstChild("HumanoidRootPart") then
+	local rootPart = wormyBotRoot.HumanoidRootPart
+	-- Teleport 7 studs above the void (Y = 7)
+	rootPart.CFrame = CFrame.new(rootPart.Position.X, 7, rootPart.Position.Z)
+end
+
+  	end    
 }) local Tab = Window:MakeTab({
     Name = "farm",
     Icon = "rbxassetid://4483345998",
