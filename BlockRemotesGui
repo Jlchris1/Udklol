@@ -1,0 +1,185 @@
+--// GUI Remote Blocker (with top-center hide/show toggle)
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "RemoteBlockerGUI"
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ResetOnSpawn = false
+
+-- Visibility Toggle (top-center)
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Text = "👁️"
+ToggleButton.Size = UDim2.new(0, 50, 0, 30)
+ToggleButton.Position = UDim2.new(0.5, -25, 0, 10) -- top-center
+ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.Parent = ScreenGui
+
+-- Main GUI Frame
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(1, 0, 0, 70)
+Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Frame.BorderSizePixel = 0
+Frame.Position = UDim2.new(0, 0, 0, 50) -- slightly below toggle
+Frame.Parent = ScreenGui
+
+-- TextBox
+local TextBox = Instance.new("TextBox")
+TextBox.PlaceholderText = "Enter remote name..."
+TextBox.Size = UDim2.new(0.5, -10, 0, 30)
+TextBox.Position = UDim2.new(0, 10, 0, 20)
+TextBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+TextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextBox.Parent = Frame
+
+-- Block button
+local BlockButton = Instance.new("TextButton")
+BlockButton.Text = "🧱 Block"
+BlockButton.Size = UDim2.new(0, 100, 0, 30)
+BlockButton.Position = UDim2.new(0.5, 10, 0, 20)
+BlockButton.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+BlockButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+BlockButton.Parent = Frame
+
+-- Open remote list button
+local OpenListButton = Instance.new("TextButton")
+OpenListButton.Text = "📜 Remotes"
+OpenListButton.Size = UDim2.new(0, 100, 0, 30)
+OpenListButton.Position = UDim2.new(0.5, 120, 0, 20)
+OpenListButton.BackgroundColor3 = Color3.fromRGB(0, 100, 150)
+OpenListButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+OpenListButton.Parent = Frame
+
+-- ScrollingFrame
+local ScrollingFrame = Instance.new("ScrollingFrame")
+ScrollingFrame.Size = UDim2.new(0.4, 0, 0.5, 0)
+ScrollingFrame.Position = UDim2.new(0.3, 0, 0, 130)
+ScrollingFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+ScrollingFrame.BorderSizePixel = 0
+ScrollingFrame.Visible = false
+ScrollingFrame.ScrollBarThickness = 8
+ScrollingFrame.AutomaticCanvasSize = Enum.AutomaticSize.None
+ScrollingFrame.Parent = ScreenGui
+
+-- UIListLayout
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.Parent = ScrollingFrame
+ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ListLayout.Padding = UDim.new(0, 2)
+
+-- Auto-expand scroll frame
+ListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, ListLayout.AbsoluteContentSize.Y + 10)
+end)
+
+-- Hook FireServer
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+local oldNamecall = mt.__namecall
+
+-- Track blocked remotes
+local blockedRemotes = {} -- [Remote] = true
+local selectedRemote = nil -- Currently selected in UI
+
+mt.__namecall = function(self, ...)
+    if blockedRemotes[self] and getnamecallmethod() == "FireServer" then
+        warn("Blocked " .. self.Name .. " from firing.")
+        return nil
+    end
+    return oldNamecall(self, ...)
+end
+
+-- Add button for a remote
+local function addRemoteButton(label, remote)
+    local b = Instance.new("TextButton")
+    b.Text = label
+    b.Size = UDim2.new(1, -6, 0, 25)
+    b.BackgroundColor3 = blockedRemotes[remote] and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(60, 60, 60)
+    b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.Font = Enum.Font.SourceSans
+    b.TextSize = 18
+    b.Parent = ScrollingFrame
+
+    b.MouseButton1Click:Connect(function()
+        selectedRemote = remote
+        TextBox.Text = remote.Name
+        -- Update block button
+        if blockedRemotes[remote] then
+            BlockButton.Text = "✅ Unblock"
+            BlockButton.BackgroundColor3 = Color3.fromRGB(0, 120, 0)
+        else
+            BlockButton.Text = "🧱 Block"
+            BlockButton.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+        end
+    end)
+end
+
+-- Scan all remotes
+local function listRemotes()
+    for _, obj in ipairs(ScrollingFrame:GetChildren()) do
+        if obj:IsA("TextButton") then obj:Destroy() end
+    end
+
+    local function search(container, prefix)
+        for _, v in ipairs(container:GetDescendants()) do
+            if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
+                addRemoteButton(prefix .. v.Name, v)
+            end
+        end
+    end
+
+    search(ReplicatedStorage, "[ReplicatedStorage] ")
+
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") then
+            search(tool, "(" .. LocalPlayer.Name .. "):" .. tool.Name .. " > ")
+        end
+    end
+end
+
+-- Open/close remote list
+OpenListButton.MouseButton1Click:Connect(function()
+    if ScrollingFrame.Visible then
+        ScrollingFrame.Visible = false
+    else
+        listRemotes()
+        ScrollingFrame.Visible = true
+    end
+end)
+
+-- Block/unblock
+BlockButton.MouseButton1Click:Connect(function()
+    if not selectedRemote then return warn("Select a remote first.") end
+
+    if blockedRemotes[selectedRemote] then
+        blockedRemotes[selectedRemote] = nil
+        BlockButton.Text = "🧱 Block"
+        BlockButton.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+    else
+        blockedRemotes[selectedRemote] = true
+        BlockButton.Text = "✅ Unblock"
+        BlockButton.BackgroundColor3 = Color3.fromRGB(0, 120, 0)
+    end
+
+    -- Update colors
+    for _, b in ipairs(ScrollingFrame:GetChildren()) do
+        if b:IsA("TextButton") and b.Text and b.Text ~= "" then
+            local r = nil
+            for rem, _ in pairs(blockedRemotes) do
+                if b.Text:find(rem.Name, 1, true) then r = rem break end
+            end
+            b.BackgroundColor3 = (r and blockedRemotes[r]) and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(60, 60, 60)
+        end
+    end
+end)
+
+-- Toggle GUI visibility (except toggle button)
+ToggleButton.MouseButton1Click:Connect(function()
+    local visible = Frame.Visible
+    Frame.Visible = not visible
+    ScrollingFrame.Visible = visible and false or ScrollingFrame.Visible
+end)
