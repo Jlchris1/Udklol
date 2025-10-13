@@ -1,25 +1,25 @@
--- NPC Utility GUI (Part 3 - Safe Tool Handling + Behendigheid Method)
+-- NPC Utility GUI (Part 3 - Behendigheid + Jump + HipHeight Control)
 -- LocalScript, place in StarterGui
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
 -- CONFIG
 local GUI_WIDTH = 260
-local TOGGLE_WIDTH = 120
+local TOGGLE_WIDTH = 70
 local LOOP_DELAY = 0.1
 
--- ScreenGui
+-- GUI
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "NPCUtilityGUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = PlayerGui
 
--- Main Frame (Left Side)
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, GUI_WIDTH, 0, 34)
 MainFrame.Position = UDim2.new(0, 10, 0, 80)
@@ -28,7 +28,6 @@ MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
 
--- Small Toggle Bar
 local ToggleButton = Instance.new("TextButton")
 ToggleButton.Size = UDim2.new(0, TOGGLE_WIDTH, 1, 0)
 ToggleButton.Position = UDim2.new(0, 0, 0, 0)
@@ -37,19 +36,18 @@ ToggleButton.BorderSizePixel = 0
 ToggleButton.Font = Enum.Font.GothamBold
 ToggleButton.TextSize = 15
 ToggleButton.TextColor3 = Color3.new(1, 1, 1)
-ToggleButton.Text = "☰ NPC Util"
+ToggleButton.Text = "☰ NPC 3"
 ToggleButton.Parent = MainFrame
 
--- Options Container
 local Options = Instance.new("Frame")
-Options.Size = UDim2.new(1, 0, 0, 220)
+Options.Size = UDim2.new(1, 0, 0, 300)
 Options.Position = UDim2.new(0, 0, 0, 34)
 Options.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
 Options.BorderSizePixel = 0
 Options.Visible = false
 Options.Parent = MainFrame
 
--- Helper GUI builders
+-- UI Builders
 local function makeRow(y)
 	local row = Instance.new("Frame")
 	row.Size = UDim2.new(1, -12, 0, 34)
@@ -72,14 +70,41 @@ local function makeToggle(parent, text)
 	return btn
 end
 
--- Detect NPCs only (not players)
+local function makeTextboxRow(y, placeholder)
+	local frame = makeRow(y)
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(0.6, -5, 1, 0)
+	box.Position = UDim2.new(0, 0, 0, 0)
+	box.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	box.BorderSizePixel = 0
+	box.Font = Enum.Font.Gotham
+	box.TextSize = 14
+	box.TextColor3 = Color3.new(1, 1, 1)
+	box.PlaceholderText = placeholder
+	box.Parent = frame
+
+	local toggle = Instance.new("TextButton")
+	toggle.Size = UDim2.new(0.4, -5, 1, 0)
+	toggle.Position = UDim2.new(0.6, 5, 0, 0)
+	toggle.BackgroundColor3 = Color3.fromRGB(58, 58, 58)
+	toggle.BorderSizePixel = 0
+	toggle.Font = Enum.Font.Gotham
+	toggle.TextSize = 14
+	toggle.TextColor3 = Color3.new(1, 1, 1)
+	toggle.Text = "Loop: Off"
+	toggle.Parent = frame
+
+	return box, toggle
+end
+
+-- NPC Filter
 local function getNPCs()
 	local npcs = {}
 	for _, obj in ipairs(workspace:GetDescendants()) do
 		if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
 			local hum = obj:FindFirstChildOfClass("Humanoid")
 			local hasPart = obj:FindFirstChildWhichIsA("BasePart")
-			if hum or hasPart then
+			if hum and hasPart then
 				table.insert(npcs, obj)
 			end
 		end
@@ -87,10 +112,10 @@ local function getNPCs()
 	return npcs
 end
 
--- Iterate only base parts, ignoring tool parts
+-- Iterate only base parts (tools ignored naturally)
 local function iterateBaseParts(npc, fn)
 	for _, part in ipairs(npc:GetDescendants()) do
-		if part:IsA("BasePart") and not part:IsDescendantOf(npc:FindFirstChildWhichIsA("Tool")) then
+		if part:IsA("BasePart") then
 			pcall(function() fn(part) end)
 		end
 	end
@@ -98,38 +123,29 @@ end
 
 -- Actions
 local function getRidNPC(npc)
-	-- Teleports NPC far away (ignoring tools)
 	local targetPos = Vector3.new(9e37, 9e37, 9e37)
-	iterateBaseParts(npc, function(p)
-		p.CFrame = CFrame.new(targetPos)
-	end)
+	iterateBaseParts(npc, function(p) p.CFrame = CFrame.new(targetPos) end)
 	task.delay(0.2, function()
-		iterateBaseParts(npc, function(p)
-			p.Anchored = true
-		end)
+		iterateBaseParts(npc, function(p) p.Anchored = true end)
 	end)
 end
 
 local function removeNPCTools(npc)
 	for _, tool in ipairs(npc:GetChildren()) do
-		if tool:IsA("Tool") then
-			tool:Destroy()
-		end
+		if tool:IsA("Tool") then tool:Destroy() end
 	end
 end
 
+-- 🔥 Violent Old-Style Spasm (random CFrame rotations applied to all parts, wildly)
 local function spasmNPC(npc)
 	local hum = npc:FindFirstChildOfClass("Humanoid")
 	if hum then hum.PlatformStand = true end
 
-	-- Violent random rotation, ignoring tools
 	iterateBaseParts(npc, function(p)
-		local randRot = CFrame.Angles(
-			math.random() * math.pi * 6 - 3 * math.pi,
-			math.random() * math.pi * 6 - 3 * math.pi,
-			math.random() * math.pi * 6 - 3 * math.pi
-		)
-		p.CFrame = p.CFrame * randRot
+		local rx = math.rad(math.random(-180, 180))
+		local ry = math.rad(math.random(-180, 180))
+		local rz = math.rad(math.random(-180, 180))
+		p.CFrame = p.CFrame * CFrame.Angles(rx, ry, rz)
 	end)
 end
 
@@ -137,71 +153,104 @@ local function behendigheidKill(npc)
 	local head = npc:FindFirstChild("Head")
 	if head then
 		for _, a in ipairs(head:GetChildren()) do
-			if a:IsA("Attachment") then
-				a:Destroy()
-			end
+			if a:IsA("Attachment") then a:Destroy() end
 		end
 		head:Destroy()
 	end
 end
 
+local function jumpNPC(npc)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then hum.Jump = true end
+end
+
+local function setHipHeight(npc, value)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then hum.HipHeight = value end
+end
+
 -- GUI Layout
 local y = 6
-local getRidRow = makeRow(y) y = y + 40
-local removeToolsRow = makeRow(y) y = y + 40
-local spasmRow = makeRow(y) y = y + 40
-local behendigheidRow = makeRow(y) y = y + 40
+local GetRidRow = makeRow(y) y = y + 40
+local RemoveToolsRow = makeRow(y) y = y + 40
+local SpasmRow = makeRow(y) y = y + 40
+local BehendigheidRow = makeRow(y) y = y + 40
+local JumpRow = makeRow(y) y = y + 40
+local HipHeightBox, HipHeightToggle = makeTextboxRow(y, "HipHeight Value") y = y + 40
 
-local GetRidBtn = makeToggle(getRidRow, "Get rid of NPCs")
-local RemoveToolsBtn = makeToggle(removeToolsRow, "Remove NPC Tools")
-local SpasmBtn = makeToggle(spasmRow, "Spasm NPCs")
-local KillBehendigheidBtn = makeToggle(behendigheidRow, "Kill All NPCs (Behendigheid)")
+local GetRidBtn = makeToggle(GetRidRow, "Get Rid of NPCs")
+local RemoveToolsBtn = makeToggle(RemoveToolsRow, "Remove NPC Tools")
+local SpasmBtn = makeToggle(SpasmRow, "Spasm NPCs")
+local KillBehendigheidBtn = makeToggle(BehendigheidRow, "Kill (Behendigheid)")
+
+local JumpBtn = Instance.new("TextButton")
+JumpBtn.Size = UDim2.new(0.6, -5, 1, 0)
+JumpBtn.BackgroundColor3 = Color3.fromRGB(58, 58, 58)
+JumpBtn.BorderSizePixel = 0
+JumpBtn.Font = Enum.Font.Gotham
+JumpBtn.TextSize = 14
+JumpBtn.TextColor3 = Color3.new(1, 1, 1)
+JumpBtn.Text = "Jump NPCs"
+JumpBtn.Parent = JumpRow
+
+local JumpLoop = Instance.new("TextButton")
+JumpLoop.Size = UDim2.new(0.4, -5, 1, 0)
+JumpLoop.Position = UDim2.new(0.6, 5, 0, 0)
+JumpLoop.BackgroundColor3 = Color3.fromRGB(58, 58, 58)
+JumpLoop.BorderSizePixel = 0
+JumpLoop.Font = Enum.Font.Gotham
+JumpLoop.TextSize = 14
+JumpLoop.TextColor3 = Color3.new(1, 1, 1)
+JumpLoop.Text = "Loop: Off"
+JumpLoop.Parent = JumpRow
 
 -- Loop Runner
-local function startLoop(flagName, action)
+local function startLoop(flagName, action, extra)
 	coroutine.wrap(function()
 		while _G[flagName] do
 			for _, npc in ipairs(getNPCs()) do
-				pcall(function() action(npc) end)
+				pcall(function() action(npc, extra) end)
 			end
 			task.wait(LOOP_DELAY)
 		end
 	end)()
 end
 
--- Button Logic
-GetRidBtn.MouseButton1Click:Connect(function()
-	_G["getRidLoop"] = not _G["getRidLoop"]
-	GetRidBtn.Text = "Get rid of NPCs : " .. (_G["getRidLoop"] and "On" or "Off")
-	if _G["getRidLoop"] then startLoop("getRidLoop", getRidNPC) end
+-- Buttons logic
+local function toggleLoop(btn, flagName, action)
+	_G[flagName] = not _G[flagName]
+	btn.Text = btn.Text:match(": Off") and btn.Text:gsub("Off", "On") or btn.Text:gsub("On", "Off")
+	if _G[flagName] then startLoop(flagName, action) end
+end
+
+GetRidBtn.MouseButton1Click:Connect(function() toggleLoop(GetRidBtn, "getRidLoop", getRidNPC) end)
+RemoveToolsBtn.MouseButton1Click:Connect(function() toggleLoop(RemoveToolsBtn, "removeToolsLoop", removeNPCTools) end)
+SpasmBtn.MouseButton1Click:Connect(function() toggleLoop(SpasmBtn, "spasmLoop", spasmNPC) end)
+KillBehendigheidBtn.MouseButton1Click:Connect(function() toggleLoop(KillBehendigheidBtn, "behendigheidLoop", behendigheidKill) end)
+
+JumpBtn.MouseButton1Click:Connect(function()
+	for _, npc in ipairs(getNPCs()) do pcall(function() jumpNPC(npc) end) end
+end)
+JumpLoop.MouseButton1Click:Connect(function()
+	_G["jumpLoop"] = not _G["jumpLoop"]
+	JumpLoop.Text = "Loop: " .. (_G["jumpLoop"] and "On" or "Off")
+	if _G["jumpLoop"] then startLoop("jumpLoop", jumpNPC) end
+end)
+HipHeightToggle.MouseButton1Click:Connect(function()
+	local val = tonumber(HipHeightBox.Text) or 2
+	_G["hipLoop"] = not _G["hipLoop"]
+	HipHeightToggle.Text = "Loop: " .. (_G["hipLoop"] and "On" or "Off")
+	if _G["hipLoop"] then startLoop("hipLoop", setHipHeight, val) end
 end)
 
-RemoveToolsBtn.MouseButton1Click:Connect(function()
-	_G["removeToolsLoop"] = not _G["removeToolsLoop"]
-	RemoveToolsBtn.Text = "Remove NPC Tools : " .. (_G["removeToolsLoop"] and "On" or "Off")
-	if _G["removeToolsLoop"] then startLoop("removeToolsLoop", removeNPCTools) end
-end)
-
-SpasmBtn.MouseButton1Click:Connect(function()
-	_G["spasmLoop"] = not _G["spasmLoop"]
-	SpasmBtn.Text = "Spasm NPCs : " .. (_G["spasmLoop"] and "On" or "Off")
-	if _G["spasmLoop"] then startLoop("spasmLoop", spasmNPC) end
-end)
-
-KillBehendigheidBtn.MouseButton1Click:Connect(function()
-	_G["behendigheidLoop"] = not _G["behendigheidLoop"]
-	KillBehendigheidBtn.Text = "Kill All NPCs (Behendigheid) : " .. (_G["behendigheidLoop"] and "On" or "Off")
-	if _G["behendigheidLoop"] then startLoop("behendigheidLoop", behendigheidKill) end
-end)
-
--- GUI Open/Close Toggle
+-- GUI Toggle Animation
 local open = false
 ToggleButton.MouseButton1Click:Connect(function()
 	open = not open
-	local targetSize = open and UDim2.new(0, GUI_WIDTH, 0, 220) or UDim2.new(0, GUI_WIDTH, 0, 34)
+	local targetSize = open and UDim2.new(0, GUI_WIDTH, 0, 300) or UDim2.new(0, GUI_WIDTH, 0, 34)
 	TweenService:Create(MainFrame, TweenInfo.new(0.22, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = targetSize}):Play()
 	task.wait(0.08)
 	Options.Visible = open
 end)
 
-print("[NPCUtilityGUI v3.4] Loaded - Safe against tools, violent spasm ready.")
+print("[NPCUtilityGUI v3.9] Loaded - Violent Old-Style Spasm Active")
