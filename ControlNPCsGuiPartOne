@@ -1,0 +1,288 @@
+-- NPC Control GUI (Safe + Kill & Anchor Updated) -- LocalScript in StarterGui
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local PlayerGui = player:WaitForChild("PlayerGui")
+
+-- CONFIG
+local VOID_Y = -500
+local LOOP_DELAY = 0.6
+local GUI_WIDTH = 260
+
+-- ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "NPCControlGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = PlayerGui
+
+-- Main container
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, GUI_WIDTH, 0, 34)
+MainFrame.Position = UDim2.new(1, -GUI_WIDTH - 10, 0, 60)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+
+-- Toggle button
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(1,0,0,34)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(44,44,44)
+ToggleButton.BorderSizePixel = 0
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.TextSize = 15
+ToggleButton.TextColor3 = Color3.new(1,1,1)
+ToggleButton.Text = "☰ NPC Controls"
+ToggleButton.Parent = MainFrame
+
+-- Options frame
+local Options = Instance.new("Frame")
+Options.Size = UDim2.new(1,0,0,360)
+Options.Position = UDim2.new(0,0,0,34)
+Options.BackgroundColor3 = Color3.fromRGB(32,32,32)
+Options.BorderSizePixel = 0
+Options.Parent = MainFrame
+Options.Visible = false
+
+-- Helpers
+local function makeRow(y)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, -12, 0, 34)
+	row.Position = UDim2.new(0, 6, 0, y)
+	row.BackgroundTransparency = 1
+	row.Parent = Options
+	return row
+end
+
+local function makeActionButton(parent,text)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0.78,0,1,0)
+	btn.Position = UDim2.new(0,0,0,0)
+	btn.BackgroundColor3 = Color3.fromRGB(58,58,58)
+	btn.BorderSizePixel = 0
+	btn.Font = Enum.Font.Gotham
+	btn.TextSize = 14
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.Text = text
+	btn.Parent = parent
+	return btn
+end
+
+local function makeSmallToggle(parent)
+	local tog = Instance.new("TextButton")
+	tog.Size = UDim2.new(0.18,0,1,0)
+	tog.Position = UDim2.new(0.82,6,0,0)
+	tog.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	tog.BorderSizePixel = 0
+	tog.Font = Enum.Font.Gotham
+	tog.TextSize = 12
+	tog.TextColor3 = Color3.new(1,1,1)
+	tog.Text = "Loop: Off"
+	tog.Parent = parent
+	return tog
+end
+
+-- ROWS
+local y = 6
+local killRow = makeRow(y); y=y+40
+local KillBtn = makeActionButton(killRow,"Kill NPCs")
+local KillLoop = makeSmallToggle(killRow)
+
+local infRow = makeRow(y); y=y+40
+local InfBtn = makeActionButton(infRow,"Infinite HP")
+local InfLoop = makeSmallToggle(infRow)
+
+local psRow = makeRow(y); y=y+40
+local PSBtn = makeActionButton(psRow,"PlatformStand")
+local PSLoop = makeSmallToggle(psRow)
+
+local sitRow = makeRow(y); y=y+40
+local SitBtn = makeActionButton(sitRow,"Sit NPCs")
+local SitLoop = makeSmallToggle(sitRow)
+
+local anchorRow = makeRow(y); y=y+40
+local AnchorBtn = makeActionButton(anchorRow,"Anchor NPCs")
+local AnchorLoop = makeSmallToggle(anchorRow)
+
+local flingRow = makeRow(y); y=y+40
+local FlingBox = Instance.new("TextBox")
+FlingBox.Size=UDim2.new(0.7,0,1,0)
+FlingBox.Position=UDim2.new(0,0,0,0)
+FlingBox.PlaceholderText="Fling strength"
+FlingBox.BackgroundColor3=Color3.fromRGB(50,50,50)
+FlingBox.TextColor3=Color3.new(1,1,1)
+FlingBox.Text="6000"
+FlingBox.BorderSizePixel=0
+FlingBox.Font=Enum.Font.Gotham
+FlingBox.TextSize=14
+FlingBox.Parent=flingRow
+
+local FlingBtn = Instance.new("TextButton")
+FlingBtn.Size=UDim2.new(0.3,-6,1,0)
+FlingBtn.Position=UDim2.new(0.7,6,0,0)
+FlingBtn.BackgroundColor3=Color3.fromRGB(100,50,50)
+FlingBtn.Text="Fling"
+FlingBtn.Font=Enum.Font.Gotham
+FlingBtn.TextSize=14
+FlingBtn.TextColor3=Color3.new(1,1,1)
+FlingBtn.BorderSizePixel=0
+FlingBtn.Parent=flingRow
+
+local FlingLoopToggle = makeSmallToggle(flingRow)
+FlingLoopToggle.Position = UDim2.new(0.7,70,0,0)
+
+local voidRow = makeRow(y); y=y+40
+local VoidBtn = makeActionButton(voidRow,"Void NPCs")
+local VoidLoop = makeSmallToggle(voidRow)
+
+-- LOOP STATE
+local loops = {kill=false,inf=false,ps=false,sit=false,anchor=false,fling=false,void=false}
+local loopRunners = {}
+
+-- NPC Detection: Humanoid or BasePart and not player
+local function getNPCs()
+	local npcs = {}
+	for _,obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
+			local hasHum = obj:FindFirstChildOfClass("Humanoid")
+			local hasPart=false
+			for _,p in ipairs(obj:GetDescendants()) do if p:IsA("BasePart") then hasPart=true break end end
+			if hasHum or hasPart then table.insert(npcs,obj) end
+		end
+	end
+	return npcs
+end
+
+local function iterateBaseParts(npc,fn)
+	for _,p in ipairs(npc:GetDescendants()) do
+		if p:IsA("BasePart") then pcall(function() fn(p) end) end
+	end
+end
+
+-- ACTIONS
+local function killNPC(npc)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then
+		pcall(function()
+			hum.Health = hum.MaxHealth -- restore first
+			hum.Health = -math.huge -- then kill
+		end)
+	end
+end
+
+local function giveInfHP(npc)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then pcall(function() hum.Health = math.huge end) end
+end
+
+local function enablePlatformStand(npc)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then pcall(function() hum.PlatformStand = true end) end
+end
+
+local function makeSit(npc)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then pcall(function() hum.Sit = true end) end
+end
+
+local anchoredNPCs = {} -- track toggle state
+local function toggleAnchor(npc)
+	if anchoredNPCs[npc] then
+		iterateBaseParts(npc,function(p) p.Anchored=false end)
+		anchoredNPCs[npc]=nil
+	else
+		iterateBaseParts(npc,function(p) p.Anchored=true end)
+		anchoredNPCs[npc]=true
+	end
+end
+
+local function flingNPC(npc,strength)
+	iterateBaseParts(npc,function(p)
+		if p:IsA("BasePart") then
+			p.Velocity = Vector3.new(
+				math.random(-1000,1000),
+				math.random(0,800)+strength,
+				math.random(-1000,1000)
+			)
+		end
+	end)
+end
+
+local function safeVoidTeleport(npc,voidY)
+	local parts={}
+	for _,p in ipairs(npc:GetDescendants()) do if p:IsA("BasePart") then table.insert(parts,p) end end
+	if #parts==0 then return end
+	local minBottom=math.huge
+	for _,p in ipairs(parts) do
+		local bottom=p.Position.Y - p.Size.Y/2
+		if bottom<minBottom then minBottom=bottom end
+	end
+	local shift=(voidY+3)-minBottom
+	for _,p in ipairs(parts) do pcall(function() p.CFrame=p.CFrame+Vector3.new(0,shift,0) end) end
+end
+
+-- LOOP Helpers
+local function startLoop(key,action)
+	if loopRunners[key] then return end
+	loops[key]=true
+	local co=coroutine.create(function()
+		while loops[key] do
+			for _,npc in ipairs(getNPCs()) do pcall(function() action(npc) end) end
+			task.wait(0.6)
+		end
+		loopRunners[key]=nil
+	end)
+	loopRunners[key]=co
+	coroutine.resume(co)
+end
+local function stopLoop(key) loops[key]=false end
+
+-- BUTTON CONNECTIONS
+KillBtn.MouseButton1Click:Connect(function() for _,n in ipairs(getNPCs()) do killNPC(n) end end)
+InfBtn.MouseButton1Click:Connect(function() for _,n in ipairs(getNPCs()) do giveInfHP(n) end end)
+PSBtn.MouseButton1Click:Connect(function() for _,n in ipairs(getNPCs()) do enablePlatformStand(n) end end)
+SitBtn.MouseButton1Click:Connect(function() for _,n in ipairs(getNPCs()) do makeSit(n) end end)
+AnchorBtn.MouseButton1Click:Connect(function() for _,n in ipairs(getNPCs()) do toggleAnchor(n) end end)
+FlingBtn.MouseButton1Click:Connect(function()
+	local s=tonumber(FlingBox.Text) or 6000
+	for _,n in ipairs(getNPCs()) do flingNPC(n,s) end
+end)
+VoidBtn.MouseButton1Click:Connect(function() for _,n in ipairs(getNPCs()) do safeVoidTeleport(n,VOID_Y) end end)
+
+-- Loop toggles
+local function linkLoop(button,key,action)
+	button.MouseButton1Click:Connect(function()
+		loops[key]=not loops[key]
+		button.Text="Loop: "..(loops[key] and "On" or "Off")
+		if loops[key] then startLoop(key,action) else stopLoop(key) end
+	end)
+end
+
+linkLoop(KillLoop,"kill",killNPC)
+linkLoop(InfLoop,"inf",giveInfHP)
+linkLoop(PSLoop,"ps",enablePlatformStand)
+linkLoop(SitLoop,"sit",makeSit)
+linkLoop(AnchorLoop,"anchor",function(n)
+	iterateBaseParts(n,function(p) p.Anchored=true end)
+end)
+linkLoop(FlingLoopToggle,"fling",function(n)
+	local s=tonumber(FlingBox.Text) or 6000
+	flingNPC(n,s)
+end)
+linkLoop(VoidLoop,"void",function(n) safeVoidTeleport(n,VOID_Y) end)
+
+-- GUI toggle
+local open=false
+ToggleButton.MouseButton1Click:Connect(function()
+	open=not open
+	local targetSize=open and UDim2.new(0,GUI_WIDTH,0,420) or UDim2.new(0,GUI_WIDTH,0,34)
+	TweenService:Create(MainFrame,TweenInfo.new(0.22,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),{Size=targetSize}):Play()
+	task.wait(0.08)
+	Options.Visible=open
+end)
+
+print("[NPCControlGUI] Fully safe with Kill restore & toggleable Anchor loaded.")
