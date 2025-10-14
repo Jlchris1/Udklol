@@ -1,0 +1,374 @@
+-- Services
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local replicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Create ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "GripTargetGui"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+screenGui.Parent = playerGui
+
+-- Create a Scrolling Frame for Main UI
+local mainFrame = Instance.new("ScrollingFrame")
+mainFrame.Size = UDim2.new(0, 400, 0, 500) -- Increased canvas size
+mainFrame.Position = UDim2.new(0, 10, 0.5, -250) -- Positioned back on the left side
+mainFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+mainFrame.BackgroundTransparency = 0.5
+mainFrame.ScrollBarThickness = 10
+mainFrame.ZIndex = 5 -- Adjusted ZIndex to be lower than buttons
+mainFrame.Visible = true -- Main GUI visible by default
+mainFrame.Parent = screenGui
+
+-- Create a UIListLayout for the scrolling frame
+local listLayout = Instance.new("UIListLayout")
+listLayout.FillDirection = Enum.FillDirection.Vertical
+listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+listLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0, 5)
+listLayout.Parent = mainFrame
+
+-- Helper function to create buttons with common settings
+local function createButton(parent, text, position, size)
+    local button = Instance.new("TextButton")
+    button.Size = size or UDim2.new(0, 120, 0, 40)
+    button.Position = position
+    button.Text = text
+    button.BackgroundColor3 = Color3.new(1, 1, 1)
+    button.BackgroundTransparency = 0 -- Ensure the background is not transparent
+    button.TextColor3 = Color3.new(0, 0, 0) -- Set text color to black for visibility
+    button.ZIndex = 10 -- Match player list ZIndex
+    button.Parent = parent
+    return button
+end
+
+-- Create UI Elements
+local buttonToggleMainFrame = createButton(screenGui, "Toggle GUI", UDim2.new(0.5, -75, 0, 10)) -- Centered on the top
+local buttonStart = createButton(mainFrame, "Start Grip Target", UDim2.new(0, 10, 0, 50))
+local buttonOpenPlayerList = createButton(mainFrame, "Open Player List", UDim2.new(0, 10, 0, 100))
+local buttonTargetAll = createButton(mainFrame, "Target All", UDim2.new(0, 10, 0, 150))
+local cooldownTextBox = Instance.new("TextBox")
+cooldownTextBox.Size = UDim2.new(0, 120, 0, 40)
+cooldownTextBox.Position = UDim2.new(0, 10, 0, 200)
+cooldownTextBox.PlaceholderText = "Adjust Switch CD"
+cooldownTextBox.Text = ""
+cooldownTextBox.BackgroundColor3 = Color3.new(1, 1, 1)
+cooldownTextBox.ZIndex = 10 -- Match player list ZIndex
+cooldownTextBox.Parent = mainFrame
+
+-- New buttons for attaching tools and targeting
+local buttonAttachTool = createButton(mainFrame, "Attach Tool", UDim2.new(0, 10, 0, 250))
+local buttonAttachTargetAll = createButton(mainFrame, "Attach Target All", UDim2.new(0, 10, 0, 300))
+local buttonAttachSelectTarget = createButton(mainFrame, "Attach Select Target", UDim2.new(0, 10, 0, 350))
+
+-- New Massless Attached Button
+local buttonMasslessAttached = createButton(mainFrame, "Massless Attached", UDim2.new(0, 10, 0, 400)) -- New button added
+
+-- New Spin Sword Button
+local buttonSpinSword = createButton(mainFrame, "Spin Sword", UDim2.new(0, 10, 0, 450)) -- New button added
+
+local cooldownSpinTextBox = Instance.new("TextBox") -- TextBox for Spin Sword cooldown
+cooldownSpinTextBox.Size = UDim2.new(0, 120, 0, 40)
+cooldownSpinTextBox.Position = UDim2.new(0, 10, 0, 500)
+cooldownSpinTextBox.PlaceholderText = "Spin CD (seconds)"
+cooldownSpinTextBox.Text = ""
+cooldownSpinTextBox.BackgroundColor3 = Color3.new(1, 1, 1)
+cooldownSpinTextBox.ZIndex = 10 -- Match player list ZIndex
+cooldownSpinTextBox.Parent = mainFrame
+
+-- New WL and Target Buttons
+local buttonWL = createButton(mainFrame, "WL", UDim2.new(0, 150, 0, 50)) -- Whitelist button
+local buttonTarget = createButton(mainFrame, "Target", UDim2.new(0, 150, 0, 100)) -- Target button
+
+local selectedPlayers = {}
+local whitelistedPlayers = {} -- Store whitelisted players
+local targetPlayers = {} -- Store targeted players
+local gripActive = false
+local targetAllActive = false
+local defaultCooldown = 0.1
+
+-- Function to get cooldown value from the TextBox or use the default
+local function getCooldownValue()
+    local cooldown = tonumber(cooldownTextBox.Text)
+    if cooldown and cooldown > 0 then
+        return cooldown
+    else
+        return defaultCooldown -- If invalid or no input, use the default
+    end
+end
+
+-- Function to get cooldown value for spin
+local function getSpinCooldownValue()
+    local cooldown = tonumber(cooldownSpinTextBox.Text)
+    if cooldown and cooldown > 0 then
+        return cooldown
+    else
+        return defaultCooldown -- If invalid or no input, use the default
+    end
+end
+
+-- Function to set the tool's parent to the Shirt
+local function attachToolToShirt()
+    local tool = player.Character and player.Character:FindFirstChildOfClass("Tool")
+    
+    if tool then
+        tool.Parent = player.Character:FindFirstChild("Shirt") or player.Character:FindFirstChild("Humanoid") -- Move tool to Shirt
+    else
+        warn("No tool found to attach!")
+    end
+end
+
+-- Function to get all tools inside the shirt
+local function getToolsInShirt()
+    local tools = {}
+    local shirt = player.Character and player.Character:FindFirstChild("Shirt")
+
+    for _, item in pairs(shirt:GetChildren()) do
+        if item:IsA("Tool") then
+            table.insert(tools, item)
+        end
+    end
+
+    return tools
+end
+
+-- Function to teleport the equipped tool to the shirt
+local function teleportEquippedToolToShirt()
+    attachToolToShirt() -- Attach tool to the shirt
+end
+
+-- Function to teleport each tool inside the shirt to the target player
+local function teleportShirtToolsToTarget(targetPlayer)
+    local tools = getToolsInShirt()
+    
+    for _, tool in pairs(tools) do
+        local targetRootPart = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+        
+        if targetRootPart then
+            tool.Handle.Position = targetRootPart.Position -- Teleport tool to target's HumanoidRootPart position
+        end
+    end
+end
+
+-- Function to target all players using tools inside the shirt
+local function attachTargetAllPlayers()
+    targetAllActive = true
+    local targetIndex = 1
+    while targetAllActive do
+        local allPlayers = Players:GetPlayers()
+        local playerCount = #allPlayers
+        
+        if playerCount > 1 then
+            targetIndex = (targetIndex % playerCount) + 1 -- Cycle through players
+            local targetPlayer = allPlayers[targetIndex]
+            
+            if targetPlayer ~= player and not whitelistedPlayers[targetPlayer.Name] and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                teleportShirtToolsToTarget(targetPlayer) -- Teleport all tools in shirt to target player
+            end
+        end
+
+        local cooldown = getCooldownValue()
+        wait(cooldown)
+    end
+end
+
+-- Function to target selected players using tools inside the shirt
+local function attachTargetSelectedPlayers()
+    gripActive = true
+    while gripActive do
+        for targetPlayer in pairs(targetPlayers) do
+            if targetPlayers[targetPlayer] and not whitelistedPlayers[targetPlayer.Name] then
+                teleportShirtToolsToTarget(targetPlayer) -- Attach shirt tools to selected targets
+            end
+            wait(0.1) -- Adjust as needed for performance
+        end
+
+        wait(getCooldownValue())
+    end
+end
+
+-- Function to stop attaching target all
+local function stopAttachTargetAll()
+    targetAllActive = false
+end
+
+-- Function to stop attaching target selected
+local function stopAttachTargetSelected()
+    gripActive = false
+end
+
+-- Function to toggle attach tool
+buttonAttachTool.MouseButton1Click:Connect(function()
+    teleportEquippedToolToShirt() -- Teleport the equipped tool to the shirt
+end)
+
+-- Function to toggle attach target all
+buttonAttachTargetAll.MouseButton1Click:Connect(function()
+    if targetAllActive then
+        stopAttachTargetAll() -- Stop attaching target all
+        buttonAttachTargetAll.Text = "Attach Target All"
+        buttonAttachTargetAll.BackgroundColor3 = Color3.new(1, 1, 1) -- Reset button color
+    else
+        attachTargetAllPlayers() -- Start attaching target all
+        buttonAttachTargetAll.Text = "Stop Target All"
+        buttonAttachTargetAll.BackgroundColor3 = Color3.new(1, 0, 0) -- Change to red
+    end
+end)
+
+-- Function to toggle attach target selected
+buttonAttachSelectTarget.MouseButton1Click:Connect(function()
+    if gripActive then
+        stopAttachTargetSelected() -- Stop attaching target selected
+        buttonAttachSelectTarget.Text = "Attach Select Target"
+        buttonAttachSelectTarget.BackgroundColor3 = Color3.new(1, 1, 1) -- Reset button color
+    else
+        attachTargetSelectedPlayers() -- Start attaching target selected
+        buttonAttachSelectTarget.Text = "Stop Select Target"
+        buttonAttachSelectTarget.BackgroundColor3 = Color3.new(1, 0, 0) -- Change to red
+    end
+end)
+
+-- Toggle Main Frame Visibility
+buttonToggleMainFrame.MouseButton1Click:Connect(function()
+    mainFrame.Visible = not mainFrame.Visible -- Toggle visibility
+end)
+
+-- Create player list GUI as a scrolling frame
+local playerListGui = Instance.new("ScrollingFrame")
+playerListGui.Size = UDim2.new(0, 320, 1, 0) -- Adjusted width of the player list
+playerListGui.Position = UDim2.new(1, -330, 0, 0) -- Positioned to the right side
+playerListGui.BackgroundTransparency = 0.5
+playerListGui.BackgroundColor3 = Color3.new(0, 0, 0)
+playerListGui.ZIndex = 10
+playerListGui.Visible = false -- Player GUI hidden by default
+playerListGui.CanvasSize = UDim2.new(0, 320, 0, 5000) -- Increased canvas size
+playerListGui.ScrollBarThickness = 10
+playerListGui.Parent = screenGui
+
+-- Create UIListLayout for Player List
+local playerListLayout = Instance.new("UIListLayout")
+playerListLayout.FillDirection = Enum.FillDirection.Vertical
+playerListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+playerListLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+playerListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+playerListLayout.Padding = UDim.new(0, 5)
+playerListLayout.Parent = playerListGui
+
+-- Function to create a TextLabel for player display
+local function createPlayerLabel(playerName, displayName)
+    local playerLabel = Instance.new("TextLabel")
+    playerLabel.Size = UDim2.new(1, 0, 0, 40)
+    playerLabel.BackgroundTransparency = 1
+    playerLabel.TextColor3 = Color3.new(1, 1, 1)
+    playerLabel.TextScaled = true
+    playerLabel.Text = displayName .. "\n@" .. playerName -- Display name above username
+    playerLabel.Parent = playerListGui
+
+    -- Adjust text size if necessary
+    if #playerName > 20 then -- Example length limit for username
+        playerLabel.TextSize = 18 -- Adjust text size to fit
+    end
+
+    -- Create WL and Target Buttons
+    local wlButton = createButton(playerLabel, "WL", UDim2.new(1, -50, 0, 5), UDim2.new(0, 40, 0, 30))
+    wlButton.ZIndex = 11 -- Higher ZIndex for buttons
+    local targetButton = createButton(playerLabel, "Target", UDim2.new(1, -100, 0, 5), UDim2.new(0, 40, 0, 30))
+    targetButton.ZIndex = 11 -- Higher ZIndex for buttons
+
+    -- Set initial colors based on whitelisted and targeted status
+    if whitelistedPlayers[playerName] then
+        wlButton.BackgroundColor3 = Color3.new(0, 1, 0) -- Set button color to green
+        playerLabel.TextColor3 = Color3.new(1, 1, 1) -- Keep text white
+    end
+
+    if targetPlayers[playerName] then
+        targetButton.BackgroundColor3 = Color3.new(1, 0, 0) -- Set button color to red
+        playerLabel.TextColor3 = Color3.new(1, 0, 0) -- Set text color to red
+    end
+
+    -- WL button functionality
+    wlButton.MouseButton1Click:Connect(function()
+        whitelistedPlayers[playerName] = not whitelistedPlayers[playerName] -- Toggle whitelist status
+
+        if whitelistedPlayers[playerName] then
+            wlButton.BackgroundColor3 = Color3.new(0, 1, 0) -- Set button color to green
+            playerLabel.TextColor3 = Color3.new(1, 1, 1) -- Keep text white
+        else
+            wlButton.BackgroundColor3 = Color3.new(1, 1, 1) -- Set button color back to white
+            playerLabel.TextColor3 = Color3.new(1, 1, 1) -- Keep text white
+        end
+    end)
+
+    -- Target button functionality
+    targetButton.MouseButton1Click:Connect(function()
+        targetPlayers[playerName] = not targetPlayers[playerName] -- Toggle target status
+
+        if targetPlayers[playerName] then
+            targetButton.BackgroundColor3 = Color3.new(1, 0, 0) -- Set button color to red
+            playerLabel.TextColor3 = Color3.new(1, 0, 0) -- Set text color to red
+        else
+            targetButton.BackgroundColor3 = Color3.new(1, 1, 1) -- Set button color back to white
+            playerLabel.TextColor3 = Color3.new(1, 1, 1) -- Set text color back to white
+        end
+    end)
+end
+
+-- Function to update the player list and align buttons properly
+local function updatePlayerList()
+    for _, v in pairs(playerListGui:GetChildren()) do
+        if v:IsA("TextLabel") then
+            v:Destroy() -- Clear existing labels
+        end
+    end
+
+    for _, targetPlayer in pairs(Players:GetPlayers()) do
+        if targetPlayer ~= player then
+            -- Create a label for each player
+            createPlayerLabel(targetPlayer.Name, targetPlayer.DisplayName) -- Use DisplayName and original Name
+        end
+    end
+
+    playerListLayout:Layout() -- Update layout after adding new items
+
+    -- Dynamically adjust canvas size based on player count
+    local playerCount = #Players:GetPlayers()
+    playerListGui.CanvasSize = UDim2.new(0, 320, 0, playerCount * 45) -- 45 pixels per player label
+end
+
+-- Open player list button functionality
+buttonOpenPlayerList.MouseButton1Click:Connect(function()
+    playerListGui.Visible = not playerListGui.Visible -- Toggle visibility
+    updatePlayerList() -- Update player list when opened
+end)
+
+-- Connect to player joining/leaving to update the list
+Players.PlayerAdded:Connect(updatePlayerList)
+Players.PlayerRemoving:Connect(updatePlayerList)
+
+-- Function to refresh the player list every second
+local function refreshPlayerList()
+    while true do
+        updatePlayerList() -- Update player list
+        wait(1) -- Refresh every second
+    end
+end
+
+-- Start the refresh loop
+refreshPlayerList()
+
+-- Massless function for the tools in the local player's shirt
+buttonMasslessAttached.MouseButton1Click:Connect(function()
+    local tools = getToolsInShirt()
+    for _, tool in pairs(tools) do
+        if tool:FindFirstChild("Handle") then
+            tool.Handle.Massless = true -- Set the tool's handle massless
+            buttonMasslessAttached.BackgroundColor3 = Color3.new(0, 1, 0) -- Change button color to green
+        end
+    end
+end)
+
+-- Reset the GUI on opening
+updatePlayerList()
