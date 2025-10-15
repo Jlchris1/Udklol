@@ -1,3 +1,6 @@
+-- GripTargetGui_Compact.lua
+-- Compact, mobile-friendly version of the Grip Target GUI
+
 -- Services
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
@@ -5,17 +8,17 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 -- GUI Setup
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "GripTargetGui"
+screenGui.Name = "GripTargetGuiCompact"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 screenGui.Parent = playerGui
 
 local mainFrame = Instance.new("ScrollingFrame")
-mainFrame.Size = UDim2.new(0, 400, 0, 500)
-mainFrame.Position = UDim2.new(0, 10, 0.5, -250)
+mainFrame.Size = UDim2.new(0, 280, 0, 320) -- smaller width and height
+mainFrame.Position = UDim2.new(0, 10, 0.6, -160) -- lower on screen
 mainFrame.BackgroundColor3 = Color3.new(0, 0, 0)
 mainFrame.BackgroundTransparency = 0.5
-mainFrame.ScrollBarThickness = 10
+mainFrame.ScrollBarThickness = 8
 mainFrame.ZIndex = 5
 mainFrame.Visible = true
 mainFrame.Parent = screenGui
@@ -25,13 +28,13 @@ listLayout.FillDirection = Enum.FillDirection.Vertical
 listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 listLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-listLayout.Padding = UDim.new(0, 5)
+listLayout.Padding = UDim.new(0, 4)
 listLayout.Parent = mainFrame
 
 -- Helper for button creation
 local function createButton(parent, text, posY)
 	local button = Instance.new("TextButton")
-	button.Size = UDim2.new(0, 160, 0, 40)
+	button.Size = UDim2.new(0, 140, 0, 36) -- same size as original toggle/button
 	button.Position = UDim2.new(0, 10, 0, posY)
 	button.Text = text
 	button.BackgroundColor3 = Color3.new(1, 1, 1)
@@ -41,21 +44,21 @@ local function createButton(parent, text, posY)
 	return button
 end
 
--- Buttons
-local buttonToggleMainFrame = createButton(screenGui, "Toggle GUI", 10)
+-- Buttons and TextBoxes
+local buttonToggleMainFrame = createButton(screenGui, "Toggle GUI", 20) -- lowered toggle
 local cooldownTextBox = Instance.new("TextBox")
-cooldownTextBox.Size = UDim2.new(0, 120, 0, 40)
-cooldownTextBox.Position = UDim2.new(0, 10, 0, 50)
+cooldownTextBox.Size = UDim2.new(0, 120, 0, 36)
+cooldownTextBox.Position = UDim2.new(0, 10, 0, 60)
 cooldownTextBox.PlaceholderText = "Cooldown (sec)"
 cooldownTextBox.BackgroundColor3 = Color3.new(1, 1, 1)
 cooldownTextBox.Parent = mainFrame
 
-local buttonAttachTool = createButton(mainFrame, "Attach Tool", 100)
-local buttonAttachTargetAll = createButton(mainFrame, "Attach Target All", 150)
-local buttonAttachSelected = createButton(mainFrame, "Attach Selected Target", 200)
-local buttonNormalTargetAll = createButton(mainFrame, "Normal Target All", 250)
-local buttonNormalSelected = createButton(mainFrame, "Normal Selected Target", 300)
-local buttonLoadList = createButton(mainFrame, "Load Player List", 350)
+local buttonAttachTool = createButton(mainFrame, "Attach Tool", 110)
+local buttonAttachTargetAll = createButton(mainFrame, "Attach Target All", 160)
+local buttonAttachSelected = createButton(mainFrame, "Attach Selected Target", 210)
+local buttonNormalTargetAll = createButton(mainFrame, "Normal Target All", 260)
+local buttonNormalSelected = createButton(mainFrame, "Normal Selected Target", 310)
+local buttonLoadList = createButton(mainFrame, "Load Player List", 360)
 
 -- Variables
 local gripActive = false
@@ -105,9 +108,7 @@ local function getToolsInShirt()
 	if not shirt then return {} end
 	local tools = {}
 	for _, t in pairs(shirt:GetChildren()) do
-		if t:IsA("Tool") then
-			table.insert(tools, t)
-		end
+		if t:IsA("Tool") then table.insert(tools, t) end
 	end
 	return tools
 end
@@ -134,9 +135,7 @@ local function teleportNormalToolsToTarget(targetPlayer)
 		if tool:IsA("Tool") and tool:FindFirstChild("Handle") then
 			makeToolsMassless()
 			local targetHRP = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-			if targetHRP then
-				pcall(function() tool.Handle.Position = targetHRP.Position end)
-			end
+			if targetHRP then pcall(function() tool.Handle.Position = targetHRP.Position end) end
 		end
 	end
 end
@@ -152,25 +151,20 @@ local function isSelected(plr)
 	return val and val:IsA("BoolValue") and val.Value
 end
 
--- Attach Target All (round-robin cycling like original)
+-- Attach Target All (round-robin)
 local function attachTargetAllPlayers()
 	targetAllActive = true
 	local targetIndex = 1
 	while targetAllActive do
 		local allPlayers = Players:GetPlayers()
 		local playerCount = #allPlayers
-
 		if playerCount > 1 then
-			-- advance to next index in a cyclic manner
 			targetIndex = (targetIndex % playerCount) + 1
 			local targetPlayer = allPlayers[targetIndex]
-
-			-- if selected player is not self and not whitelisted and has a character/humanoidrootpart, teleport
 			if targetPlayer ~= player and not isWhitelisted(targetPlayer) and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
 				teleportAttachedToolsToTarget(targetPlayer)
 			end
 		end
-
 		task.wait(getCooldown())
 	end
 end
@@ -212,37 +206,26 @@ buttonAttachSelected.MouseButton1Click:Connect(function()
 	end
 end)
 
--- Normal Target All (round-robin switching with cooldown; skips whitelisted/self/missing HRP)
+-- Normal Target All
 local function normalTargetAllPlayers()
 	normalTargetActive = true
 	local targetIndex = 1
 	while normalTargetActive do
 		local allPlayers = Players:GetPlayers()
 		local playerCount = #allPlayers
-
 		if playerCount > 1 then
-			-- Attempt to find a valid next target (limit attempts to playerCount)
-			local attempts = 0
-			local foundValid = false
+			local attempts, foundValid = 0, false
 			while attempts < playerCount and normalTargetActive do
 				targetIndex = (targetIndex % playerCount) + 1
 				local candidate = allPlayers[targetIndex]
 				attempts = attempts + 1
-
 				if candidate and candidate ~= player and not isWhitelisted(candidate) and candidate.Character and candidate.Character:FindFirstChild("HumanoidRootPart") then
-					-- Found a valid candidate, teleport normal (non-attached) tools there
 					teleportNormalToolsToTarget(candidate)
 					foundValid = true
 					break
 				end
 			end
-
-			-- if no valid found, nothing happens this cycle (just wait and retry next loop)
-			if not foundValid then
-				-- optional: could log or change UI, but we simply wait and retry
-			end
 		end
-
 		task.wait(getCooldown())
 	end
 end
@@ -284,13 +267,11 @@ buttonNormalSelected.MouseButton1Click:Connect(function()
 	end
 end)
 
--- Load Player List (creates Whitelisted & Selected BoolValues) and destroy button after use
+-- Load Player List
 buttonLoadList.MouseButton1Click:Connect(function()
-	-- fire loadstring
 	pcall(function()
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Playerlistv6"))()
 	end)
-	-- color feedback then destroy the button so it can't be used again
 	buttonLoadList.BackgroundColor3 = Color3.new(0, 1, 0)
 	task.delay(0.15, function()
 		if buttonLoadList and buttonLoadList.Parent then
