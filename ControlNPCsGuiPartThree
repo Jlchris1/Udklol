@@ -1,4 +1,4 @@
--- NPC Utility GUI v5.7 (Spasm, Void Spam v3, Void v2/v4/v5, Erase, Get Rid, Jump & HipHeight)
+-- NPC Utility GUI Compact (Aligned Left) v5.7
 -- LocalScript, place in StarterGui
 
 local Players = game:GetService("Players")
@@ -10,21 +10,22 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 
 -- CONFIG
 local GUI_WIDTH = 280
-local GUI_HEIGHT = 800 -- Expanded GUI to fit spasm button
+local GUI_HEIGHT = 300
 local TOGGLE_WIDTH = 70
 local LOOP_DELAY = 0.1
+local OFFSET_X = 10 -- Position more to the left
 
 -- GUI
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "NPCUtilityGUI"
+ScreenGui.Name = "NPCUtilityGUI_Compact"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = PlayerGui
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, GUI_WIDTH, 0, 34)
-MainFrame.Position = UDim2.new(0, 3, 0, 65)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.Position = UDim2.new(0, OFFSET_X, 0, 65) -- moved more to the left
+MainFrame.BackgroundColor3 = Color3.fromRGB(25,25,25)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
@@ -32,18 +33,18 @@ MainFrame.Parent = ScreenGui
 local ToggleButton = Instance.new("TextButton")
 ToggleButton.Size = UDim2.new(0, TOGGLE_WIDTH, 1, 0)
 ToggleButton.Position = UDim2.new(0, 0, 0, 0)
-ToggleButton.BackgroundColor3 = Color3.fromRGB(44, 44, 44)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(44,44,44)
 ToggleButton.BorderSizePixel = 0
 ToggleButton.Font = Enum.Font.GothamBold
 ToggleButton.TextSize = 15
-ToggleButton.TextColor3 = Color3.new(1, 1, 1)
+ToggleButton.TextColor3 = Color3.new(1,1,1)
 ToggleButton.Text = "☰ NPC Utility"
 ToggleButton.Parent = MainFrame
 
 local Options = Instance.new("Frame")
 Options.Size = UDim2.new(1, 0, 0, GUI_HEIGHT)
-Options.Position = UDim2.new(0, 0, 0, 34)
-Options.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+Options.Position = UDim2.new(0,0,0,34)
+Options.BackgroundColor3 = Color3.fromRGB(32,32,32)
 Options.BorderSizePixel = 0
 Options.Visible = false
 Options.Parent = MainFrame
@@ -51,8 +52,8 @@ Options.Parent = MainFrame
 -- UI Helpers
 local function makeRow(y)
 	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1, -12, 0, 34)
-	row.Position = UDim2.new(0, 6, 0, y)
+	row.Size = UDim2.new(1,-12,0,34)
+	row.Position = UDim2.new(0,6,0,y)
 	row.BackgroundTransparency = 1
 	row.Parent = Options
 	return row
@@ -60,13 +61,13 @@ end
 
 local function makeToggle(parent, text)
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(1, 0, 1, 0)
-	btn.BackgroundColor3 = Color3.fromRGB(58, 58, 58)
+	btn.Size = UDim2.new(1,0,1,0)
+	btn.BackgroundColor3 = Color3.fromRGB(58,58,58)
 	btn.BorderSizePixel = 0
 	btn.Font = Enum.Font.Gotham
 	btn.TextSize = 14
-	btn.TextColor3 = Color3.new(1, 1, 1)
-	btn.Text = text .. " : Off"
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.Text = text.." : Off"
 	btn.Parent = parent
 	return btn
 end
@@ -74,24 +75,24 @@ end
 local function makeTextboxRow(y, placeholder)
 	local frame = makeRow(y)
 	local box = Instance.new("TextBox")
-	box.Size = UDim2.new(0.6, -5, 1, 0)
-	box.Position = UDim2.new(0, 0, 0, 0)
-	box.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	box.Size = UDim2.new(0.6,-5,1,0)
+	box.Position = UDim2.new(0,0,0,0)
+	box.BackgroundColor3 = Color3.fromRGB(50,50,50)
 	box.BorderSizePixel = 0
 	box.Font = Enum.Font.Gotham
 	box.TextSize = 14
-	box.TextColor3 = Color3.new(1, 1, 1)
+	box.TextColor3 = Color3.new(1,1,1)
 	box.PlaceholderText = placeholder
 	box.Parent = frame
 
 	local toggle = Instance.new("TextButton")
-	toggle.Size = UDim2.new(0.4, -5, 1, 0)
-	toggle.Position = UDim2.new(0.6, 5, 0, 0)
-	toggle.BackgroundColor3 = Color3.fromRGB(58, 58, 58)
+	toggle.Size = UDim2.new(0.4,-5,1,0)
+	toggle.Position = UDim2.new(0.6,5,0,0)
+	toggle.BackgroundColor3 = Color3.fromRGB(58,58,58)
 	toggle.BorderSizePixel = 0
 	toggle.Font = Enum.Font.Gotham
 	toggle.TextSize = 14
-	toggle.TextColor3 = Color3.new(1, 1, 1)
+	toggle.TextColor3 = Color3.new(1,1,1)
 	toggle.Text = "Loop: Off"
 	toggle.Parent = frame
 
@@ -105,9 +106,7 @@ local function getNPCs()
 		if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
 			local hum = obj:FindFirstChildOfClass("Humanoid")
 			local hasPart = obj:FindFirstChildWhichIsA("BasePart")
-			if hum and hasPart then
-				table.insert(npcs, obj)
-			end
+			if hum and hasPart then table.insert(npcs,obj) end
 		end
 	end
 	return npcs
@@ -115,13 +114,10 @@ end
 
 local function iterateBaseParts(npc, fn)
 	for _, part in ipairs(npc:GetDescendants()) do
-		if part:IsA("BasePart") then
-			pcall(function() fn(part) end)
-		end
+		if part:IsA("BasePart") then pcall(function() fn(part) end) end
 	end
 end
 
--- Check if NPC is closest to local player
 local function isClosestToLocalPlayer(npc)
 	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
 	if not hrp then return false end
@@ -131,9 +127,7 @@ local function isClosestToLocalPlayer(npc)
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr ~= player and plr.Character and plr.Character.PrimaryPart then
 			local dist = (hrp.Position - plr.Character.PrimaryPart.Position).Magnitude
-			if dist < npcDist then
-				return false
-			end
+			if dist < npcDist then return false end
 		end
 	end
 	return true
@@ -143,9 +137,7 @@ end
 local function getRidNPC(npc)
 	if isClosestToLocalPlayer(npc) then
 		local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
-		if hrp then
-			pcall(function() hrp.CFrame = CFrame.new(9e37, 9e37, 9e37) end)
-		end
+		if hrp then pcall(function() hrp.CFrame = CFrame.new(9e37,9e37,9e37) end) end
 	end
 end
 
@@ -162,7 +154,7 @@ end
 local function voidV2(npc)
 	if not isClosestToLocalPlayer(npc) then return end
 	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
-	if hrp then hrp.CFrame = CFrame.new(1e6, 0, 1e6) end
+	if hrp then hrp.CFrame = CFrame.new(1e6,0,1e6) end
 end
 
 local function voidV3(npc)
@@ -171,37 +163,11 @@ local function voidV3(npc)
 		local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
 		if hrp then
 			while hrp.Parent and _G["void3Loop"] do
-				pcall(function() hrp.Velocity = Vector3.new(0, -1e7, 0) end)
+				pcall(function() hrp.Velocity = Vector3.new(0,-1e7,0) end)
 				task.wait(0.01)
 			end
 		end
 	end)()
-end
-
-local function voidV4(npc)
-	if not isClosestToLocalPlayer(npc) then return end
-	coroutine.wrap(function()
-		local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
-		if hrp then
-			while hrp.Parent and _G["void4Loop"] do
-				pcall(function() hrp.CFrame = hrp.CFrame + Vector3.new(0, -1e5, 0) end)
-				task.wait(0.01)
-			end
-		end
-	end)()
-end
-
-local function voidV5(npc)
-	if not isClosestToLocalPlayer(npc) then return end
-	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
-	local playerY = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position.Y or 0
-	if hrp then
-		pcall(function()
-			hrp.CFrame = hrp.CFrame + Vector3.new(0, 1000, 0)
-			task.wait(0.2)
-			hrp.CFrame = hrp.CFrame - Vector3.new(0, 1000, 0)
-		end)
-	end
 end
 
 local function jumpNPC(npc)
@@ -209,7 +175,7 @@ local function jumpNPC(npc)
 	if hum then hum.Jump = true end
 end
 
-local function setHipHeight(npc, value)
+local function setHipHeight(npc,value)
 	local hum = npc:FindFirstChildOfClass("Humanoid")
 	if hum then hum.HipHeight = value end
 end
@@ -217,7 +183,7 @@ end
 local function spasmNPC(npc)
 	local hum = npc:FindFirstChildOfClass("Humanoid")
 	if hum then hum.PlatformStand = true end
-	iterateBaseParts(npc, function(p)
+	iterateBaseParts(npc,function(p)
 		local rx, ry, rz = math.rad(math.random(-180,180)), math.rad(math.random(-180,180)), math.rad(math.random(-180,180))
 		p.CFrame = p.CFrame * CFrame.Angles(rx, ry, rz)
 	end)
@@ -225,36 +191,32 @@ end
 
 -- GUI Layout
 local y = 6
-local GetRidRow = makeRow(y) y = y + 40
-local EraseRow = makeRow(y) y = y + 40
-local Void2Row = makeRow(y) y = y + 40
-local Void3Row = makeRow(y) y = y + 40
-local Void4Row = makeRow(y) y = y + 40
-local Void5Row = makeRow(y) y = y + 40
-local SpasmRow = makeRow(y) y = y + 40
-local JumpRow = makeRow(y) y = y + 40
-local HipHeightBox, HipHeightToggle = makeTextboxRow(y, "HipHeight Value") y = y + 40
+local GetRidRow = makeRow(y) y=y+40
+local EraseRow = makeRow(y) y=y+40
+local Void2Row = makeRow(y) y=y+40
+local Void3Row = makeRow(y) y=y+40
+local SpasmRow = makeRow(y) y=y+40
+local JumpRow = makeRow(y) y=y+40
+local HipHeightBox,HipHeightToggle = makeTextboxRow(y,"HipHeight Value") y=y+40
 
-local GetRidBtn = makeToggle(GetRidRow, "Get Rid of NPCs")
-local EraseBtn = makeToggle(EraseRow, "Erase NPCs (Closest Only)")
-local Void2Btn = makeToggle(Void2Row, "Void v2")
-local Void3Btn = makeToggle(Void3Row, "Void v3 (Spam)")
-local Void4Btn = makeToggle(Void4Row, "Void v4")
-local Void5Btn = makeToggle(Void5Row, "Void v5")
-local SpasmBtn = makeToggle(SpasmRow, "Spasm NPCs")
+local GetRidBtn = makeToggle(GetRidRow,"Get Rid of NPCs")
+local EraseBtn = makeToggle(EraseRow,"Erase NPCs (Closest Only)")
+local Void2Btn = makeToggle(Void2Row,"Void v2")
+local Void3Btn = makeToggle(Void3Row,"Void v3 (Spam)")
+local SpasmBtn = makeToggle(SpasmRow,"Spasm NPCs")
 
 local JumpBtn = Instance.new("TextButton")
-JumpBtn.Size = UDim2.new(0.6, -5, 1, 0)
-JumpBtn.BackgroundColor3 = Color3.fromRGB(58, 58, 58)
+JumpBtn.Size = UDim2.new(0.6,-5,1,0)
+JumpBtn.BackgroundColor3 = Color3.fromRGB(58,58,58)
 JumpBtn.BorderSizePixel = 0
 JumpBtn.Font = Enum.Font.Gotham
 JumpBtn.TextSize = 14
-JumpBtn.TextColor3 = Color3.new(1, 1, 1)
+JumpBtn.TextColor3 = Color3.new(1,1,1)
 JumpBtn.Text = "Jump NPCs"
 JumpBtn.Parent = JumpRow
 
 local JumpLoopBtn = Instance.new("TextButton")
-JumpLoopBtn.Size = UDim2.new(0.4, -5, 1, 0)
+JumpLoopBtn.Size = UDim2.new(0.4,-5,1,0)
 JumpLoopBtn.Position = UDim2.new(0.6,5,0,0)
 JumpLoopBtn.BackgroundColor3 = Color3.fromRGB(58,58,58)
 JumpLoopBtn.BorderSizePixel = 0
@@ -268,9 +230,7 @@ JumpLoopBtn.Parent = JumpRow
 local function startLoop(flagName, action, extra)
 	coroutine.wrap(function()
 		while _G[flagName] do
-			for _, npc in ipairs(getNPCs()) do
-				pcall(function() action(npc, extra) end)
-			end
+			for _, npc in ipairs(getNPCs()) do pcall(function() action(npc,extra) end) end
 			task.wait(LOOP_DELAY)
 		end
 	end)()
@@ -279,42 +239,40 @@ end
 local function toggleLoop(btn, flagName, action, extra)
 	_G[flagName] = not _G[flagName]
 	btn.Text = btn.Text:match(": Off") and btn.Text:gsub("Off","On") or btn.Text:gsub("On","Off")
-	if _G[flagName] then startLoop(flagName, action, extra) end
+	if _G[flagName] then startLoop(flagName,action,extra) end
 end
 
 -- Bindings
-GetRidBtn.MouseButton1Click:Connect(function() toggleLoop(GetRidBtn, "getRidLoop", getRidNPC) end)
-EraseBtn.MouseButton1Click:Connect(function() toggleLoop(EraseBtn, "eraseLoop", eraseNPCsAll) end)
-Void2Btn.MouseButton1Click:Connect(function() toggleLoop(Void2Btn, "void2Loop", voidV2) end)
-Void3Btn.MouseButton1Click:Connect(function() toggleLoop(Void3Btn, "void3Loop", voidV3) end)
-Void4Btn.MouseButton1Click:Connect(function() toggleLoop(Void4Btn, "void4Loop", voidV4) end)
-Void5Btn.MouseButton1Click:Connect(function() toggleLoop(Void5Btn, "void5Loop", voidV5) end)
-SpasmBtn.MouseButton1Click:Connect(function() toggleLoop(SpasmBtn, "spasmLoop", spasmNPC) end)
+GetRidBtn.MouseButton1Click:Connect(function() toggleLoop(GetRidBtn,"getRidLoop",getRidNPC) end)
+EraseBtn.MouseButton1Click:Connect(function() toggleLoop(EraseBtn,"eraseLoop",eraseNPCsAll) end)
+Void2Btn.MouseButton1Click:Connect(function() toggleLoop(Void2Btn,"void2Loop",voidV2) end)
+Void3Btn.MouseButton1Click:Connect(function() toggleLoop(Void3Btn,"void3Loop",voidV3) end)
+SpasmBtn.MouseButton1Click:Connect(function() toggleLoop(SpasmBtn,"spasmLoop",spasmNPC) end)
 
 JumpBtn.MouseButton1Click:Connect(function()
 	for _, npc in ipairs(getNPCs()) do pcall(function() jumpNPC(npc) end) end
 end)
 JumpLoopBtn.MouseButton1Click:Connect(function()
 	_G["jumpLoop"] = not _G["jumpLoop"]
-	JumpLoopBtn.Text = "Loop: " .. (_G["jumpLoop"] and "On" or "Off")
-	if _G["jumpLoop"] then startLoop("jumpLoop", jumpNPC) end
+	JumpLoopBtn.Text = "Loop: "..(_G["jumpLoop"] and "On" or "Off")
+	if _G["jumpLoop"] then startLoop("jumpLoop",jumpNPC) end
 end)
 
 HipHeightToggle.MouseButton1Click:Connect(function()
 	local val = tonumber(HipHeightBox.Text) or 2
 	_G["hipLoop"] = not _G["hipLoop"]
-	HipHeightToggle.Text = "Loop: " .. (_G["hipLoop"] and "On" or "Off")
-	if _G["hipLoop"] then startLoop("hipLoop", setHipHeight, val) end
+	HipHeightToggle.Text = "Loop: "..(_G["hipLoop"] and "On" or "Off")
+	if _G["hipLoop"] then startLoop("hipLoop",setHipHeight,val) end
 end)
 
 -- GUI Toggle
 local open = false
 ToggleButton.MouseButton1Click:Connect(function()
 	open = not open
-	local targetSize = open and UDim2.new(0, GUI_WIDTH, 0, GUI_HEIGHT) or UDim2.new(0, GUI_WIDTH, 0, 34)
-	TweenService:Create(MainFrame, TweenInfo.new(0.22, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = targetSize}):Play()
+	local targetSize = open and UDim2.new(0, GUI_WIDTH,0,GUI_HEIGHT) or UDim2.new(0, GUI_WIDTH,0,34)
+	TweenService:Create(MainFrame,TweenInfo.new(0.22,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),{Size=targetSize}):Play()
 	task.wait(0.08)
 	Options.Visible = open
 end)
 
-print("[NPCUtilityGUI v5.7] Loaded - Full functionality including Spasm and all void versions")
+print("[NPCUtilityGUI Compact v5.7] Loaded - Compact GUI aligned left, all toggles functional")
