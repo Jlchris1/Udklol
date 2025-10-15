@@ -1,4 +1,4 @@
--- NPC Utility GUI (Part 3 - Behendigheid + Jump + HipHeight Control)
+-- NPC Utility GUI v4.1 (Permanent Erase + consistent size with Part1/2)
 -- LocalScript, place in StarterGui
 
 local Players = game:GetService("Players")
@@ -9,7 +9,8 @@ local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
 -- CONFIG
-local GUI_WIDTH = 260
+local GUI_WIDTH = 280 -- same as Part1/2
+local GUI_HEIGHT = 400
 local TOGGLE_WIDTH = 70
 local LOOP_DELAY = 0.1
 
@@ -36,18 +37,18 @@ ToggleButton.BorderSizePixel = 0
 ToggleButton.Font = Enum.Font.GothamBold
 ToggleButton.TextSize = 15
 ToggleButton.TextColor3 = Color3.new(1, 1, 1)
-ToggleButton.Text = "☰ NPC 3"
+ToggleButton.Text = "☰ NPC Utility"
 ToggleButton.Parent = MainFrame
 
 local Options = Instance.new("Frame")
-Options.Size = UDim2.new(1, 0, 0, 300)
+Options.Size = UDim2.new(1, 0, 0, GUI_HEIGHT)
 Options.Position = UDim2.new(0, 0, 0, 34)
 Options.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
 Options.BorderSizePixel = 0
 Options.Visible = false
 Options.Parent = MainFrame
 
--- UI Builders
+-- UI Helpers
 local function makeRow(y)
 	local row = Instance.new("Frame")
 	row.Size = UDim2.new(1, -12, 0, 34)
@@ -97,7 +98,7 @@ local function makeTextboxRow(y, placeholder)
 	return box, toggle
 end
 
--- NPC Filter
+-- NPC Utilities
 local function getNPCs()
 	local npcs = {}
 	for _, obj in ipairs(workspace:GetDescendants()) do
@@ -112,7 +113,6 @@ local function getNPCs()
 	return npcs
 end
 
--- Iterate only base parts (tools ignored naturally)
 local function iterateBaseParts(npc, fn)
 	for _, part in ipairs(npc:GetDescendants()) do
 		if part:IsA("BasePart") then
@@ -136,15 +136,11 @@ local function removeNPCTools(npc)
 	end
 end
 
--- 🔥 Violent Old-Style Spasm (random CFrame rotations applied to all parts, wildly)
 local function spasmNPC(npc)
 	local hum = npc:FindFirstChildOfClass("Humanoid")
 	if hum then hum.PlatformStand = true end
-
 	iterateBaseParts(npc, function(p)
-		local rx = math.rad(math.random(-180, 180))
-		local ry = math.rad(math.random(-180, 180))
-		local rz = math.rad(math.random(-180, 180))
+		local rx, ry, rz = math.rad(math.random(-180, 180)), math.rad(math.random(-180, 180)), math.rad(math.random(-180, 180))
 		p.CFrame = p.CFrame * CFrame.Angles(rx, ry, rz)
 	end)
 end
@@ -169,8 +165,33 @@ local function setHipHeight(npc, value)
 	if hum then hum.HipHeight = value end
 end
 
+-- Erase functions
+local function eraseNPC(npc)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then
+		pcall(function() hum.Health = 0 end)
+	end
+	task.wait(0.1)
+	pcall(function() npc:Destroy() end)
+end
+
+local function permanentEraseNPC(npc)
+	pcall(function() npc:Destroy() end)
+end
+
+local function voidV2(npc)
+	local targetPos = Vector3.new(1000000, 0, 1000000)
+	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
+	if hrp then
+		pcall(function() hrp.CFrame = CFrame.new(targetPos) end)
+	end
+end
+
 -- GUI Layout
 local y = 6
+local EraseRow = makeRow(y) y = y + 40
+local PermEraseRow = makeRow(y) y = y + 40
+local VoidRow = makeRow(y) y = y + 40
 local GetRidRow = makeRow(y) y = y + 40
 local RemoveToolsRow = makeRow(y) y = y + 40
 local SpasmRow = makeRow(y) y = y + 40
@@ -178,6 +199,10 @@ local BehendigheidRow = makeRow(y) y = y + 40
 local JumpRow = makeRow(y) y = y + 40
 local HipHeightBox, HipHeightToggle = makeTextboxRow(y, "HipHeight Value") y = y + 40
 
+-- Buttons
+local EraseBtn = makeToggle(EraseRow, "Erase NPCs from Existence")
+local PermEraseBtn = makeToggle(PermEraseRow, "Permanent Erase NPCs")
+local VoidBtn = makeToggle(VoidRow, "Void v2 NPCs")
 local GetRidBtn = makeToggle(GetRidRow, "Get Rid of NPCs")
 local RemoveToolsBtn = makeToggle(RemoveToolsRow, "Remove NPC Tools")
 local SpasmBtn = makeToggle(SpasmRow, "Spasm NPCs")
@@ -204,7 +229,7 @@ JumpLoop.TextColor3 = Color3.new(1, 1, 1)
 JumpLoop.Text = "Loop: Off"
 JumpLoop.Parent = JumpRow
 
--- Loop Runner
+-- Loop system
 local function startLoop(flagName, action, extra)
 	coroutine.wrap(function()
 		while _G[flagName] do
@@ -216,18 +241,20 @@ local function startLoop(flagName, action, extra)
 	end)()
 end
 
--- Buttons logic
 local function toggleLoop(btn, flagName, action)
 	_G[flagName] = not _G[flagName]
 	btn.Text = btn.Text:match(": Off") and btn.Text:gsub("Off", "On") or btn.Text:gsub("On", "Off")
 	if _G[flagName] then startLoop(flagName, action) end
 end
 
+-- Bindings
+EraseBtn.MouseButton1Click:Connect(function() toggleLoop(EraseBtn, "eraseLoop", eraseNPC) end)
+PermEraseBtn.MouseButton1Click:Connect(function() toggleLoop(PermEraseBtn, "permEraseLoop", permanentEraseNPC) end)
+VoidBtn.MouseButton1Click:Connect(function() toggleLoop(VoidBtn, "voidLoop", voidV2) end)
 GetRidBtn.MouseButton1Click:Connect(function() toggleLoop(GetRidBtn, "getRidLoop", getRidNPC) end)
 RemoveToolsBtn.MouseButton1Click:Connect(function() toggleLoop(RemoveToolsBtn, "removeToolsLoop", removeNPCTools) end)
 SpasmBtn.MouseButton1Click:Connect(function() toggleLoop(SpasmBtn, "spasmLoop", spasmNPC) end)
 KillBehendigheidBtn.MouseButton1Click:Connect(function() toggleLoop(KillBehendigheidBtn, "behendigheidLoop", behendigheidKill) end)
-
 JumpBtn.MouseButton1Click:Connect(function()
 	for _, npc in ipairs(getNPCs()) do pcall(function() jumpNPC(npc) end) end
 end)
@@ -243,14 +270,14 @@ HipHeightToggle.MouseButton1Click:Connect(function()
 	if _G["hipLoop"] then startLoop("hipLoop", setHipHeight, val) end
 end)
 
--- GUI Toggle Animation
+-- GUI Toggle
 local open = false
 ToggleButton.MouseButton1Click:Connect(function()
 	open = not open
-	local targetSize = open and UDim2.new(0, GUI_WIDTH, 0, 300) or UDim2.new(0, GUI_WIDTH, 0, 34)
+	local targetSize = open and UDim2.new(0, GUI_WIDTH, 0, GUI_HEIGHT) or UDim2.new(0, GUI_WIDTH, 0, 34)
 	TweenService:Create(MainFrame, TweenInfo.new(0.22, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = targetSize}):Play()
 	task.wait(0.08)
 	Options.Visible = open
 end)
 
-print("[NPCUtilityGUI v3.9] Loaded - Violent Old-Style Spasm Active")
+print("[NPCUtilityGUI v4.1] Loaded - Permanent Erase & Void v2 Active")
