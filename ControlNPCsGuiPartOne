@@ -168,8 +168,9 @@ local function killNPC(npc)
 	local hum = npc:FindFirstChildOfClass("Humanoid")
 	if hum then
 		pcall(function()
-			hum.Health = 100 -- first set to 100
-			hum.Health = -math.huge -- then kill
+			hum.Health = 100 -- restore health first
+			task.wait(0.05) -- small delay to ensure scripts detect health change
+			hum:TakeDamage(math.huge) -- properly fire damage
 		end)
 	end
 end
@@ -275,4 +276,4 @@ ToggleButton.MouseButton1Click:Connect(function()
 	Options.Visible=open
 end)
 
-print("[NPCControlGUI] Fully safe, targeting only Humanoids with HRP and Kill sets Health to 100 first.")
+print("[NPCControlGUI] Fully safe, Kill now properly fires damage after setting Health to 100.")
