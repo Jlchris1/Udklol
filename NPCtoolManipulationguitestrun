@@ -97,6 +97,32 @@ local targetAllToggle = createToggle(mainFrame, "Target All NPCs", 226)
 local attachToolButton = createButton(mainFrame, "Attach Tool (Shirt Tools)", 266)
 local attachTargetToggle = createToggle(mainFrame, "Attach Target NPCs", 306)
 local killAllToggle = createToggle(mainFrame, "Kill All Equipped Tools", 346)
+-- Add this after your last button creation (after killAllToggle)
+
+local unattachButton = createButton(mainFrame, "Unattach Tools (to Character)", 386)
+
+unattachButton.MouseButton1Click:Connect(function()
+	local char = player.Character
+	if not char then return end
+	-- Move all tools inside any container (Shirt/Humanoid) back to character
+	local containers = {char:FindFirstChild("Shirt"), char:FindFirstChildOfClass("Humanoid")}
+	for _, container in pairs(containers) do
+		if container then
+			for _, tool in pairs(container:GetChildren()) do
+				if tool:IsA("Tool") then
+					tool.Parent = char
+				end
+			end
+		end
+	end
+	-- Also ensure tools already in character stay
+	for _, tool in pairs(char:GetChildren()) do
+		if tool:IsA("Tool") then
+			tool.Parent = char
+		end
+	end
+end)
+
 
 --// State
 local state = {
