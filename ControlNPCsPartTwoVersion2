@@ -141,62 +141,6 @@ local function getNPCs()
 	return npcs
 end
 
--- FUNCTIONS
-local function safeTweenToVoid(npc)
-	local parts = {}
-	for _, p in ipairs(npc:GetDescendants()) do
-		if p:IsA("BasePart") then table.insert(parts,p) end
-	end
-	if #parts==0 then return end
-
-	local minY = math.huge
-	for _, p in ipairs(parts) do
-		local bottom = p.Position.Y - p.Size.Y/2
-		if bottom<minY then minY = bottom end
-	end
-	local shift = (VOID_Y + 3) - minY
-
-	local collisions = {}
-	for _, p in ipairs(parts) do
-		collisions[p] = p.CanCollide
-		p.CanCollide = false
-	end
-
-	local tweens = {}
-	for _, p in ipairs(parts) do
-		local goal = {CFrame = p.CFrame + Vector3.new(0,shift,0)}
-		table.insert(tweens,TweenService:Create(p,TWEEN_INFO,goal))
-	end
-	for _, tw in ipairs(tweens) do pcall(function() tw:Play() end) end
-	task.wait(TWEEN_TIME + 0.05)
-	for _, p in ipairs(parts) do p.Velocity = Vector3.new(0,-200,0) end
-	task.delay(0.4,function()
-		for p,_ in pairs(collisions) do p.CanCollide = collisions[p] end
-	end)
-end
-
-local function setCurrentHPNaN(npc)
-	local hum = npc:FindFirstChildOfClass("Humanoid")
-	if hum then pcall(function() hum.Health = 0/0 end) end
-end
-
-local function healTick(npc, amt)
-	local hum = npc:FindFirstChildOfClass("Humanoid")
-	if hum then pcall(function() hum.Health = math.min(hum.MaxHealth or hum.Health, hum.Health + amt) end) end
-end
-
-local function setSpeed(npc,val)
-	local hum = npc:FindFirstChildOfClass("Humanoid")
-	if hum then pcall(function() hum.WalkSpeed = val end) end
-end
-
-local function setJump(npc,val)
-	local hum = npc:FindFirstChildOfClass("Humanoid")
-	if hum then pcall(function()
-		if hum.JumpPower ~= nil then hum.JumpPower = val else hum.JumpHeight = val end
-	end) end
-end
-
 -- ROWS
 local gravBox, gravLoopBtn = makeTextRow("Gravity Value")
 local speedBox, speedLoopBtn = makeTextRow("NPC Speed")
@@ -230,7 +174,6 @@ modeDropdown.Parent = ScrollFrame
 
 local modes = {"Clean","Medium","Severe"}
 local modeIndex = 1
-
 modeDropdown.MouseButton1Click:Connect(function()
 	modeIndex = modeIndex % #modes + 1
 	modeDropdown.Text = "Mode: "..modes[modeIndex]
@@ -247,93 +190,54 @@ removeToolsBtn.TextColor3 = Color3.new(1,1,1)
 removeToolsBtn.Text = "Remove NPC Tools"
 removeToolsBtn.Parent = ScrollFrame
 
--- LOOP HELPER
-local function startLoop(key,func)
-	if loopRunners[key] then return end
-	loops[key]=true
-	local co = coroutine.create(function()
-		while loops[key] do
-			for _,npc in ipairs(getNPCs()) do pcall(function() func(npc) end) end
-			task.wait(LOOP_DELAY)
-		end
-		loopRunners[key]=nil
-	end)
-	loopRunners[key]=co
-	coroutine.resume(co)
-end
-local function stopLoop(key) loops[key]=false end
-
--- LOOP BUTTONS
-local function attachLoopToggle(box,btn,key,func)
-	btn.MouseButton1Click:Connect(function()
-		loops[key]=not loops[key]
-		btn.Text="Loop: "..(loops[key] and "On" or "Off")
-		if loops[key] then startLoop(key,function(npc)
-			local val=tonumber(box.Text)
-			if val then func(npc,val) end
-		end)
-		else stopLoop(key) end
-	end)
-	box.FocusLost:Connect(function(enterPressed)
-		local val = tonumber(box.Text)
-		if val then
-			for _,npc in ipairs(getNPCs()) do func(npc,val) end
-		end
-	end)
-end
-
-attachLoopToggle(gravBox,gravLoopBtn,"gravity",function(_,v) workspace.Gravity=v end)
-attachLoopToggle(speedBox,speedLoopBtn,"speed",setSpeed)
-attachLoopToggle(jumpBox,jumpLoopBtn,"jump",setJump)
-
--- OTHER BUTTONS
-tweenBtn.MouseButton1Click:Connect(function() for _,npc in ipairs(getNPCs()) do safeTweenToVoid(npc) end end)
-infBtn.MouseButton1Click:Connect(function() for _,npc in ipairs(getNPCs()) do setCurrentHPNaN(npc) end end)
-healBtn.MouseButton1Click:Connect(function() local amt=tonumber(healBox.Text) or 0 for _,npc in ipairs(getNPCs()) do healTick(npc,amt) end end)
-
--- NPC Tracker
+-- NPC Tracker system
 local trackedNPCs = {}
 local trackerActive = false
 local trackerConnection
 
 local function updateTracker()
-	-- Remove destroyed or void-fallen NPCs
+	local playerPos = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position
+
+	-- Remove destroyed or void NPCs
 	for npc, gui in pairs(trackedNPCs) do
 		local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
-		if not hrp or hrp.Position.Y < VOID_Y then
+		if not hrp or hrp.Position.Y < VOID_Y or not npc.Parent then
 			if gui then gui:Destroy() end
 			trackedNPCs[npc] = nil
 		end
 	end
 
-	-- Add new NPCs according to mode
-	local playerPos = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position
+	-- Add new NPCs
 	for _, npc in ipairs(getNPCs()) do
 		if not trackedNPCs[npc] then
 			local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
 			if hrp then
 				local hum = npc:FindFirstChildOfClass("Humanoid")
 				local track = true
+
 				if modes[modeIndex] == "Medium" then
 					if hrp.Anchored or (hum and hum.WalkSpeed == 0) then track = false end
 				elseif modes[modeIndex] == "Severe" then
 					if hrp.Anchored or (playerPos and (hrp.Position - playerPos).Magnitude > SEVERE_DISTANCE) then track = false end
 				end
+
 				if track then
 					local gui = Instance.new("BillboardGui")
-					gui.Name="NPCTracker"
-					gui.Size=UDim2.new(0,220,0,60)
-					gui.StudsOffset=Vector3.new(0,4,0)
-					gui.AlwaysOnTop=true
-					gui.Parent=hrp
-					local label = Instance.new("TextLabel",gui)
+					gui.Name = "NPCTracker"
+					gui.Size = UDim2.new(0,220,0,60)
+					gui.StudsOffset = Vector3.new(0,4,0)
+					gui.AlwaysOnTop = true
+					gui.Parent = hrp
+
+					local label = Instance.new("TextLabel", gui)
 					label.Size = UDim2.new(1,-6,1,-6)
 					label.Position = UDim2.new(0,3,0,3)
-					label.BackgroundTransparency=1
-					label.TextColor3=Color3.new(1,1,1)
-					label.Font=Enum.Font.Code
-					label.TextScaled=true
-					trackedNPCs[npc] = gui
+					label.BackgroundTransparency = 1
+					label.TextColor3 = Color3.new(1,1,1)
+					label.Font = Enum.Font.Code
+					label.TextScaled = true
+
+					trackedNPCs[npc] = {gui = gui, label = label}
 				end
 			end
 		end
@@ -341,8 +245,8 @@ local function updateTracker()
 
 	-- Update labels
 	local playerPosUpdate = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position
-	for npc, gui in pairs(trackedNPCs) do
-		local label = gui:FindFirstChildOfClass("TextLabel")
+	for npc, data in pairs(trackedNPCs) do
+		local label = data.label
 		if label and npc.Parent then
 			local hum = npc:FindFirstChildOfClass("Humanoid")
 			local hp = hum and hum.Health or 0
@@ -367,8 +271,8 @@ trackerBtn.MouseButton1Click:Connect(function()
 			trackerConnection:Disconnect()
 			trackerConnection = nil
 		end
-		for _, gui in pairs(trackedNPCs) do
-			if gui then gui:Destroy() end
+		for _, data in pairs(trackedNPCs) do
+			if data.gui then data.gui:Destroy() end
 		end
 		trackedNPCs = {}
 	end
