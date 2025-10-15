@@ -122,9 +122,9 @@ FlingBox.TextSize=14
 FlingBox.Parent=flingRow
 
 local FlingBtn = Instance.new("TextButton")
-FlingBtn.Size=UDim2.new(0.3,-6,1,0)
-FlingBtn.Position=UDim2.new(0.7,6,0,0)
-FlingBtn.BackgroundColor3=Color3.fromRGB(100,50,50)
+FlingBtn.Size = UDim2.new(0.3,-6,1,0)
+FlingBtn.Position = UDim2.new(0.7,6,0,0)
+FlingBtn.BackgroundColor3 = Color3.fromRGB(100,50,50)
 FlingBtn.Text="Fling"
 FlingBtn.Font=Enum.Font.Gotham
 FlingBtn.TextSize=14
@@ -143,21 +143,21 @@ local VoidLoop = makeSmallToggle(voidRow)
 local loops = {kill=false,inf=false,ps=false,sit=false,anchor=false,fling=false,void=false}
 local loopRunners = {}
 
--- NPC Detection: Humanoid or BasePart and not player
+-- NPC Detection: Only models with Humanoid and HRP, excluding players
 local function getNPCs()
 	local npcs = {}
-	for _,obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
-			local hasHum = obj:FindFirstChildOfClass("Humanoid")
-			local hasPart=false
-			for _,p in ipairs(obj:GetDescendants()) do if p:IsA("BasePart") then hasPart=true break end end
-			if hasHum or hasPart then table.insert(npcs,obj) end
+	for _,hum in ipairs(workspace:GetDescendants()) do
+		if hum:IsA("Humanoid") then
+			local char = hum.Parent
+			if char and char:IsA("Model") and char:FindFirstChild("HumanoidRootPart") and not Players:GetPlayerFromCharacter(char) then
+				table.insert(npcs,char)
+			end
 		end
 	end
 	return npcs
 end
 
-local function iterateBaseParts(npc,fn)
+local function iterateHumanoidParts(npc,fn)
 	for _,p in ipairs(npc:GetDescendants()) do
 		if p:IsA("BasePart") then pcall(function() fn(p) end) end
 	end
@@ -168,8 +168,8 @@ local function killNPC(npc)
 	local hum = npc:FindFirstChildOfClass("Humanoid")
 	if hum then
 		pcall(function()
-			hum.Health = hum.MaxHealth -- restore first
-			hum.Health = -math.huge -- then kill
+			hum.Health = hum.MaxHealth
+			hum.Health = -math.huge
 		end)
 	end
 end
@@ -189,40 +189,32 @@ local function makeSit(npc)
 	if hum then pcall(function() hum.Sit = true end) end
 end
 
-local anchoredNPCs = {} -- track toggle state
+local anchoredNPCs = {}
 local function toggleAnchor(npc)
 	if anchoredNPCs[npc] then
-		iterateBaseParts(npc,function(p) p.Anchored=false end)
+		iterateHumanoidParts(npc,function(p) p.Anchored=false end)
 		anchoredNPCs[npc]=nil
 	else
-		iterateBaseParts(npc,function(p) p.Anchored=true end)
+		iterateHumanoidParts(npc,function(p) p.Anchored=true end)
 		anchoredNPCs[npc]=true
 	end
 end
 
 local function flingNPC(npc,strength)
-	iterateBaseParts(npc,function(p)
-		if p:IsA("BasePart") then
-			p.Velocity = Vector3.new(
-				math.random(-1000,1000),
-				math.random(0,800)+strength,
-				math.random(-1000,1000)
-			)
-		end
+	iterateHumanoidParts(npc,function(p)
+		p.Velocity = Vector3.new(
+			math.random(-1000,1000),
+			math.random(0,800)+strength,
+			math.random(-1000,1000)
+		)
 	end)
 end
 
 local function safeVoidTeleport(npc,voidY)
-	local parts={}
-	for _,p in ipairs(npc:GetDescendants()) do if p:IsA("BasePart") then table.insert(parts,p) end end
-	if #parts==0 then return end
-	local minBottom=math.huge
-	for _,p in ipairs(parts) do
-		local bottom=p.Position.Y - p.Size.Y/2
-		if bottom<minBottom then minBottom=bottom end
-	end
-	local shift=(voidY+3)-minBottom
-	for _,p in ipairs(parts) do pcall(function() p.CFrame=p.CFrame+Vector3.new(0,shift,0) end) end
+	local hrp = npc:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local shift = voidY + 3 - hrp.Position.Y
+	iterateHumanoidParts(npc,function(p) p.CFrame = p.CFrame + Vector3.new(0,shift,0) end)
 end
 
 -- LOOP Helpers
@@ -232,7 +224,7 @@ local function startLoop(key,action)
 	local co=coroutine.create(function()
 		while loops[key] do
 			for _,npc in ipairs(getNPCs()) do pcall(function() action(npc) end) end
-			task.wait(0.6)
+			task.wait(LOOP_DELAY)
 		end
 		loopRunners[key]=nil
 	end)
@@ -266,9 +258,7 @@ linkLoop(KillLoop,"kill",killNPC)
 linkLoop(InfLoop,"inf",giveInfHP)
 linkLoop(PSLoop,"ps",enablePlatformStand)
 linkLoop(SitLoop,"sit",makeSit)
-linkLoop(AnchorLoop,"anchor",function(n)
-	iterateBaseParts(n,function(p) p.Anchored=true end)
-end)
+linkLoop(AnchorLoop,"anchor",toggleAnchor)
 linkLoop(FlingLoopToggle,"fling",function(n)
 	local s=tonumber(FlingBox.Text) or 6000
 	flingNPC(n,s)
@@ -285,4 +275,4 @@ ToggleButton.MouseButton1Click:Connect(function()
 	Options.Visible=open
 end)
 
-print("[NPCControlGUI] Fully safe with Kill restore & toggleable Anchor loaded.")
+print("[NPCControlGUI] Fully safe, targeting only Humanoids with HRP loaded.")
