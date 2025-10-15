@@ -1,4 +1,4 @@
--- NPC Utility GUI v5.1 (Void V3/V4/V5 + Erase)
+-- NPC Utility GUI v5.6 (Void Spam v3, Void v2/v4/v5, Erase, Get Rid, Jump & HipHeight)
 -- LocalScript, place in StarterGui
 
 local Players = game:GetService("Players")
@@ -10,7 +10,7 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 
 -- CONFIG
 local GUI_WIDTH = 280
-local GUI_HEIGHT = 600 -- Expanded GUI
+local GUI_HEIGHT = 750 -- Expanded GUI for extra features
 local TOGGLE_WIDTH = 70
 local LOOP_DELAY = 0.1
 
@@ -121,37 +121,86 @@ local function iterateBaseParts(npc, fn)
 	end
 end
 
--- Actions
-local function getRidNPC(npc)
-	local targetPos = Vector3.new(9e37, 9e37, 9e37)
-	iterateBaseParts(npc, function(p) p.CFrame = CFrame.new(targetPos) end)
-	task.delay(0.2, function()
-		iterateBaseParts(npc, function(p) p.Anchored = true end)
-	end)
+-- Check if NPC is closest to local player
+local function isClosestToLocalPlayer(npc)
+	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
+	if not hrp then return false end
+	local playerPos = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position
+	if not playerPos then return false end
+	local npcDist = (hrp.Position - playerPos).Magnitude
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= player and plr.Character and plr.Character.PrimaryPart then
+			local dist = (hrp.Position - plr.Character.PrimaryPart.Position).Magnitude
+			if dist < npcDist then
+				return false
+			end
+		end
+	end
+	return true
 end
 
-local function removeNPCTools(npc)
-	for _, tool in ipairs(npc:GetChildren()) do
-		if tool:IsA("Tool") then tool:Destroy() end
+-- NPC Actions
+local function getRidNPC(npc)
+	if isClosestToLocalPlayer(npc) then
+		local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
+		if hrp then
+			pcall(function() hrp.CFrame = CFrame.new(9e37, 9e37, 9e37) end)
+		end
 	end
 end
 
-local function spasmNPC(npc)
-	local hum = npc:FindFirstChildOfClass("Humanoid")
-	if hum then hum.PlatformStand = true end
-	iterateBaseParts(npc, function(p)
-		local rx, ry, rz = math.rad(math.random(-180, 180)), math.rad(math.random(-180, 180)), math.rad(math.random(-180, 180))
-		p.CFrame = p.CFrame * CFrame.Angles(rx, ry, rz)
-	end)
+local function eraseNPCsAll()
+	for _, npc in ipairs(getNPCs()) do
+		if isClosestToLocalPlayer(npc) then
+			local hum = npc:FindFirstChildOfClass("Humanoid")
+			if hum then hum.Health = 0 end
+			pcall(function() npc:Destroy() end)
+		end
+	end
 end
 
-local function behendigheidKill(npc)
-	local head = npc:FindFirstChild("Head")
-	if head then
-		for _, a in ipairs(head:GetChildren()) do
-			if a:IsA("Attachment") then a:Destroy() end
+local function voidV2(npc)
+	if not isClosestToLocalPlayer(npc) then return end
+	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
+	if hrp then hrp.CFrame = CFrame.new(1e6, 0, 1e6) end
+end
+
+local function voidV3(npc)
+	if not isClosestToLocalPlayer(npc) then return end
+	coroutine.wrap(function()
+		local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
+		if hrp then
+			while hrp.Parent and _G["void3Loop"] do
+				pcall(function() hrp.Velocity = Vector3.new(0, -1e7, 0) end)
+				task.wait(0.01)
+			end
 		end
-		head:Destroy()
+	end)()
+end
+
+local function voidV4(npc)
+	if not isClosestToLocalPlayer(npc) then return end
+	coroutine.wrap(function()
+		local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
+		if hrp then
+			while hrp.Parent and _G["void4Loop"] do
+				pcall(function() hrp.CFrame = hrp.CFrame + Vector3.new(0, -1e5, 0) end)
+				task.wait(0.01)
+			end
+		end
+	end)()
+end
+
+local function voidV5(npc)
+	if not isClosestToLocalPlayer(npc) then return end
+	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
+	local playerY = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position.Y or 0
+	if hrp then
+		pcall(function()
+			hrp.CFrame = hrp.CFrame + Vector3.new(0, 1000, 0)
+			task.wait(0.2)
+			hrp.CFrame = hrp.CFrame - Vector3.new(0, 1000, 0)
+		end)
 	end
 end
 
@@ -165,76 +214,23 @@ local function setHipHeight(npc, value)
 	if hum then hum.HipHeight = value end
 end
 
--- Erase NPC
-local function eraseNPC(npc)
-	local hum = npc:FindFirstChildOfClass("Humanoid")
-	if hum then pcall(function() hum.Health = 0 end) end
-	task.wait(0.1)
-	pcall(function() npc:Destroy() end)
-end
-
--- Void variations
-local function voidV2(npc)
-	local targetPos = Vector3.new(1000000, 0, 1000000)
-	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
-	if hrp then pcall(function() hrp.CFrame = CFrame.new(targetPos) end) end
-end
-
-local function voidV3(npc)
-	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
-	if hrp then
-		pcall(function() hrp.Velocity = Vector3.new(0, -1e7, 0) end)
-	end
-end
-
-local function voidV4(npc)
-	coroutine.wrap(function()
-		local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
-		if hrp then
-			while hrp.Parent do
-				pcall(function() hrp.CFrame = hrp.CFrame + Vector3.new(0, -1e5, 0) end)
-				task.wait(0.01)
-			end
-		end
-	end)()
-end
-
-local function voidV5(npc)
-	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
-	local playerY = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position.Y or 0
-	if hrp then
-		pcall(function()
-			hrp.CFrame = hrp.CFrame + Vector3.new(0, 1000, 0)
-			task.wait(0.2)
-			hrp.CFrame = hrp.CFrame - Vector3.new(0, 1000, 0)
-		end)
-	end
-end
-
 -- GUI Layout
 local y = 6
+local GetRidRow = makeRow(y) y = y + 40
 local EraseRow = makeRow(y) y = y + 40
 local Void2Row = makeRow(y) y = y + 40
 local Void3Row = makeRow(y) y = y + 40
 local Void4Row = makeRow(y) y = y + 40
 local Void5Row = makeRow(y) y = y + 40
-local GetRidRow = makeRow(y) y = y + 40
-local RemoveToolsRow = makeRow(y) y = y + 40
-local SpasmRow = makeRow(y) y = y + 40
-local BehendigheidRow = makeRow(y) y = y + 40
 local JumpRow = makeRow(y) y = y + 40
 local HipHeightBox, HipHeightToggle = makeTextboxRow(y, "HipHeight Value") y = y + 40
 
--- Buttons
-local EraseBtn = makeToggle(EraseRow, "Erase NPCs from Existence")
+local GetRidBtn = makeToggle(GetRidRow, "Get Rid of NPCs")
+local EraseBtn = makeToggle(EraseRow, "Erase NPCs (Closest Only)")
 local Void2Btn = makeToggle(Void2Row, "Void v2")
-local Void3Btn = makeToggle(Void3Row, "Void v3")
+local Void3Btn = makeToggle(Void3Row, "Void v3 (Spam)")
 local Void4Btn = makeToggle(Void4Row, "Void v4")
 local Void5Btn = makeToggle(Void5Row, "Void v5")
-local GetRidBtn = makeToggle(GetRidRow, "Get Rid of NPCs")
-local RemoveToolsBtn = makeToggle(RemoveToolsRow, "Remove NPC Tools")
-local SpasmBtn = makeToggle(SpasmRow, "Spasm NPCs")
-local KillBehendigheidBtn = makeToggle(BehendigheidRow, "Kill (Behendigheid)")
 
 local JumpBtn = Instance.new("TextButton")
 JumpBtn.Size = UDim2.new(0.6, -5, 1, 0)
@@ -246,16 +242,16 @@ JumpBtn.TextColor3 = Color3.new(1, 1, 1)
 JumpBtn.Text = "Jump NPCs"
 JumpBtn.Parent = JumpRow
 
-local JumpLoop = Instance.new("TextButton")
-JumpLoop.Size = UDim2.new(0.4, -5, 1, 0)
-JumpLoop.Position = UDim2.new(0.6, 5, 0, 0)
-JumpLoop.BackgroundColor3 = Color3.fromRGB(58, 58, 58)
-JumpLoop.BorderSizePixel = 0
-JumpLoop.Font = Enum.Font.Gotham
-JumpLoop.TextSize = 14
-JumpLoop.TextColor3 = Color3.new(1, 1, 1)
-JumpLoop.Text = "Loop: Off"
-JumpLoop.Parent = JumpRow
+local JumpLoopBtn = Instance.new("TextButton")
+JumpLoopBtn.Size = UDim2.new(0.4, -5, 1, 0)
+JumpLoopBtn.Position = UDim2.new(0.6,5,0,0)
+JumpLoopBtn.BackgroundColor3 = Color3.fromRGB(58,58,58)
+JumpLoopBtn.BorderSizePixel = 0
+JumpLoopBtn.Font = Enum.Font.Gotham
+JumpLoopBtn.TextSize = 14
+JumpLoopBtn.TextColor3 = Color3.new(1,1,1)
+JumpLoopBtn.Text = "Loop: Off"
+JumpLoopBtn.Parent = JumpRow
 
 -- Loop system
 local function startLoop(flagName, action, extra)
@@ -269,30 +265,29 @@ local function startLoop(flagName, action, extra)
 	end)()
 end
 
-local function toggleLoop(btn, flagName, action)
+local function toggleLoop(btn, flagName, action, extra)
 	_G[flagName] = not _G[flagName]
-	btn.Text = btn.Text:match(": Off") and btn.Text:gsub("Off", "On") or btn.Text:gsub("On", "Off")
-	if _G[flagName] then startLoop(flagName, action) end
+	btn.Text = btn.Text:match(": Off") and btn.Text:gsub("Off","On") or btn.Text:gsub("On","Off")
+	if _G[flagName] then startLoop(flagName, action, extra) end
 end
 
 -- Bindings
-EraseBtn.MouseButton1Click:Connect(function() toggleLoop(EraseBtn, "eraseLoop", eraseNPC) end)
+GetRidBtn.MouseButton1Click:Connect(function() toggleLoop(GetRidBtn, "getRidLoop", getRidNPC) end)
+EraseBtn.MouseButton1Click:Connect(function() toggleLoop(EraseBtn, "eraseLoop", eraseNPCsAll) end)
 Void2Btn.MouseButton1Click:Connect(function() toggleLoop(Void2Btn, "void2Loop", voidV2) end)
 Void3Btn.MouseButton1Click:Connect(function() toggleLoop(Void3Btn, "void3Loop", voidV3) end)
 Void4Btn.MouseButton1Click:Connect(function() toggleLoop(Void4Btn, "void4Loop", voidV4) end)
 Void5Btn.MouseButton1Click:Connect(function() toggleLoop(Void5Btn, "void5Loop", voidV5) end)
-GetRidBtn.MouseButton1Click:Connect(function() toggleLoop(GetRidBtn, "getRidLoop", getRidNPC) end)
-RemoveToolsBtn.MouseButton1Click:Connect(function() toggleLoop(RemoveToolsBtn, "removeToolsLoop", removeNPCTools) end)
-SpasmBtn.MouseButton1Click:Connect(function() toggleLoop(SpasmBtn, "spasmLoop", spasmNPC) end)
-KillBehendigheidBtn.MouseButton1Click:Connect(function() toggleLoop(KillBehendigheidBtn, "behendigheidLoop", behendigheidKill) end)
+
 JumpBtn.MouseButton1Click:Connect(function()
 	for _, npc in ipairs(getNPCs()) do pcall(function() jumpNPC(npc) end) end
 end)
-JumpLoop.MouseButton1Click:Connect(function()
+JumpLoopBtn.MouseButton1Click:Connect(function()
 	_G["jumpLoop"] = not _G["jumpLoop"]
-	JumpLoop.Text = "Loop: " .. (_G["jumpLoop"] and "On" or "Off")
+	JumpLoopBtn.Text = "Loop: " .. (_G["jumpLoop"] and "On" or "Off")
 	if _G["jumpLoop"] then startLoop("jumpLoop", jumpNPC) end
 end)
+
 HipHeightToggle.MouseButton1Click:Connect(function()
 	local val = tonumber(HipHeightBox.Text) or 2
 	_G["hipLoop"] = not _G["hipLoop"]
@@ -310,4 +305,4 @@ ToggleButton.MouseButton1Click:Connect(function()
 	Options.Visible = open
 end)
 
-print("[NPCUtilityGUI v5.1] Loaded - Expanded GUI, Void V3/V4/V5 + Erase Active")
+print("[NPCUtilityGUI v5.6] Loaded - Full functionality with Void Spam v3, Void v2/v4/v5, Erase, Get Rid, Jump & HipHeight")
