@@ -1,4 +1,4 @@
--- NPC Advanced Tools GUI (Compact + Small Frame)
+-- Compact NPC Advanced Tools GUI with Tracker (Centered)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -11,7 +11,8 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 local GUI_WIDTH = 200
 local VOID_Y = -500
 local LOOP_DELAY = 0.5
-local TRACK_REFRESH = 0.4
+local TRACK_REFRESH = 0.3
+local SEVERE_DISTANCE = 500
 
 -- ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -23,7 +24,7 @@ ScreenGui.Parent = PlayerGui
 -- Main frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, GUI_WIDTH, 0, 28)
-MainFrame.Position = UDim2.new(1, - (GUI_WIDTH * 2) - 20, 0, 60)
+MainFrame.Position = UDim2.new(0.5, -GUI_WIDTH/2, 0.1, 0) -- Centered near top
 MainFrame.BackgroundColor3 = Color3.fromRGB(25,25,25)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -56,10 +57,10 @@ listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 listLayout.Padding = UDim.new(0,4)
 listLayout.Parent = ScrollFrame
 
--- Helper UI
+-- Helper UI functions
 local function makeRow(text,width)
 	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(1,-8,0,26)
+	frame.Size = UDim2.new(1,-6,0,26)
 	frame.BackgroundTransparency = 1
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(width or 0.7,0,1,0)
@@ -67,7 +68,7 @@ local function makeRow(text,width)
 	btn.BackgroundColor3 = Color3.fromRGB(58,58,58)
 	btn.BorderSizePixel = 0
 	btn.Font = Enum.Font.Gotham
-	btn.TextSize = 12
+	btn.TextSize = 13
 	btn.TextColor3 = Color3.new(1,1,1)
 	btn.Text = text
 	btn.Parent = frame
@@ -87,26 +88,26 @@ end
 
 local function makeTextRow(defaultText)
 	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(1,-8,0,26)
+	frame.Size = UDim2.new(1,-6,0,26)
 	frame.BackgroundTransparency = 1
 	local box = Instance.new("TextBox")
-	box.Size = UDim2.new(0.65,0,1,0)
+	box.Size = UDim2.new(0.63,0,1,0)
 	box.Position = UDim2.new(0,0,0,0)
 	box.Text = defaultText
 	box.PlaceholderText = defaultText
 	box.BackgroundColor3 = Color3.fromRGB(50,50,50)
 	box.TextColor3 = Color3.new(1,1,1)
 	box.Font = Enum.Font.Gotham
-	box.TextSize = 12
+	box.TextSize = 13
 	box.ClearTextOnFocus = false
 	box.Parent = frame
 	local loopBtn = Instance.new("TextButton")
-	loopBtn.Size = UDim2.new(0.32,0,1,0)
-	loopBtn.Position = UDim2.new(0.65,4,0,0)
+	loopBtn.Size = UDim2.new(0.34,0,1,0)
+	loopBtn.Position = UDim2.new(0.63,4,0,0)
 	loopBtn.BackgroundColor3 = Color3.fromRGB(80,80,40)
 	loopBtn.Text = "Loop: Off"
 	loopBtn.Font = Enum.Font.Gotham
-	loopBtn.TextSize = 12
+	loopBtn.TextSize = 13
 	loopBtn.TextColor3 = Color3.new(1,1,1)
 	loopBtn.BorderSizePixel = 0
 	loopBtn.Parent = frame
@@ -137,7 +138,7 @@ local function iterateParts(npc, fn)
 	end
 end
 
--- FUNCTIONS
+-- NPC functions
 local function setCurrentHPNaN(npc)
 	local hum = npc:FindFirstChildOfClass("Humanoid")
 	if hum then pcall(function() hum.Health = 0/0 end) end
@@ -166,6 +167,7 @@ local speedBox, speedLoopBtn = makeTextRow("NPC Speed")
 local jumpBox, jumpLoopBtn = makeTextRow("NPC JumpPower")
 local infBtn, infLoopBtn = makeRow("Set Current HP = 0/0")
 local healBox, healBtn = makeTextRow("Heal per tick")
+local trackerBtn, trackerLoop = makeRow("Toggle NPC Tracker")
 
 -- Loop helpers
 local function startLoop(key,func)
@@ -209,6 +211,77 @@ attachLoopToggle(jumpBox,jumpLoopBtn,"jump",setJump)
 infBtn.MouseButton1Click:Connect(function() for _,npc in ipairs(getNPCs()) do setCurrentHPNaN(npc) end end)
 healBtn.MouseButton1Click:Connect(function() local amt=tonumber(healBox.Text) or 0 for _,npc in ipairs(getNPCs()) do healTick(npc,amt) end end)
 
+-- Tracker
+local trackedNPCs = {}
+local trackerActive = false
+local trackerConn = nil
+
+local function addNPCToTracker(npc)
+	if not npc or trackedNPCs[npc] then return end
+	local hrp = npc:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	if hrp:FindFirstChild("NPCTracker") then return end
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "NPCTracker"
+	gui.Size = UDim2.new(0,180,0,40)
+	gui.StudsOffset = Vector3.new(0,2,0)
+	gui.AlwaysOnTop = true
+	gui.Parent = hrp
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1,-4,1,-4)
+	label.Position = UDim2.new(0,2,0,2)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.new(1,1,1)
+	label.Font = Enum.Font.Code
+	label.TextScaled = true
+	label.Parent = gui
+	trackedNPCs[npc] = {gui = gui, label = label}
+end
+
+local function removeNPCFromTracker(npc)
+	local data = trackedNPCs[npc]
+	if data and data.gui then pcall(function() data.gui:Destroy() end) end
+	trackedNPCs[npc] = nil
+end
+
+local function updateTracker()
+	local playerPos = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position
+	for npc, data in pairs(trackedNPCs) do
+		if not npc.Parent or not npc:FindFirstChild("HumanoidRootPart") then removeNPCFromTracker(npc) end
+		if data and data.label and npc.Parent then
+			local hum = npc:FindFirstChildOfClass("Humanoid")
+			local hrp = npc:FindFirstChild("HumanoidRootPart")
+			local dist = 0
+			if playerPos and hrp then dist = (hrp.Position - playerPos).Magnitude end
+			if hum then
+				data.label.Text = string.format("%s | HP: %.1f | Speed: %.1f | JP: %.1f | Dist: %.1f", npc.Name, hum.Health or 0, hum.WalkSpeed or 0, hum.JumpPower or hum.JumpHeight or 0, dist)
+			end
+		end
+	end
+end
+
+local function scannerLoop()
+	while trackerActive do
+		for _, npc in ipairs(getNPCs()) do
+			if not trackedNPCs[npc] then addNPCToTracker(npc) end
+		end
+		task.wait(TRACK_REFRESH)
+	end
+end
+
+trackerBtn.MouseButton1Click:Connect(function()
+	trackerActive = not trackerActive
+	if trackerActive then
+		if not trackerConn then
+			trackerConn = RunService.Heartbeat:Connect(updateTracker)
+		end
+		task.spawn(scannerLoop)
+	else
+		if trackerConn then trackerConn:Disconnect() trackerConn=nil end
+		for npc,_ in pairs(trackedNPCs) do removeNPCFromTracker(npc) end
+	end
+end)
+
 -- Toggle GUI
 local open=false
 ToggleButton.MouseButton1Click:Connect(function()
@@ -218,4 +291,4 @@ ToggleButton.MouseButton1Click:Connect(function()
 	TweenService:Create(MainFrame,TweenInfo.new(0.2,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),{Size=size}):Play()
 end)
 
-print("[NPC_AdvancedTools] Compact version loaded (Void tween removed).")
+print("[NPC_AdvancedTools] Centered compact tracker version loaded.")
