@@ -1,4 +1,4 @@
--- NPC Utility GUI v4.1 (Permanent Erase + consistent size with Part1/2)
+-- NPC Utility GUI v5.1 (Void V3/V4/V5 + Erase)
 -- LocalScript, place in StarterGui
 
 local Players = game:GetService("Players")
@@ -9,8 +9,8 @@ local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
 -- CONFIG
-local GUI_WIDTH = 280 -- same as Part1/2
-local GUI_HEIGHT = 400
+local GUI_WIDTH = 280
+local GUI_HEIGHT = 600 -- Expanded GUI
 local TOGGLE_WIDTH = 70
 local LOOP_DELAY = 0.1
 
@@ -165,33 +165,59 @@ local function setHipHeight(npc, value)
 	if hum then hum.HipHeight = value end
 end
 
--- Erase functions
+-- Erase NPC
 local function eraseNPC(npc)
 	local hum = npc:FindFirstChildOfClass("Humanoid")
-	if hum then
-		pcall(function() hum.Health = 0 end)
-	end
+	if hum then pcall(function() hum.Health = 0 end) end
 	task.wait(0.1)
 	pcall(function() npc:Destroy() end)
 end
 
-local function permanentEraseNPC(npc)
-	pcall(function() npc:Destroy() end)
-end
-
+-- Void variations
 local function voidV2(npc)
 	local targetPos = Vector3.new(1000000, 0, 1000000)
 	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
+	if hrp then pcall(function() hrp.CFrame = CFrame.new(targetPos) end) end
+end
+
+local function voidV3(npc)
+	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
 	if hrp then
-		pcall(function() hrp.CFrame = CFrame.new(targetPos) end)
+		pcall(function() hrp.Velocity = Vector3.new(0, -1e7, 0) end)
+	end
+end
+
+local function voidV4(npc)
+	coroutine.wrap(function()
+		local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
+		if hrp then
+			while hrp.Parent do
+				pcall(function() hrp.CFrame = hrp.CFrame + Vector3.new(0, -1e5, 0) end)
+				task.wait(0.01)
+			end
+		end
+	end)()
+end
+
+local function voidV5(npc)
+	local hrp = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
+	local playerY = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position.Y or 0
+	if hrp then
+		pcall(function()
+			hrp.CFrame = hrp.CFrame + Vector3.new(0, 1000, 0)
+			task.wait(0.2)
+			hrp.CFrame = hrp.CFrame - Vector3.new(0, 1000, 0)
+		end)
 	end
 end
 
 -- GUI Layout
 local y = 6
 local EraseRow = makeRow(y) y = y + 40
-local PermEraseRow = makeRow(y) y = y + 40
-local VoidRow = makeRow(y) y = y + 40
+local Void2Row = makeRow(y) y = y + 40
+local Void3Row = makeRow(y) y = y + 40
+local Void4Row = makeRow(y) y = y + 40
+local Void5Row = makeRow(y) y = y + 40
 local GetRidRow = makeRow(y) y = y + 40
 local RemoveToolsRow = makeRow(y) y = y + 40
 local SpasmRow = makeRow(y) y = y + 40
@@ -201,8 +227,10 @@ local HipHeightBox, HipHeightToggle = makeTextboxRow(y, "HipHeight Value") y = y
 
 -- Buttons
 local EraseBtn = makeToggle(EraseRow, "Erase NPCs from Existence")
-local PermEraseBtn = makeToggle(PermEraseRow, "Permanent Erase NPCs")
-local VoidBtn = makeToggle(VoidRow, "Void v2 NPCs")
+local Void2Btn = makeToggle(Void2Row, "Void v2")
+local Void3Btn = makeToggle(Void3Row, "Void v3")
+local Void4Btn = makeToggle(Void4Row, "Void v4")
+local Void5Btn = makeToggle(Void5Row, "Void v5")
 local GetRidBtn = makeToggle(GetRidRow, "Get Rid of NPCs")
 local RemoveToolsBtn = makeToggle(RemoveToolsRow, "Remove NPC Tools")
 local SpasmBtn = makeToggle(SpasmRow, "Spasm NPCs")
@@ -249,8 +277,10 @@ end
 
 -- Bindings
 EraseBtn.MouseButton1Click:Connect(function() toggleLoop(EraseBtn, "eraseLoop", eraseNPC) end)
-PermEraseBtn.MouseButton1Click:Connect(function() toggleLoop(PermEraseBtn, "permEraseLoop", permanentEraseNPC) end)
-VoidBtn.MouseButton1Click:Connect(function() toggleLoop(VoidBtn, "voidLoop", voidV2) end)
+Void2Btn.MouseButton1Click:Connect(function() toggleLoop(Void2Btn, "void2Loop", voidV2) end)
+Void3Btn.MouseButton1Click:Connect(function() toggleLoop(Void3Btn, "void3Loop", voidV3) end)
+Void4Btn.MouseButton1Click:Connect(function() toggleLoop(Void4Btn, "void4Loop", voidV4) end)
+Void5Btn.MouseButton1Click:Connect(function() toggleLoop(Void5Btn, "void5Loop", voidV5) end)
 GetRidBtn.MouseButton1Click:Connect(function() toggleLoop(GetRidBtn, "getRidLoop", getRidNPC) end)
 RemoveToolsBtn.MouseButton1Click:Connect(function() toggleLoop(RemoveToolsBtn, "removeToolsLoop", removeNPCTools) end)
 SpasmBtn.MouseButton1Click:Connect(function() toggleLoop(SpasmBtn, "spasmLoop", spasmNPC) end)
@@ -280,4 +310,4 @@ ToggleButton.MouseButton1Click:Connect(function()
 	Options.Visible = open
 end)
 
-print("[NPCUtilityGUI v4.1] Loaded - Permanent Erase & Void v2 Active")
+print("[NPCUtilityGUI v5.1] Loaded - Expanded GUI, Void V3/V4/V5 + Erase Active")
