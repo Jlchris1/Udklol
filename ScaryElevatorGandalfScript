@@ -1,0 +1,97 @@
+-- LocalScript (StarterPlayerScripts)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+local FIRE_DISTANCE = 50
+local FIRE_COUNT = 5
+local FIRE_SPACING = 0.03
+
+-- Toggle state
+local isEnabled = false
+
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "WindStaffToggleGUI"
+screenGui.ResetOnSpawn = false -- GUI persists after respawn
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 120, 0, 40)
+toggleButton.Position = UDim2.new(0, 10, 0.5, -20) -- left side middle
+toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextSize = 18
+toggleButton.Text = "WindStaff: OFF"
+toggleButton.Parent = screenGui
+
+-- Toggle function
+toggleButton.MouseButton1Click:Connect(function()
+	isEnabled = not isEnabled
+	toggleButton.Text = "WindStaff: " .. (isEnabled and "ON" or "OFF")
+end)
+
+-- Main logic
+local function setupCharacter(character)
+	local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+	local function handleTool(tool)
+		if not tool:IsA("Tool") or tool.Name ~= "WindStaff" then return end
+		local remote = tool:WaitForChild("RemoteEvent")
+
+		local heartbeatConn
+		local isBursting = false
+
+		local function onEquipped()
+			if heartbeatConn then heartbeatConn:Disconnect() end
+
+			heartbeatConn = RunService.Heartbeat:Connect(function()
+				if tool.Parent ~= character or isBursting or not isEnabled then
+					return
+				end
+
+				isBursting = true
+				spawn(function()
+					for i = 1, FIRE_COUNT do
+						if tool.Parent ~= character or not isEnabled then break end
+						local camera = workspace.CurrentCamera
+						local lookVector = camera.CFrame.LookVector
+						local forwardPos = humanoidRootPart.Position + (lookVector * FIRE_DISTANCE)
+						remote:FireServer(forwardPos)
+						task.wait(FIRE_SPACING)
+					end
+					isBursting = false
+				end)
+			end)
+		end
+
+		local function onUnequipped()
+			if heartbeatConn then
+				heartbeatConn:Disconnect()
+				heartbeatConn = nil
+			end
+			isBursting = false
+		end
+
+		tool.Equipped:Connect(onEquipped)
+		tool.Unequipped:Connect(onUnequipped)
+	end
+
+	-- Detect tools added to character
+	character.ChildAdded:Connect(handleTool)
+	-- Handle tool already equipped
+	local existing = character:FindFirstChild("WindStaff")
+	if existing then
+		handleTool(existing)
+	end
+end
+
+-- Setup for current character
+if player.Character then
+	setupCharacter(player.Character)
+end
+
+-- Re-setup on respawn
+player.CharacterAdded:Connect(setupCharacter)
