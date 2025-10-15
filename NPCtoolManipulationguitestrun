@@ -1,5 +1,5 @@
--- NPC_KillAura_Full.lua
--- Full centered GUI: KillAura + Attach Target + Kill All for equipped non-attached tools
+-- NPC_KillAura_Compact.lua
+-- Compact, mobile-friendly GUI: KillAura + Attach Target + Kill All for equipped non-attached tools
 
 --// Services
 local Players = game:GetService("Players")
@@ -14,14 +14,14 @@ local hrpAdjustRate = 0.5
 
 --// GUI Setup
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "NPCKillAuraGui"
+screenGui.Name = "NPCKillAuraGuiCompact"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 screenGui.Parent = playerGui
 
--- Main Frame (centered, slightly lower)
+-- Main Frame (smaller for mobile)
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 380, 0, 580)
+mainFrame.Size = UDim2.new(0, 240, 0, 360)
 mainFrame.Position = UDim2.new(0.5, 0, 0.55, 0)
 mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
@@ -31,8 +31,8 @@ mainFrame.Parent = screenGui
 
 -- Hide/Show toggle above the GUI
 local hideToggle = Instance.new("TextButton")
-hideToggle.Size = UDim2.new(0, 140, 0, 36)
-hideToggle.Position = UDim2.new(0.5, -70, 0.55, -300 - 40)
+hideToggle.Size = UDim2.new(0, 120, 0, 30)
+hideToggle.Position = UDim2.new(0.5, -60, 0.55, -200 - 30)
 hideToggle.Text = "Hide/Show KillAura"
 hideToggle.BackgroundColor3 = Color3.fromRGB(170,170,170)
 hideToggle.Parent = screenGui
@@ -43,22 +43,22 @@ end)
 --// UI Helpers
 local function createLabel(parent, text, y)
 	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -20, 0, 20)
-	lbl.Position = UDim2.new(0, 10, 0, y)
+	lbl.Size = UDim2.new(1, -10, 0, 18)
+	lbl.Position = UDim2.new(0, 5, 0, y)
 	lbl.BackgroundTransparency = 1
 	lbl.Text = text
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
 	lbl.TextColor3 = Color3.new(1,1,1)
 	lbl.Font = Enum.Font.SourceSans
-	lbl.TextSize = 16
+	lbl.TextSize = 14
 	lbl.Parent = parent
 	return lbl
 end
 
 local function createTextBox(parent, placeholder, y)
 	local tb = Instance.new("TextBox")
-	tb.Size = UDim2.new(1, -20, 0, 30)
-	tb.Position = UDim2.new(0, 10, 0, y)
+	tb.Size = UDim2.new(1, -10, 0, 24)
+	tb.Position = UDim2.new(0, 5, 0, y)
 	tb.PlaceholderText = placeholder
 	tb.Text = ""
 	tb.BackgroundColor3 = Color3.fromRGB(230,230,230)
@@ -68,8 +68,8 @@ end
 
 local function createToggle(parent, text, y)
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0, 200, 0, 36)
-	btn.Position = UDim2.new(0.5, -100, 0, y)
+	btn.Size = UDim2.new(1, -10, 0, 28)
+	btn.Position = UDim2.new(0, 5, 0, y)
 	btn.Text = text .. " : OFF"
 	btn.BackgroundColor3 = Color3.fromRGB(200,200,200)
 	btn.Parent = parent
@@ -78,8 +78,8 @@ end
 
 local function createButton(parent, text, y)
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0, 200, 0, 36)
-	btn.Position = UDim2.new(0.5, -100, 0, y)
+	btn.Size = UDim2.new(1, -10, 0, 28)
+	btn.Position = UDim2.new(0, 5, 0, y)
 	btn.Text = text
 	btn.BackgroundColor3 = Color3.fromRGB(180,180,250)
 	btn.Parent = parent
@@ -87,42 +87,18 @@ local function createButton(parent, text, y)
 end
 
 --// UI Elements
-createLabel(mainFrame, "Kill-Aura / NPC Utilities", 6)
-local rangeBox = createTextBox(mainFrame, "Kill aura range (studs)", 36)
-local enableKillToggle = createToggle(mainFrame, "Enable Kill Aura (NPCs)", 76)
-createLabel(mainFrame, "NPC HumanoidRootPart size adjust", 116)
-local hrpSizeBox = createTextBox(mainFrame, "HRP size (e.g. 2)", 146)
-local loopHrpAdjustToggle = createToggle(mainFrame, "Loop HRP adjust (NPCs)", 186)
-local targetAllToggle = createToggle(mainFrame, "Target All NPCs", 226)
-local attachToolButton = createButton(mainFrame, "Attach Tool (Shirt Tools)", 266)
-local attachTargetToggle = createToggle(mainFrame, "Attach Target NPCs", 306)
-local killAllToggle = createToggle(mainFrame, "Kill All Equipped Tools", 346)
--- Add this after your last button creation (after killAllToggle)
-
-local unattachButton = createButton(mainFrame, "Unattach Tools (to Character)", 386)
-
-unattachButton.MouseButton1Click:Connect(function()
-	local char = player.Character
-	if not char then return end
-	-- Move all tools inside any container (Shirt/Humanoid) back to character
-	local containers = {char:FindFirstChild("Shirt"), char:FindFirstChildOfClass("Humanoid")}
-	for _, container in pairs(containers) do
-		if container then
-			for _, tool in pairs(container:GetChildren()) do
-				if tool:IsA("Tool") then
-					tool.Parent = char
-				end
-			end
-		end
-	end
-	-- Also ensure tools already in character stay
-	for _, tool in pairs(char:GetChildren()) do
-		if tool:IsA("Tool") then
-			tool.Parent = char
-		end
-	end
-end)
-
+local yPos = 6
+createLabel(mainFrame, "Kill-Aura / NPC Utilities", yPos) yPos = yPos + 24
+local rangeBox = createTextBox(mainFrame, "Kill aura range (studs)", yPos) yPos = yPos + 28
+local enableKillToggle = createToggle(mainFrame, "Enable Kill Aura (NPCs)", yPos) yPos = yPos + 32
+createLabel(mainFrame, "NPC HRP size adjust", yPos) yPos = yPos + 20
+local hrpSizeBox = createTextBox(mainFrame, "HRP size (e.g. 2)", yPos) yPos = yPos + 28
+local loopHrpAdjustToggle = createToggle(mainFrame, "Loop HRP adjust (NPCs)", yPos) yPos = yPos + 32
+local targetAllToggle = createToggle(mainFrame, "Target All NPCs", yPos) yPos = yPos + 32
+local attachToolButton = createButton(mainFrame, "Attach Tool (Shirt Tools)", yPos) yPos = yPos + 32
+local attachTargetToggle = createToggle(mainFrame, "Attach Target NPCs", yPos) yPos = yPos + 32
+local killAllToggle = createToggle(mainFrame, "Kill All Equipped Tools", yPos) yPos = yPos + 32
+local unattachButton = createButton(mainFrame, "Unattach Tools", yPos)
 
 --// State
 local state = {
@@ -163,9 +139,7 @@ local function getNPCHRP(model)
 		end
 	end
 	for _, part in ipairs(model:GetChildren()) do
-		if part:IsA("BasePart") then
-			return part
-		end
+		if part:IsA("BasePart") then return part end
 	end
 	return nil
 end
@@ -174,15 +148,12 @@ local function getAllNPCs()
 	local results = {}
 	for _, obj in pairs(workspace:GetDescendants()) do
 		if obj:IsA("Model") and obj:FindFirstChildWhichIsA("Humanoid") then
-			if not Players:GetPlayerFromCharacter(obj) then
-				table.insert(results, obj)
-			end
+			if not Players:GetPlayerFromCharacter(obj) then table.insert(results, obj) end
 		end
 	end
 	return results
 end
 
--- Teleport tools parented to Shirt
 local function teleportShirtToolsToTarget(npc)
 	local npcHRP = getNPCHRP(npc)
 	if not npcHRP then return end
@@ -194,17 +165,13 @@ local function teleportShirtToolsToTarget(npc)
 		if tool:IsA("Tool") then
 			for _, obj in pairs(tool:GetDescendants()) do
 				if obj:IsA("Part") then
-					pcall(function()
-						obj.Massless = true
-						obj.Position = npcHRP.Position
-					end)
+					pcall(function() obj.Massless = true obj.Position = npcHRP.Position end)
 				end
 			end
 		end
 	end
 end
 
--- Teleport equipped tools (normal, non-attached) to NPC
 local function teleportEquippedToolsToNPC(npc)
 	local npcHRP = getNPCHRP(npc)
 	if not npcHRP then return end
@@ -213,29 +180,22 @@ local function teleportEquippedToolsToNPC(npc)
 	for _, tool in pairs(char:GetChildren()) do
 		if tool:IsA("Tool") and tool.Parent == char then
 			local handle = tool:FindFirstChild("Handle")
-			if handle then
-				pcall(function()
-					handle.Massless = true
-					handle.Position = npcHRP.Position
-				end)
-			end
+			if handle then pcall(function() handle.Massless = true handle.Position = npcHRP.Position end) end
 		end
 	end
 end
 
---// Kill Aura Loop
-local killAuraRunning = false
+--// Loop functions
+local killAuraRunning, killAllRunning, targetAllRunning, attachTargetRunning, hrpAdjustRunning = false, false, false, false, false
+
 local function killAuraLoop()
 	killAuraRunning = true
 	while state.killAuraEnabled do
-		local range = state.killAuraRange or 8
 		local myHRP = getMyHRP()
 		if myHRP then
-			local npcs = getAllNPCs()
-			for i = 1, #npcs do
-				local npc = npcs[i]
+			for _, npc in ipairs(getAllNPCs()) do
 				local hrp = getNPCHRP(npc)
-				if hrp and (hrp.Position - myHRP.Position).Magnitude <= range then
+				if hrp and (hrp.Position - myHRP.Position).Magnitude <= (state.killAuraRange or 8) then
 					teleportEquippedToolsToNPC(npc)
 					task.wait(0.01)
 				end
@@ -246,12 +206,10 @@ local function killAuraLoop()
 	killAuraRunning = false
 end
 
---// Kill All Equipped Tools Loop
-local killAllRunning = false
 local function killAllLoop()
 	killAllRunning = true
 	while state.killAllEnabled do
-		for _, npc in pairs(getAllNPCs()) do
+		for _, npc in ipairs(getAllNPCs()) do
 			teleportEquippedToolsToNPC(npc)
 			task.wait(0.01)
 		end
@@ -260,12 +218,10 @@ local function killAllLoop()
 	killAllRunning = false
 end
 
---// Target All Loop
-local targetAllRunning = false
 local function targetAllLoop()
 	targetAllRunning = true
 	while state.targetAllNPCs do
-		for _, npc in pairs(getAllNPCs()) do
+		for _, npc in ipairs(getAllNPCs()) do
 			teleportShirtToolsToTarget(npc)
 			task.wait(0.01)
 		end
@@ -274,12 +230,10 @@ local function targetAllLoop()
 	targetAllRunning = false
 end
 
---// Attach Target Loop
-local attachTargetRunning = false
 local function attachTargetLoop()
 	attachTargetRunning = true
 	while state.attachTarget do
-		for _, npc in pairs(getAllNPCs()) do
+		for _, npc in ipairs(getAllNPCs()) do
 			teleportShirtToolsToTarget(npc)
 			task.wait(0.01)
 		end
@@ -288,38 +242,31 @@ local function attachTargetLoop()
 	attachTargetRunning = false
 end
 
---// HRP Adjust Loop
-local hrpAdjustRunning = false
 local function hrpAdjustLoop()
 	hrpAdjustRunning = true
 	while state.loopHrpAdjust do
 		local sizeVal = state.hrpSizeValue or 2
-		for _, npc in pairs(getAllNPCs()) do
+		for _, npc in ipairs(getAllNPCs()) do
 			local hrp = getNPCHRP(npc)
-			if hrp then
-				pcall(function()
-					hrp.Size = Vector3.new(sizeVal, sizeVal, sizeVal)
-					hrp.CanCollide = false
-				end)
-			end
+			if hrp then pcall(function() hrp.Size = Vector3.new(sizeVal,sizeVal,sizeVal) hrp.CanCollide = false end) end
 		end
 		task.wait(hrpAdjustRate)
 	end
 	hrpAdjustRunning = false
 end
 
---// Toggle Helpers
+--// Toggle helper
 local function setToggle(btn, enabled)
 	if enabled then
 		btn.BackgroundColor3 = Color3.fromRGB(120,200,120)
-		btn.Text = btn.Text:match("^[^:]+") .. " : ON"
+		btn.Text = btn.Text:match("^[^:]+").." : ON"
 	else
 		btn.BackgroundColor3 = Color3.fromRGB(200,200,200)
-		btn.Text = btn.Text:match("^[^:]+") .. " : OFF"
+		btn.Text = btn.Text:match("^[^:]+").." : OFF"
 	end
 end
 
---// GUI Connections
+--// Connections
 enableKillToggle.MouseButton1Click:Connect(function()
 	state.killAuraEnabled = not state.killAuraEnabled
 	setToggle(enableKillToggle, state.killAuraEnabled)
@@ -349,9 +296,7 @@ end)
 targetAllToggle.MouseButton1Click:Connect(function()
 	state.targetAllNPCs = not state.targetAllNPCs
 	setToggle(targetAllToggle, state.targetAllNPCs)
-	if state.targetAllNPCs and not targetAllRunning then
-		task.spawn(targetAllLoop)
-	end
+	if state.targetAllNPCs and not targetAllRunning then task.spawn(targetAllLoop) end
 end)
 
 attachToolButton.MouseButton1Click:Connect(function()
@@ -360,9 +305,7 @@ attachToolButton.MouseButton1Click:Connect(function()
 		local shirt = char:FindFirstChild("Shirt") or char:FindFirstChild("Humanoid")
 		if shirt then
 			for _, tool in pairs(char:GetChildren()) do
-				if tool:IsA("Tool") then
-					tool.Parent = shirt
-				end
+				if tool:IsA("Tool") then tool.Parent = shirt end
 			end
 		end
 	end
@@ -371,17 +314,27 @@ end)
 attachTargetToggle.MouseButton1Click:Connect(function()
 	state.attachTarget = not state.attachTarget
 	setToggle(attachTargetToggle, state.attachTarget)
-	if state.attachTarget and not attachTargetRunning then
-		task.spawn(attachTargetLoop)
-	end
+	if state.attachTarget and not attachTargetRunning then task.spawn(attachTargetLoop) end
 end)
 
 killAllToggle.MouseButton1Click:Connect(function()
 	state.killAllEnabled = not state.killAllEnabled
 	setToggle(killAllToggle, state.killAllEnabled)
-	if state.killAllEnabled and not killAllRunning then
-		task.spawn(killAllLoop)
-	end
+	if state.killAllEnabled and not killAllRunning then task.spawn(killAllLoop) end
 end)
 
-print("NPC KillAura GUI loaded with KillAura, Attach Target, and Kill All Equipped Tools.")
+unattachButton.MouseButton1Click:Connect(function()
+	local char = player.Character
+	if not char then return end
+	local containers = {char:FindFirstChild("Shirt"), char:FindFirstChildOfClass("Humanoid")}
+	for _, container in pairs(containers) do
+		if container then
+			for _, tool in pairs(container:GetChildren()) do
+				if tool:IsA("Tool") then tool.Parent = char end
+			end
+		end
+	end
+	for _, tool in pairs(char:GetChildren()) do if tool:IsA("Tool") then tool.Parent = char end end
+end)
+
+print("NPC KillAura Compact GUI loaded - mobile friendly, smaller, full functionality.")
