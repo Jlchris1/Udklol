@@ -1,4 +1,4 @@
--- NPC Utility GUI v5.6 (Void Spam v3, Void v2/v4/v5, Erase, Get Rid, Jump & HipHeight)
+-- NPC Utility GUI v5.7 (Spasm, Void Spam v3, Void v2/v4/v5, Erase, Get Rid, Jump & HipHeight)
 -- LocalScript, place in StarterGui
 
 local Players = game:GetService("Players")
@@ -10,7 +10,7 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 
 -- CONFIG
 local GUI_WIDTH = 280
-local GUI_HEIGHT = 750 -- Expanded GUI for extra features
+local GUI_HEIGHT = 800 -- Expanded GUI to fit spasm button
 local TOGGLE_WIDTH = 70
 local LOOP_DELAY = 0.1
 
@@ -214,6 +214,15 @@ local function setHipHeight(npc, value)
 	if hum then hum.HipHeight = value end
 end
 
+local function spasmNPC(npc)
+	local hum = npc:FindFirstChildOfClass("Humanoid")
+	if hum then hum.PlatformStand = true end
+	iterateBaseParts(npc, function(p)
+		local rx, ry, rz = math.rad(math.random(-180,180)), math.rad(math.random(-180,180)), math.rad(math.random(-180,180))
+		p.CFrame = p.CFrame * CFrame.Angles(rx, ry, rz)
+	end)
+end
+
 -- GUI Layout
 local y = 6
 local GetRidRow = makeRow(y) y = y + 40
@@ -222,6 +231,7 @@ local Void2Row = makeRow(y) y = y + 40
 local Void3Row = makeRow(y) y = y + 40
 local Void4Row = makeRow(y) y = y + 40
 local Void5Row = makeRow(y) y = y + 40
+local SpasmRow = makeRow(y) y = y + 40
 local JumpRow = makeRow(y) y = y + 40
 local HipHeightBox, HipHeightToggle = makeTextboxRow(y, "HipHeight Value") y = y + 40
 
@@ -231,6 +241,7 @@ local Void2Btn = makeToggle(Void2Row, "Void v2")
 local Void3Btn = makeToggle(Void3Row, "Void v3 (Spam)")
 local Void4Btn = makeToggle(Void4Row, "Void v4")
 local Void5Btn = makeToggle(Void5Row, "Void v5")
+local SpasmBtn = makeToggle(SpasmRow, "Spasm NPCs")
 
 local JumpBtn = Instance.new("TextButton")
 JumpBtn.Size = UDim2.new(0.6, -5, 1, 0)
@@ -278,6 +289,7 @@ Void2Btn.MouseButton1Click:Connect(function() toggleLoop(Void2Btn, "void2Loop", 
 Void3Btn.MouseButton1Click:Connect(function() toggleLoop(Void3Btn, "void3Loop", voidV3) end)
 Void4Btn.MouseButton1Click:Connect(function() toggleLoop(Void4Btn, "void4Loop", voidV4) end)
 Void5Btn.MouseButton1Click:Connect(function() toggleLoop(Void5Btn, "void5Loop", voidV5) end)
+SpasmBtn.MouseButton1Click:Connect(function() toggleLoop(SpasmBtn, "spasmLoop", spasmNPC) end)
 
 JumpBtn.MouseButton1Click:Connect(function()
 	for _, npc in ipairs(getNPCs()) do pcall(function() jumpNPC(npc) end) end
@@ -305,4 +317,4 @@ ToggleButton.MouseButton1Click:Connect(function()
 	Options.Visible = open
 end)
 
-print("[NPCUtilityGUI v5.6] Loaded - Full functionality with Void Spam v3, Void v2/v4/v5, Erase, Get Rid, Jump & HipHeight")
+print("[NPCUtilityGUI v5.7] Loaded - Full functionality including Spasm and all void versions")
