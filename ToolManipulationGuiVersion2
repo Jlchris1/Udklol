@@ -1,5 +1,4 @@
--- KillAura_CompactGUI.lua
--- Compact version with functional GUI: Kill-Aura, HRP adjust, Tool Resizer
+-- KillAura_CompactGUI.lua (Ultra Compact: Smaller Frame & Buttons, Fully Re-aligned)
 
 -- Services
 local Players = game:GetService("Players")
@@ -19,8 +18,8 @@ screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 screenGui.Parent = playerGui
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 280, 0, 380) -- compacted width and height
-mainFrame.Position = UDim2.new(1, -290, 0.55, -190)
+mainFrame.Size = UDim2.new(0, 200, 0, 320) -- ultra compact size
+mainFrame.Position = UDim2.new(1, -210, 0.55, -160)
 mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
 mainFrame.BackgroundTransparency = 0.05
 mainFrame.BorderSizePixel = 0
@@ -29,22 +28,22 @@ mainFrame.Parent = screenGui
 -- UI helpers
 local function createLabel(parent, text, y)
 	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -20, 0, 18)
-	lbl.Position = UDim2.new(0, 10, 0, y)
+	lbl.Size = UDim2.new(1, -12, 0, 14)
+	lbl.Position = UDim2.new(0, 6, 0, y)
 	lbl.BackgroundTransparency = 1
 	lbl.Text = text
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
 	lbl.TextColor3 = Color3.new(1,1,1)
 	lbl.Font = Enum.Font.SourceSans
-	lbl.TextSize = 14
+	lbl.TextSize = 13
 	lbl.Parent = parent
 	return lbl
 end
 
 local function createTextBox(parent, placeholder, y)
 	local tb = Instance.new("TextBox")
-	tb.Size = UDim2.new(1, -20, 0, 28)
-	tb.Position = UDim2.new(0, 10, 0, y)
+	tb.Size = UDim2.new(1, -12, 0, 20)
+	tb.Position = UDim2.new(0, 6, 0, y)
 	tb.PlaceholderText = placeholder
 	tb.Text = ""
 	tb.BackgroundColor3 = Color3.fromRGB(230,230,230)
@@ -54,8 +53,8 @@ end
 
 local function createToggle(parent, text, y)
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(1, -20, 0, 32)
-	btn.Position = UDim2.new(0, 10, 0, y)
+	btn.Size = UDim2.new(1, -12, 0, 24)
+	btn.Position = UDim2.new(0, 6, 0, y)
 	btn.Text = text .. " : OFF"
 	btn.BackgroundColor3 = Color3.fromRGB(200,200,200)
 	btn.Parent = parent
@@ -63,24 +62,43 @@ local function createToggle(parent, text, y)
 end
 
 -- UI Elements
-createLabel(mainFrame, "Kill-Aura / Tool & HRP Utilities", 6)
-local rangeBox = createTextBox(mainFrame, "Kill aura range (studs)", 30)
-local enableKillToggle = createToggle(mainFrame, "Enable Kill Aura (skip whitelisted)", 64)
+local y = 4
+createLabel(mainFrame, "Kill-Aura / Tool & HRP", y)
+y += 18
+local rangeBox = createTextBox(mainFrame, "Kill aura range", y)
+y += 24
+local enableKillToggle = createToggle(mainFrame, "Enable Kill Aura", y)
+y += 28
 
-createLabel(mainFrame, "Tool Part Size (resizes ALL Normal Parts)", 98)
-local toolSizeBox = createTextBox(mainFrame, "Tool part size (e.g. 1 or 2)", 122)
-local autoToolSizeToggle = createToggle(mainFrame, "Auto-adjust Tool Size (loop 3s)", 156)
+createLabel(mainFrame, "Tool Part & Mesh Size", y)
+y += 16
+local toolSizeBox = createTextBox(mainFrame, "Tool size", y)
+y += 24
+local autoToolSizeToggle = createToggle(mainFrame, "Auto Tool Resize", y)
+y += 28
 
-createLabel(mainFrame, "Other players HumanoidRootPart size (studs)", 190)
-local hrpSizeBox = createTextBox(mainFrame, "HRP size (e.g. 2)", 214)
-local loopHrpAdjustToggle = createToggle(mainFrame, "Loop HRP adjust (skip whitelisted)", 248)
-local hrpSelectedAdjustToggle = createToggle(mainFrame, "Adjust Selected Players' HRP only", 282)
-local autoKillSelectedToggle = createToggle(mainFrame, "Auto Kill-Aura (Selected only)", 316)
+createLabel(mainFrame, "Attach Kill-Aura Range", y)
+y += 16
+local attachRangeBox = createTextBox(mainFrame, "Attach range", y)
+y += 24
+local enableAttachKillToggle = createToggle(mainFrame, "Enable Attach Kill Aura", y)
+y += 28
+
+createLabel(mainFrame, "Other players HRP size", y)
+y += 16
+local hrpSizeBox = createTextBox(mainFrame, "HRP size", y)
+y += 24
+local loopHrpAdjustToggle = createToggle(mainFrame, "Loop HRP adjust", y)
+y += 28
+local hrpSelectedAdjustToggle = createToggle(mainFrame, "Selected HRP only", y)
+y += 28
+local autoKillSelectedToggle = createToggle(mainFrame, "Auto Kill-Aura (Sel.)", y)
+y += 28
 
 local applySelectedHrpBtn = Instance.new("TextButton")
-applySelectedHrpBtn.Size = UDim2.new(1, -20, 0, 32)
-applySelectedHrpBtn.Position = UDim2.new(0, 10, 0, 348)
-applySelectedHrpBtn.Text = "Apply HRP size to Selected Players"
+applySelectedHrpBtn.Size = UDim2.new(1, -12, 0, 24)
+applySelectedHrpBtn.Position = UDim2.new(0, 6, 0, y)
+applySelectedHrpBtn.Text = "Apply HRP to Selected"
 applySelectedHrpBtn.BackgroundColor3 = Color3.fromRGB(200,200,200)
 applySelectedHrpBtn.Parent = mainFrame
 
@@ -91,7 +109,9 @@ local state = {
 	autoToolSize = false,
 	loopHrpAdjust = false,
 	hrpSelectedOnly = false,
+	attachKillAuraEnabled = false,
 	killAuraRange = 8,
+	attachAuraRange = 8,
 	toolHandleSize = 1,
 	hrpSizeValue = 2,
 }
@@ -125,17 +145,16 @@ local function getMyHRP()
 	return char:FindFirstChild("HumanoidRootPart")
 end
 
-local function applyToolPartSizeToLocalTools(size)
+local function applyToolSizeToLocalTools(size)
 	local char = player.Character
 	if not char then return end
 	for _, tool in pairs(char:GetChildren()) do
 		if tool:IsA("Tool") then
-			for _, obj in pairs(tool:GetDescendants()) do
-				if obj:IsA("Part") and obj.Shape == Enum.PartType.Block then
-					pcall(function()
-						obj.Massless = true
-						obj.Size = Vector3.new(size, size, size)
-					end)
+			for _, obj in pairs(tool:GetChildren()) do
+				if obj:IsA("BasePart") then
+					pcall(function() obj.Massless = true obj.Size = Vector3.new(size,size,size) end)
+				elseif obj:IsA("MeshPart") then
+					pcall(function() obj.Scale = Vector3.new(size,size,size) end)
 				end
 			end
 		end
@@ -148,16 +167,13 @@ local function teleportAttachedToolsToTarget(targetPlayer)
 	if not targetHRP then return end
 	local myChar = player.Character
 	if not myChar then return end
-	local shirt = myChar:FindFirstChild("Shirt") or myChar:FindFirstChild("Humanoid")
+	local shirt = myChar:FindFirstChild("Shirt") or myChar:FindFirstChildOfClass("Humanoid")
 	if not shirt then return end
 	for _, t in pairs(shirt:GetChildren()) do
 		if t:IsA("Tool") then
-			for _, obj in pairs(t:GetDescendants()) do
-				if obj:IsA("Part") then
-					pcall(function()
-						obj.Massless = true
-						obj.Position = targetHRP.Position
-					end)
+			for _, obj in pairs(t:GetChildren()) do
+				if obj:IsA("BasePart") or obj:IsA("MeshPart") then
+					pcall(function() obj.Massless = true obj.Position = targetHRP.Position end)
 				end
 			end
 		end
@@ -172,12 +188,9 @@ local function teleportNormalToolsToTarget(targetPlayer)
 	if not myChar then return end
 	for _, t in pairs(myChar:GetChildren()) do
 		if t:IsA("Tool") then
-			for _, obj in pairs(t:GetDescendants()) do
-				if obj:IsA("Part") then
-					pcall(function()
-						obj.Massless = true
-						obj.Position = targetHRP.Position
-					end)
+			for _, obj in pairs(t:GetChildren()) do
+				if obj:IsA("BasePart") or obj:IsA("MeshPart") then
+					pcall(function() obj.Massless = true obj.Position = targetHRP.Position end)
 				end
 			end
 		end
@@ -204,12 +217,12 @@ local function playersInRange(range, selectedOnly, skipWhitelisted)
 end
 
 -- Loops
-local killAuraRunning, hrpAdjustRunning, toolSizeLoopRunning = false, false, false
+local killAuraRunning, attachKillAuraRunning, hrpAdjustRunning, toolSizeLoopRunning = false, false, false, false
 
 local function killAuraLoop()
 	killAuraRunning = true
 	while state.killAuraEnabled do
-		local targets = playersInRange(state.killAuraRange or 8, state.autoKillSelected, true)
+		local targets = playersInRange(state.killAuraRange, state.autoKillSelected, true)
 		for _, tgt in ipairs(targets) do
 			teleportAttachedToolsToTarget(tgt)
 			teleportNormalToolsToTarget(tgt)
@@ -219,18 +232,27 @@ local function killAuraLoop()
 	killAuraRunning = false
 end
 
+local function attachKillAuraLoop()
+	attachKillAuraRunning = true
+	while state.attachKillAuraEnabled do
+		local targets = playersInRange(state.attachAuraRange, state.autoKillSelected, true)
+		for _, tgt in ipairs(targets) do
+			teleportAttachedToolsToTarget(tgt)
+		end
+		task.wait(defaultLoopRate)
+	end
+	attachKillAuraRunning = false
+end
+
 local function hrpAdjustLoop()
 	hrpAdjustRunning = true
 	while state.loopHrpAdjust do
-		local sizeVal = state.hrpSizeValue or 2
+		local sizeVal = state.hrpSizeValue
 		for _, pl in pairs(Players:GetPlayers()) do
 			if pl ~= player and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
 				if not isWhitelisted(pl) and (not state.hrpSelectedOnly or isSelected(pl)) then
 					local hrp = pl.Character.HumanoidRootPart
-					pcall(function()
-						hrp.Size = Vector3.new(sizeVal, sizeVal, sizeVal)
-						hrp.CanCollide = false
-					end)
+					pcall(function() hrp.Size = Vector3.new(sizeVal,sizeVal,sizeVal) hrp.CanCollide = false end)
 				end
 			end
 		end
@@ -244,7 +266,7 @@ local function toolSizeLoop()
 	while state.autoToolSize do
 		local newSize = safeNumberFromTextBox(toolSizeBox, state.toolHandleSize)
 		state.toolHandleSize = newSize
-		applyToolPartSizeToLocalTools(newSize)
+		applyToolSizeToLocalTools(newSize)
 		task.wait(toolResizeLoopRate)
 	end
 	toolSizeLoopRunning = false
@@ -255,7 +277,7 @@ local function adjustSelectedPlayersHRPOnce()
 		if pl ~= player and isSelected(pl) and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") and not isWhitelisted(pl) then
 			pcall(function()
 				local hrp = pl.Character.HumanoidRootPart
-				hrp.Size = Vector3.new(state.hrpSizeValue or 2, state.hrpSizeValue or 2, state.hrpSizeValue or 2)
+				hrp.Size = Vector3.new(state.hrpSizeValue,state.hrpSizeValue,state.hrpSizeValue)
 				hrp.CanCollide = false
 			end)
 		end
@@ -266,10 +288,10 @@ end
 local function setToggle(btn, enabled)
 	if enabled then
 		btn.BackgroundColor3 = Color3.fromRGB(120,200,120)
-		btn.Text = btn.Text:match("^[^:]+") .. " : ON"
+		btn.Text = btn.Text:match("^[^:]+").." : ON"
 	else
 		btn.BackgroundColor3 = Color3.fromRGB(200,200,200)
-		btn.Text = btn.Text:match("^[^:]+") .. " : OFF"
+		btn.Text = btn.Text:match("^[^:]+").." : OFF"
 	end
 end
 
@@ -280,6 +302,13 @@ enableKillToggle.MouseButton1Click:Connect(function()
 	if state.killAuraEnabled and not killAuraRunning then task.spawn(killAuraLoop) end
 end)
 rangeBox.FocusLost:Connect(function() state.killAuraRange = safeNumberFromTextBox(rangeBox, state.killAuraRange) end)
+
+enableAttachKillToggle.MouseButton1Click:Connect(function()
+	state.attachKillAuraEnabled = not state.attachKillAuraEnabled
+	setToggle(enableAttachKillToggle, state.attachKillAuraEnabled)
+	if state.attachKillAuraEnabled and not attachKillAuraRunning then task.spawn(attachKillAuraLoop) end
+end)
+attachRangeBox.FocusLost:Connect(function() state.attachAuraRange = safeNumberFromTextBox(attachRangeBox, state.attachAuraRange) end)
 
 autoToolSizeToggle.MouseButton1Click:Connect(function()
 	state.autoToolSize = not state.autoToolSize
@@ -309,13 +338,13 @@ applySelectedHrpBtn.MouseButton1Click:Connect(adjustSelectedPlayersHRPOnce)
 
 -- Hide/Show toggle
 local hideToggle = Instance.new("TextButton")
-hideToggle.Size = UDim2.new(0, 140, 0, 32)
-hideToggle.Position = UDim2.new(1, -290, 0.55, -220)
-hideToggle.Text = "Hide/Show KillAura"
+hideToggle.Size = UDim2.new(0, 100, 0, 24)
+hideToggle.Position = UDim2.new(1, -210, 0.55, -190)
+hideToggle.Text = "Hide/Show"
 hideToggle.BackgroundColor3 = Color3.fromRGB(170,170,170)
 hideToggle.Parent = screenGui
 hideToggle.MouseButton1Click:Connect(function()
 	mainFrame.Visible = not mainFrame.Visible
 end)
 
-print("Compact KillAura GUI loaded and fully functional.")
+print("Ultra Compact KillAura GUI loaded with fully resized and aligned buttons.")
