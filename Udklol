@@ -1,11 +1,8 @@
-local syn = getgenv().syn
-getgenv().syn = false
-
 local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/jensonhirst/Orion/main/source')))()local Window = OrionLib:MakeWindow({Name = "JLhub", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})local Tab = Window:MakeTab({
-	Name = "Tab 1",
+	Name = "nothing",
 	Icon = "rbxassetid://4483345998",
 	PremiumOnly = false
-}) Name = "guis",
+})Name = "guis",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 }) Tab:AddButton({
@@ -234,5 +231,3 @@ coroutine.resume(Rejoin)
               loadstring(game:HttpGet(('https://pastefy.app/xXkUxA0P/raw'),true))()
       end    
 })
-
-getgenv().syn = syn
