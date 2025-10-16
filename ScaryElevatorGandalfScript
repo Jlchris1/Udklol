@@ -24,13 +24,13 @@ toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
 toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggleButton.Font = Enum.Font.GothamBold
 toggleButton.TextSize = 18
-toggleButton.Text = "WindStaff: OFF"
+toggleButton.Text = "Gandalf: OFF"
 toggleButton.Parent = screenGui
 
 -- Toggle function
 toggleButton.MouseButton1Click:Connect(function()
 	isEnabled = not isEnabled
-	toggleButton.Text = "WindStaff: " .. (isEnabled and "ON" or "OFF")
+	toggleButton.Text = "Gandalf: " .. (isEnabled and "ON" or "OFF")
 end)
 
 -- Main logic
