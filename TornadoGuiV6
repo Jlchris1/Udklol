@@ -1,53 +1,63 @@
--- Tornado (Friendly / Nightmare) LocalScript (updated: instantaneous multi-satellites + vertical vortex chains)
--- Place in StarterPlayerScripts or PlayerGui
+-- Tornado (Friendly / Nightmare) LocalScript — FULL SCRIPT
+-- Features:
+--  - Instant multi-satellites when enabling
+--  - Satellites persist / re-form after player respawn
+--  - Changing "Max Sub-Vortices" while active immediately adds/removes satellites
+--  - Vertical wiggly chains that stretch from satellite/main funnel and attach on touch
+--  - Existing attachment / nightmare / firing logic preserved
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local localPlayer = Players.LocalPlayer
 
--- Basic Tornado settings (editable via GUI)
+-- ========== Configurable Settings ==========
 local enabled = false
 local tornadoSpinSpeed = 80
 local tornadoUpwardSpeed = 50
 local tornadoWindfield = 100
-local tornadoMoveSpeed = 10 -- kept in UI but tornado stays on player
+local tornadoMoveSpeed = 10
 local tornadoInwardPullSpeed = 50
 
-local tornadoPosition = nil
-local pickedUpByFunnel = {}    -- parts currently lifted / orbiting (keeps track)
-local whitelistedParts = {}    -- parts we've flagged to manipulate (main pool)
-local assignedToSatellite = {} -- part -> satellite id or true
 local baseplateName = "Baseplate"
 
--- Nightmare / Friendly mode
-local nightmareMode = false -- false = friendly, true = nightmare
-
--- Satellite Vortex Settings (defaults, adjustable via UI)
+-- Satellite settings (adjustable via GUI)
 local maxPartsPerSatellite = 6
 local maxSubVortices = 3
 local satelliteChaseSpeed = 20 -- studs/sec
-local satelliteOrbitRadius = 10 -- radius (studs) for parts orbiting satellite center
-local satelliteRotationSpeed = 3.5 -- rotation rate factor for part orbiting
-local horizontalVortexAttachRadius = 30 -- studs from a satellite that will trigger horizontal attach
-local satelliteMainOrbitAttackCount = 3 -- number of parts to use per attack volley
-local satelliteMainOrbitAttackRate = 1 -- seconds between volleys
+local satelliteOrbitRadius = 10
+local satelliteRotationSpeed = 3.5
+local horizontalVortexAttachRadius = 30
+local satelliteMainOrbitAttackCount = 3
+local satelliteMainOrbitAttackRate = 1
 
--- Vertical vortex settings (wiggly stretching chains)
+-- Vertical vortex (wiggly chain) settings
 local verticalChainMinParts = 3
 local verticalChainMaxParts = 6
-local verticalChainSpeed = 0.7 -- progress units per second (controls how fast chain grows toward player)
-local verticalChainAmplitude = 4 -- lateral wiggle amplitude (studs)
-local verticalChainFrequency = 6 -- wiggle frequency
-local verticalChainSegmentDelay = 0.12 -- stagger delay between parts in chain
-local verticalAttachDistance = 2.0 -- distance to player HRP to trigger attach
+local verticalChainSpeed = 0.7
+local verticalChainAmplitude = 4
+local verticalChainFrequency = 6
+local verticalChainSegmentDelay = 0.12
+local verticalAttachDistance = 2.0
 
--- runtime tables
-local satelliteVortices = {} -- id -> {pos = Vector3, parts = {part = meta}, angleOffset = number, target = Player, id = num, verticalChains = {}}
-local satelliteAttackState = {} -- id -> {attackingPlayers = {}, attackThreads = {}}
+-- ========== Runtime State ==========
+local tornadoPosition = nil
+local pickedUpByFunnel = {}      -- part -> true (picked)
+local whitelistedParts = {}      -- part -> true (available pool)
+local assignedToSatellite = {}   -- part -> satelliteId or true
+local debrisAttachedToPlayer = {}-- part -> player
+
+local satelliteVortices = {}     -- id -> satellite table
+local satelliteAttackState = {}  -- id -> attack state
 local nextSatelliteId = 1
 
--- UI Setup (keeps your layout, adds two boxes)
+local playerAttachmentMap = {}   -- player -> Attachment on HRP
+local playerTargetThreads = {}   -- player -> boolean
+local horizontalVortexParts = {} -- not used directly but kept for parity
+
+local nightmareMode = false
+
+-- ========== UI ==========
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "TornadoBlastGUI"
 screenGui.ResetOnSpawn = false
@@ -112,7 +122,6 @@ local function createLabeledTextbox(labelText, default, index)
     return box
 end
 
--- Input boxes
 local inputBoxes = {
     {"Spin Speed", tornadoSpinSpeed},
     {"Upward Speed", tornadoUpwardSpeed},
@@ -128,16 +137,7 @@ for i, data in ipairs(inputBoxes) do
     references[i] = createLabeledTextbox(data[1], data[2], i - 1)
 end
 
--- Bind UI values
-references[1].FocusLost:Connect(function() local v = tonumber(references[1].Text); if v then tornadoSpinSpeed = v end end)
-references[2].FocusLost:Connect(function() local v = tonumber(references[2].Text); if v then tornadoUpwardSpeed = v end end)
-references[3].FocusLost:Connect(function() local v = tonumber(references[3].Text); if v then tornadoWindfield = v end end)
-references[4].FocusLost:Connect(function() local v = tonumber(references[4].Text); if v then tornadoMoveSpeed = v end end)
-references[5].FocusLost:Connect(function() local v = tonumber(references[5].Text); if v then tornadoInwardPullSpeed = v end end)
-references[6].FocusLost:Connect(function() local v = tonumber(references[6].Text); if v then maxPartsPerSatellite = math.max(1, math.floor(v)) end end)
-references[7].FocusLost:Connect(function() local v = tonumber(references[7].Text); if v then maxSubVortices = math.max(0, math.floor(v)) end end)
-
--- Tornado toggle button
+-- toggleBtn and modeToggle need to exist before toggleInputs references them
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(0, 24, 0, 24)
 toggleBtn.Position = UDim2.new(0.5, -130, 0, 10)
@@ -149,7 +149,6 @@ toggleBtn.Text = "O"
 toggleBtn.ZIndex = 2
 toggleBtn.Parent = screenGui
 
--- Mode toggle: Friendly <-> Nightmare
 local modeToggle = Instance.new("TextButton")
 modeToggle.Size = UDim2.new(0, 120, 0, 24)
 modeToggle.Position = UDim2.new(0.5, -100, 0, 40)
@@ -165,7 +164,59 @@ modeToggle.MouseButton1Click:Connect(function()
     modeToggle.Text = nightmareMode and "Mode: Nightmare" or "Mode: Friendly"
 end)
 
--- Helper functions to detect players / NPCs / local player exclusions
+-- Bind UI values (and ensure dynamic satellite count changes trigger immediate spawn/despawn)
+references[1].FocusLost:Connect(function() local v = tonumber(references[1].Text); if v then tornadoSpinSpeed = v end end)
+references[2].FocusLost:Connect(function() local v = tonumber(references[2].Text); if v then tornadoUpwardSpeed = v end end)
+references[3].FocusLost:Connect(function() local v = tonumber(references[3].Text); if v then tornadoWindfield = v end end)
+references[4].FocusLost:Connect(function() local v = tonumber(references[4].Text); if v then tornadoMoveSpeed = v end end)
+references[5].FocusLost:Connect(function() local v = tonumber(references[5].Text); if v then tornadoInwardPullSpeed = v end end)
+references[6].FocusLost:Connect(function()
+    local v = tonumber(references[6].Text)
+    if v then maxPartsPerSatellite = math.max(1, math.floor(v)) end
+end)
+
+-- Changing maxSubVortices dynamically should immediately reflect
+local function adjustSatelliteCount(newCount)
+    newCount = math.max(0, math.floor(newCount or maxSubVortices))
+    maxSubVortices = newCount
+    references[7].Text = tostring(maxSubVortices)
+    if not enabled or not tornadoPosition then return end
+
+    -- compute current satellite count
+    local current = 0
+    for _ in pairs(satelliteVortices) do current = current + 1 end
+
+    if newCount > current then
+        -- spawn difference
+        local toSpawn = newCount - current
+        -- spawn them spaced around the funnel
+        local orbitRad = math.clamp(tornadoWindfield * 0.3, 8, tornadoWindfield * 0.7)
+        local startAngle = math.random() * math.pi * 2
+        for i = 1, toSpawn do
+            local angle = startAngle + (2 * math.pi * (i - 1) / newCount) + (math.random()*0.2 - 0.1)
+            local pos = tornadoPosition + Vector3.new(math.cos(angle) * orbitRad, 10 + math.random()*6, math.sin(angle) * orbitRad)
+            spawnSatelliteAt(pos)
+        end
+    elseif newCount < current then
+        -- despawn extras (arbitrary selection - despawn those with highest ids)
+        local ids = {}
+        for id, _ in pairs(satelliteVortices) do table.insert(ids, id) end
+        table.sort(ids, function(a,b) return a > b end)
+        local toRemove = current - newCount
+        for i = 1, toRemove do
+            despawnSatellite(ids[i])
+        end
+    end
+end
+
+references[7].FocusLost:Connect(function()
+    local v = tonumber(references[7].Text)
+    if v then
+        adjustSatelliteCount(v)
+    end
+end)
+
+-- ========== Helper functions ==========
 local function isPlayerPart(part)
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr.Character and part:IsDescendantOf(plr.Character) then
@@ -175,22 +226,6 @@ local function isPlayerPart(part)
     return false
 end
 
-local function isNPCPart(part)
-    if part:IsDescendantOf(localPlayer.Character) then return false end
-    if part.Name == baseplateName then return false end
-    local model = part:FindFirstAncestorOfClass("Model")
-    if model and model:FindFirstChildOfClass("Humanoid") then
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr.Character == model then
-                return false
-            end
-        end
-        return true
-    end
-    return false
-end
-
--- Process part for funnel pickup (skip anchored and players)
 local function processPartForFunnel(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
         if not whitelistedParts[obj] and not assignedToSatellite[obj] then
@@ -200,75 +235,22 @@ local function processPartForFunnel(obj)
     end
 end
 
--- Tornado forces (friendly)
-local function applyTornadoFriendly(position)
-    local parts = Workspace:GetPartBoundsInRadius(position, tornadoWindfield)
-    for _, obj in ipairs(parts) do
-        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
-            processPartForFunnel(obj)
-            if whitelistedParts[obj] and not assignedToSatellite[obj] then
-                local offset = obj.Position - position
-                local horizontalOffset = Vector3.new(offset.X, 0, offset.Z)
-                local distance = horizontalOffset.Magnitude
-                local dirToCenter = distance > 0 and horizontalOffset.Unit or Vector3.zero
-                local spinDir = Vector3.new(-dirToCenter.Z, 0, dirToCenter.X)
-
-                local inwardPull = (distance > 0) and (-dirToCenter * tornadoInwardPullSpeed) or Vector3.zero
-                local upward = Vector3.new(0, tornadoUpwardSpeed, 0)
-                local rotational = spinDir * tornadoSpinSpeed
-
-                obj.CanCollide = false
-                obj.AssemblyLinearVelocity = rotational + inwardPull + upward
-            end
+-- Pick a bunch of parts for satellite claiming
+local function claimPartsForSatellite(n)
+    local claimed = {}
+    for part in pairs(whitelistedParts) do
+        if #claimed >= n then break end
+        if part and part.Parent and not part.Anchored and not debrisAttachedToPlayer[part] and not assignedToSatellite[part] then
+            table.insert(claimed, part)
+            assignedToSatellite[part] = true
+            whitelistedParts[part] = nil
+            pickedUpByFunnel[part] = nil
         end
     end
+    return claimed
 end
 
--- Tornado forces (nightmare)
-local function applyTornadoNightmare(position)
-    local parts = Workspace:GetPartBoundsInRadius(position, tornadoWindfield)
-    for _, obj in ipairs(parts) do
-        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
-            processPartForFunnel(obj)
-            if whitelistedParts[obj] and not assignedToSatellite[obj] then
-                local offset = obj.Position - position
-                local horizontalOffset = Vector3.new(offset.X, 0, offset.Z)
-                local distance = horizontalOffset.Magnitude
-                local dirToCenter = distance > 0 and horizontalOffset.Unit or Vector3.zero
-                local spinDir = Vector3.new(-dirToCenter.Z, 0, dirToCenter.X)
-
-                local inwardPull = (distance > 0) and (-dirToCenter * (tornadoInwardPullSpeed * 1.1)) or Vector3.zero
-                local upward = Vector3.new(0, tornadoUpwardSpeed * 1.0, 0)
-                local rotational = spinDir * (tornadoSpinSpeed * 1.2)
-
-                obj.CanCollide = false
-                obj.AssemblyLinearVelocity = rotational + inwardPull + upward
-            end
-        end
-    end
-end
-
--- Main tornado loop
-local function tornadoLoop()
-    while enabled do
-        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if root then
-            tornadoPosition = root.Position
-            if nightmareMode then
-                applyTornadoNightmare(tornadoPosition)
-            else
-                applyTornadoFriendly(tornadoPosition)
-            end
-        end
-        task.wait(0.1)
-    end
-end
-
--- ========== Attachment-based Debris Targeting (when players enter windfield) ==========
-local playerAttachmentMap = {}  -- player -> Attachment (on their HRP)
-local playerTargetThreads = {}  -- player -> coroutine flag / thread
-local debrisAttachedToPlayer = {} -- part -> player
-
+-- Attach debris to a player's HRP using AlignPosition
 local function getPlayerAttachment(targetPlayer)
     if not targetPlayer or not targetPlayer.Character then return nil end
     if playerAttachmentMap[targetPlayer] and playerAttachmentMap[targetPlayer].Parent then
@@ -291,7 +273,6 @@ local function attachDebrisToPlayer(debrisPart, targetPlayer)
     local hrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    -- destroy problematic body movers
     for _, x in next, debrisPart:GetChildren() do
         if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro") or x:IsA("BodyPosition")
             or x:IsA("BodyThrust") or x:IsA("BodyVelocity") or x:IsA("RocketPropulsion") then
@@ -343,7 +324,69 @@ local function cleanupDebrisForPlayer(targetPlayer)
     end
 end
 
--- Firing coroutine (original one-per-3s logic)
+-- ========== Tornado physics (friendly/nightmare) ==========
+local function applyTornadoFriendly(position)
+    local parts = Workspace:GetPartBoundsInRadius(position, tornadoWindfield)
+    for _, obj in ipairs(parts) do
+        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
+            processPartForFunnel(obj)
+            if whitelistedParts[obj] and not assignedToSatellite[obj] then
+                local offset = obj.Position - position
+                local horizontalOffset = Vector3.new(offset.X, 0, offset.Z)
+                local distance = horizontalOffset.Magnitude
+                local dirToCenter = distance > 0 and horizontalOffset.Unit or Vector3.zero
+                local spinDir = Vector3.new(-dirToCenter.Z, 0, dirToCenter.X)
+
+                local inwardPull = (distance > 0) and (-dirToCenter * tornadoInwardPullSpeed) or Vector3.zero
+                local upward = Vector3.new(0, tornadoUpwardSpeed, 0)
+                local rotational = spinDir * tornadoSpinSpeed
+
+                obj.CanCollide = false
+                obj.AssemblyLinearVelocity = rotational + inwardPull + upward
+            end
+        end
+    end
+end
+
+local function applyTornadoNightmare(position)
+    local parts = Workspace:GetPartBoundsInRadius(position, tornadoWindfield)
+    for _, obj in ipairs(parts) do
+        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
+            processPartForFunnel(obj)
+            if whitelistedParts[obj] and not assignedToSatellite[obj] then
+                local offset = obj.Position - position
+                local horizontalOffset = Vector3.new(offset.X, 0, offset.Z)
+                local distance = horizontalOffset.Magnitude
+                local dirToCenter = distance > 0 and horizontalOffset.Unit or Vector3.zero
+                local spinDir = Vector3.new(-dirToCenter.Z, 0, dirToCenter.X)
+
+                local inwardPull = (distance > 0) and (-dirToCenter * (tornadoInwardPullSpeed * 1.1)) or Vector3.zero
+                local upward = Vector3.new(0, tornadoUpwardSpeed * 1.0, 0)
+                local rotational = spinDir * (tornadoSpinSpeed * 1.2)
+
+                obj.CanCollide = false
+                obj.AssemblyLinearVelocity = rotational + inwardPull + upward
+            end
+        end
+    end
+end
+
+local function tornadoLoop()
+    while enabled do
+        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            tornadoPosition = root.Position
+            if nightmareMode then
+                applyTornadoNightmare(tornadoPosition)
+            else
+                applyTornadoFriendly(tornadoPosition)
+            end
+        end
+        task.wait(0.1)
+    end
+end
+
+-- ========== Player windfield targeting (fires debris every 3s) ==========
 local function startFiringAtPlayer(targetPlayer)
     if playerTargetThreads[targetPlayer] then return end
     playerTargetThreads[targetPlayer] = true
@@ -362,9 +405,7 @@ local function startFiringAtPlayer(targetPlayer)
                 end
             end
 
-            if candidate then
-                attachDebrisToPlayer(candidate, targetPlayer)
-            end
+            if candidate then attachDebrisToPlayer(candidate, targetPlayer) end
 
             local waitFor = 3
             for i=1, waitFor*10 do
@@ -382,7 +423,7 @@ local function stopFiringAtPlayer(targetPlayer)
     cleanupDebrisForPlayer(targetPlayer)
 end
 
--- Monitor players entering / leaving windfield
+-- windfield watcher monitors players inside/outside tornadoWindfield
 local function windfieldWatcher()
     while true do
         if tornadoPosition then
@@ -402,7 +443,7 @@ local function windfieldWatcher()
     end
 end
 
--- Nightmare fling loop (keeps same behavior)
+-- ========== Nightmare launcher fling logic ==========
 local function findNearestOtherPlayer(pos)
     local best, bestDist = nil, math.huge
     for _, plr in ipairs(Players:GetPlayers()) do
@@ -443,23 +484,7 @@ local function nightmareLauncherLoop()
     end
 end
 
--- ========== Satellites & Vertical Vortices ==========
-
-local function claimPartsForSatellite(n)
-    local claimed = {}
-    for part in pairs(whitelistedParts) do
-        if #claimed >= n then break end
-        if part and part.Parent and not part.Anchored and not debrisAttachedToPlayer[part] and not assignedToSatellite[part] then
-            table.insert(claimed, part)
-            assignedToSatellite[part] = true
-            whitelistedParts[part] = nil
-            pickedUpByFunnel[part] = nil
-        end
-    end
-    return claimed
-end
-
--- spawnSatellite with explicit position so we can ensure unique placement
+-- ========== Satellite creation / lifecycle ==========
 local function spawnSatelliteAt(pos, idOverride)
     local id = idOverride or nextSatelliteId
     if not idOverride then nextSatelliteId = nextSatelliteId + 1 end
@@ -483,14 +508,14 @@ local function spawnSatelliteAt(pos, idOverride)
         angleOffset = math.random() * math.pi * 2,
         parts = partsMap,
         target = nil,
-        verticalChains = {}, -- will store vertical chain metas
+        verticalChains = {},
         lastVortexSpawnTick = tick()
     }
     satelliteAttackState[id] = {attackingPlayers = {}, attackThreads = {}}
     return id
 end
 
-local function despawnSatellite(id)
+function despawnSatellite(id)
     local sat = satelliteVortices[id]
     if not sat then return end
     for part, _ in pairs(sat.parts) do
@@ -499,9 +524,7 @@ local function despawnSatellite(id)
             whitelistedParts[part] = true
             pickedUpByFunnel[part] = true
             for _, c in ipairs(part:GetChildren()) do
-                if c:IsA("AlignPosition") or c:IsA("Attachment") or c:IsA("Torque") then
-                    c:Destroy()
-                end
+                if c:IsA("AlignPosition") or c:IsA("Attachment") or c:IsA("Torque") then c:Destroy() end
             end
             part.CanCollide = true
         end
@@ -510,13 +533,13 @@ local function despawnSatellite(id)
     satelliteAttackState[id] = nil
 end
 
--- creates a vertical vortex chain toward a specific player using available parts from sat.parts or global pool
+-- vertical chain builder: create a chain of parts from a satellite toward a target player
 local function spawnVerticalChain(sat, targetPlayer)
     if not sat or not targetPlayer or not targetPlayer.Character then return end
-    -- collect candidate parts: prefer satellite parts, then fallback to global whitelisted
     local needed = math.random(verticalChainMinParts, verticalChainMaxParts)
     local chainParts = {}
-    -- try sat parts first
+
+    -- prefer satellite-owned parts first
     for part, _ in pairs(sat.parts) do
         if #chainParts >= needed then break end
         if part and part.Parent and not debrisAttachedToPlayer[part] and not part.Anchored then
@@ -529,6 +552,7 @@ local function spawnVerticalChain(sat, targetPlayer)
             }
         end
     end
+
     -- fill from global pool if needed
     for part in pairs(whitelistedParts) do
         if #chainParts >= needed then break end
@@ -547,11 +571,10 @@ local function spawnVerticalChain(sat, targetPlayer)
 
     if #chainParts == 0 then return end
 
-    -- build the chain meta
     local chain = {
         parts = chainParts,
         target = targetPlayer,
-        progress = 0,            -- grows from 0..1
+        progress = 0,
         speed = verticalChainSpeed * (0.8 + math.random()*0.8),
         amplitude = verticalChainAmplitude * (0.6 + math.random()*0.8),
         frequency = verticalChainFrequency * (0.8 + math.random()*0.8),
@@ -563,11 +586,11 @@ local function spawnVerticalChain(sat, targetPlayer)
     table.insert(sat.verticalChains, chain)
 end
 
--- Update satellites each heartbeat
+-- update satellites each heartbeat
 local function updateSatellites(delta)
     if not tornadoPosition then return end
     for id, sat in pairs(satelliteVortices) do
-        -- update target: nearest player within windfield (prefers closer)
+        -- update target to nearest player inside windfield
         local best, bestDist = nil, math.huge
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= localPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
@@ -580,7 +603,7 @@ local function updateSatellites(delta)
         end
         sat.target = best
 
-        -- movement: chase target or orbit main funnel center
+        -- movement
         local pos = sat.pos
         if sat.target and sat.target.Character and sat.target.Character:FindFirstChild("HumanoidRootPart") then
             local tgtPos = sat.target.Character.HumanoidRootPart.Position + Vector3.new(0, 8, 0)
@@ -597,7 +620,7 @@ local function updateSatellites(delta)
             sat.pos = pos + dir * math.min(1, delta * 1.5)
         end
 
-        -- update parts orbiting satellite (regular sideways orbit)
+        -- update parts for sideways orbit
         for part, meta in pairs(sat.parts) do
             if part and part.Parent then
                 local center = sat.pos
@@ -609,7 +632,7 @@ local function updateSatellites(delta)
                     part.CanCollide = false
                 end
 
-                -- horizontal vortex attach: attach to players within radius in nightmare mode
+                -- horizontal vortex attach in nightmare mode
                 for _, plr in ipairs(Players:GetPlayers()) do
                     if plr ~= localPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
                         local dToPlayer = (plr.Character.HumanoidRootPart.Position - sat.pos).Magnitude
@@ -624,7 +647,7 @@ local function updateSatellites(delta)
             end
         end
 
-        -- attempt to spawn vertical chains toward current target occasionally
+        -- occasionally spawn vertical chains toward the target
         if sat.target and (tick() - sat.lastVortexSpawnTick) >= (1.5 + math.random()*2.0) then
             sat.lastVortexSpawnTick = tick()
             spawnVerticalChain(sat, sat.target)
@@ -636,38 +659,26 @@ local function updateSatellites(delta)
             if not chain or not chain.target or not chain.target.Character then
                 table.remove(sat.verticalChains, ci)
             else
-                -- progress increases (clamped)
-                chain.progress = math.min(1.5, chain.progress + chain.speed * delta) -- allow a bit >1 so segments can finish
+                chain.progress = math.min(1.5, chain.progress + chain.speed * delta)
                 local targetHRP = chain.target.Character:FindFirstChild("HumanoidRootPart")
                 if targetHRP then
                     for idx, part in ipairs(chain.parts) do
                         if part and part.Parent and not part.Anchored then
-                            -- compute segment-specific t so parts stretch outward sequentially
                             local segT = math.clamp(chain.progress - ((idx - 1) * chain.segmentDelay), 0, 1)
-                            -- base goal = from satellite center toward player HRP
                             local basePos = sat.pos
                             local goalPos = basePos:Lerp(targetHRP.Position + Vector3.new(0, 6, 0), segT)
-                            -- lateral wiggle: compute a perpendicular vector to direction
                             local toTarget = (targetHRP.Position - basePos)
                             local horiz = Vector3.new(toTarget.X, 0, toTarget.Z)
-                            local perp
-                            if horiz.Magnitude > 0.1 then
-                                perp = Vector3.new(-horiz.Z, 0, horiz.X).Unit
-                            else
-                                perp = Vector3.new(1,0,0)
-                            end
+                            local perp = (horiz.Magnitude > 0.1) and Vector3.new(-horiz.Z, 0, horiz.X).Unit or Vector3.new(1,0,0)
                             local wiggle = perp * math.sin((segT * chain.frequency) + idx) * (chain.amplitude * (1 - segT))
                             local finalPos = goalPos + wiggle + Vector3.new(0, segT * 6, 0)
-                            -- move part toward finalPos smoothly
                             local vel = (finalPos - part.Position) / math.max(delta, 0.016)
                             part.AssemblyLinearVelocity = Vector3.new(vel.X, math.clamp(vel.Y, -140, 140), vel.Z)
                             part.CanCollide = false
 
-                            -- check proximity to player's HRP (simulate "touch" -> attach)
                             local distToHRP = (part.Position - targetHRP.Position).Magnitude
                             if distToHRP <= verticalAttachDistance then
                                 attachDebrisToPlayer(part, chain.target)
-                                -- remove this part from the chain so it's not moved anymore
                                 chain.parts[idx] = nil
                             end
                         else
@@ -675,12 +686,11 @@ local function updateSatellites(delta)
                         end
                     end
 
-                    -- compress chain.parts to remove nils
+                    -- compress parts
                     local newParts = {}
                     for _, p in ipairs(chain.parts) do if p then table.insert(newParts, p) end end
                     chain.parts = newParts
 
-                    -- if chain exhausted or progress beyond some threshold and no parts remain, remove the chain
                     if #chain.parts == 0 or chain.progress >= 1.4 then
                         table.remove(sat.verticalChains, ci)
                     end
@@ -690,7 +700,7 @@ local function updateSatellites(delta)
             end
         end
 
-        -- Main orbit attack logic: if player within mean radius, fire 3 parts each 1s as before
+        -- main orbit attack (fire up to 3 parts every 1 second)
         local meanRadius = 0
         local countR = 0
         for _, m in pairs(sat.parts) do meanRadius = meanRadius + (m.radius or satelliteOrbitRadius); countR = countR + 1 end
@@ -711,7 +721,6 @@ local function updateSatellites(delta)
                                 if not plr or not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then break end
                                 local curDist = (plr.Character.HumanoidRootPart.Position - sat.pos).Magnitude
                                 if curDist > (meanRadius + 6) then break end
-                                -- fire up to satelliteMainOrbitAttackCount free parts from sat.parts
                                 local fired = 0
                                 for part, _ in pairs(sat.parts) do
                                     if fired >= satelliteMainOrbitAttackCount then break end
@@ -733,6 +742,7 @@ local function updateSatellites(delta)
                                         end
                                     end
                                 end
+
                                 local waited = 0
                                 while waited < satelliteMainOrbitAttackRate do
                                     if not state.attackingPlayers[plr] then break end
@@ -753,120 +763,160 @@ local function updateSatellites(delta)
             end
         end
 
-        -- cleanup satellites that lost all parts
+        -- cleanup: if satellite lost all parts, despawn
         local partCount = 0
         for p, _ in pairs(sat.parts) do
             if p and p.Parent then partCount = partCount + 1 end
         end
-        if partCount == 0 then
-            despawnSatellite(id)
-        end
+        if partCount == 0 then despawnSatellite(id) end
     end
 end
 
--- spawn/maintain satellites instantly while tornado active (we'll call it on enable to form immediately)
+-- ========== Satellite formation helpers ==========
 local function formSatellitesInstant()
-    -- remove old satellites first
+    -- remove old satellites first (but return their parts to main pool)
     for id, _ in pairs(satelliteVortices) do despawnSatellite(id) end
 
     local count = math.max(0, maxSubVortices)
     if count == 0 then return end
-    if not tornadoPosition then return end
+    if not tornadoPosition then
+        -- try to wait for a short time for tornadoPosition to be set (e.g. immediate after respawn)
+        local waited = 0
+        while not tornadoPosition and waited < 1.0 do
+            task.wait(0.05)
+            waited = waited + 0.05
+            local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if root then tornadoPosition = root.Position break end
+        end
+        if not tornadoPosition then return end
+    end
 
     local orbitRad = math.clamp(tornadoWindfield * 0.3, 8, tornadoWindfield * 0.7)
     for i = 1, count do
-        local angle = (2 * math.pi * (i - 1) / count) + (math.random() * 0.2 - 0.1) -- evenly spaced + small jitter
+        local angle = (2 * math.pi * (i - 1) / count) + (math.random() * 0.2 - 0.1)
         local pos = tornadoPosition + Vector3.new(math.cos(angle) * orbitRad, 10 + math.random()*6, math.sin(angle) * orbitRad)
         spawnSatelliteAt(pos)
     end
 end
 
--- ========== Workspace monitoring: pick up appearing parts ==========
+-- ========== Workspace scanning & DescendantAdded ==========
 Workspace.DescendantAdded:Connect(function(desc)
     if desc and desc:IsA("BasePart") then
         task.defer(function()
             if enabled and tornadoPosition and (desc.Position - tornadoPosition).Magnitude <= tornadoWindfield then
-                if not desc.Anchored then
-                    processPartForFunnel(desc)
-                end
+                if not desc.Anchored then processPartForFunnel(desc) end
             end
         end)
     end
 end)
 
--- scan nearby parts to pick them up
+-- periodic scan to keep funnel stocked
 spawn(function()
     while true do
         if enabled and tornadoPosition then
             local parts = Workspace:GetPartBoundsInRadius(tornadoPosition, tornadoWindfield)
             for _, p in ipairs(parts) do
-                if p and p:IsA("BasePart") and not p.Anchored then
-                    processPartForFunnel(p)
-                end
+                if p and p:IsA("BasePart") and not p.Anchored then processPartForFunnel(p) end
             end
         end
         task.wait(1)
     end
 end)
 
--- heartbeat update
+-- ========== Heartbeat & loops ==========
 RunService.Heartbeat:Connect(function(delta)
-    if enabled then
-        updateSatellites(delta)
-    end
+    if enabled then updateSatellites(delta) end
 end)
 
--- start watchers/loops
 spawn(windfieldWatcher)
 spawn(nightmareLauncherLoop)
 
--- Tornado toggle logic (instant satellite formation)
+-- ========== Robust respawn handling ==========
+-- When the player respawns, reinitialize tornadoPosition and re-form satellites if tornado is still enabled.
+local function onCharacterAdded(character)
+    -- small wait so HRP exists and world is stable
+    task.wait(0.1)
+    local root = character:WaitForChild("HumanoidRootPart", 2)
+    if root then
+        tornadoPosition = root.Position
+    end
+
+    -- scan to restock whitelistedParts near the funnel (so satellites can claim parts)
+    if enabled and tornadoPosition then
+        local parts = Workspace:GetPartBoundsInRadius(tornadoPosition, tornadoWindfield)
+        for _, p in ipairs(parts) do
+            if p and p:IsA("BasePart") and not p.Anchored then
+                processPartForFunnel(p)
+            end
+        end
+
+        -- Immediately (re)form satellites to ensure they show after respawn
+        formSatellitesInstant()
+    end
+end
+
+-- connect character spawn
+if localPlayer.Character then
+    onCharacterAdded(localPlayer.Character)
+end
+localPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+-- ========== Toggle button logic ==========
 toggleBtn.MouseButton1Click:Connect(function()
     enabled = not enabled
     toggleBtn.Text = enabled and "X" or "O"
     if enabled then
+        -- reset runtime pools to clean state
         pickedUpByFunnel = {}
         whitelistedParts = {}
         assignedToSatellite = {}
         satelliteVortices = {}
+        satelliteAttackState = {}
         nextSatelliteId = 1
+        debrisAttachedToPlayer = {}
 
         -- start tornado loop
         spawn(tornadoLoop)
 
-        -- immediate scan to populate whitelisted pool then form satellites instantly
-        task.wait(0.05) -- tiny wait for tornadoPosition to initialize
-        -- scan immediately
+        -- tiny delay then immediate scan & form satellites
+        task.wait(0.05)
+        if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            tornadoPosition = localPlayer.Character.HumanoidRootPart.Position
+        end
+
+        -- immediate fill
         if tornadoPosition then
             local parts = Workspace:GetPartBoundsInRadius(tornadoPosition, tornadoWindfield)
             for _, p in ipairs(parts) do
-                if p and p:IsA("BasePart") and not p.Anchored then
-                    processPartForFunnel(p)
-                end
+                if p and p:IsA("BasePart") and not p.Anchored then processPartForFunnel(p) end
             end
         end
 
-        -- form satellites instantly (all at once, distinct positions)
         formSatellitesInstant()
     else
-        -- cleanup when disabling
+        -- cleanup everything
         for part in pairs(whitelistedParts) do
             if part and part:IsA("BasePart") and part.Parent then
                 part.AssemblyLinearVelocity = Vector3.zero
                 part.CanCollide = true
                 for _, child in ipairs(part:GetChildren()) do
-                    if child:IsA("AlignPosition") or child:IsA("Attachment") or child:IsA("Torque") then
-                        child:Destroy()
-                    end
+                    if child:IsA("AlignPosition") or child:IsA("Attachment") or child:IsA("Torque") then child:Destroy() end
                 end
             end
         end
+
+        -- cleanup satellites
         for id, _ in pairs(satelliteVortices) do despawnSatellite(id) end
+
+        -- cleanup player attachments
         for pl, att in pairs(playerAttachmentMap) do
             if att and att.Parent then att:Destroy() end
             playerAttachmentMap[pl] = nil
         end
+
+        -- stop firing threads
         for pl, _ in pairs(playerTargetThreads) do playerTargetThreads[pl] = nil end
+
         debrisAttachedToPlayer = {}
         whitelistedParts = {}
         pickedUpByFunnel = {}
@@ -876,4 +926,8 @@ toggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- End of updated script
+-- ========== Ensure adjustSatelliteCount is callable by other systems if needed ==========
+-- Provide spawnSatelliteAt and despawnSatellite into scope (already declared above)
+-- The UI already calls adjustSatelliteCount when the Max Sub-Vortices text changed.
+
+-- End of script
