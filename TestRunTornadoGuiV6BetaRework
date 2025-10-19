@@ -49,6 +49,9 @@ local nightmareMode = false -- false = friendly, true = nightmare
 -- Satellite data container
 local satellites = {} -- list of satellite tables
 
+-- Thread control
+local tornadoThread = nil
+
 -- UI Setup: build GUI first, then parent to PlayerGui at the end for reliability
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "TornadoBlastGUI"
@@ -183,9 +186,6 @@ modeToggle.MouseButton1Click:Connect(function()
     end
 end)
 
--- Helper functions and the rest of the script remain unchanged (kept for brevity)
--- NOTE: the rest of the original script content (tornado logic, attachments, satellites, loops) is appended below unmodified
-
 -- Helper functions to detect players / NPCs / local player exclusions
 local function isPlayerPart(part)
     for _, plr in ipairs(Players:GetPlayers()) do
@@ -221,6 +221,7 @@ end
 
 local function processPartForFunnel(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
+        -- satellite-owned parts are excluded from the main tornado
         if satelliteOwnedParts[obj] then
             return
         end
@@ -232,6 +233,7 @@ local function processPartForFunnel(obj)
 end
 
 local function distributePartsToSatellites()
+    -- satellites only exist in nightmare mode
     if not nightmareMode then
         for part, _ in pairs(satelliteOwnedParts) do
             releaseSatelliteOwnership(part)
@@ -351,8 +353,9 @@ local function applyTornadoNightmare(position)
     end
 end
 
-local function tornadoLoop()
-    while enabled do
+-- resilient tornado loop: runs while `enabled` is true and recovers from errors so it won't silently die
+local function tornadoLoopBody()
+    local ok, err = pcall(function()
         local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
         if root then
             tornadoPosition = root.Position
@@ -367,8 +370,26 @@ local function tornadoLoop()
         else
             tornadoPosition = nil
         end
-        task.wait(0.1)
+    end)
+    if not ok then
+        warn("Tornado loop error:", err)
     end
+end
+
+local function startTornadoThread()
+    if tornadoThread then return end
+    tornadoThread = task.spawn(function()
+        while enabled do
+            tornadoLoopBody()
+            task.wait(0.1)
+        end
+        tornadoThread = nil
+    end)
+end
+
+local function stopTornadoThread()
+    tornadoPosition = nil
+    tornadoThread = nil
 end
 
 -- Attachment-based Debris Targeting (when players enter windfield)
@@ -699,24 +720,44 @@ spawn(function()
     end
 end)
 
-spawn(windfieldWatcher)
-spawn(nightmareLauncherLoop)
+-- start watcher loops (resilient wrappers to avoid silent thread death)
+spawn(function()
+    while true do
+        local ok, err = pcall(windfieldWatcher)
+        if not ok then
+            warn("windfieldWatcher failed:", err)
+        end
+        task.wait(1)
+    end
+end)
 
--- Tornado toggle logic
+spawn(function()
+    while true do
+        local ok, err = pcall(nightmareLauncherLoop)
+        if not ok then
+            warn("nightmareLauncherLoop failed:", err)
+        end
+        task.wait(1)
+    end
+end)
+
+-- Tornado toggle logic (robust start/stop)
 toggleBtn.MouseButton1Click:Connect(function()
     enabled = not enabled
     toggleBtn.Text = enabled and "X" or "O"
     if enabled then
+        -- reset pools and start tornado thread
         pickedUpByFunnel = {}
         whitelistedParts = {}
         satelliteOwnedParts = {}
         satellites = {}
-        spawn(tornadoLoop)
+        startTornadoThread()
     else
+        -- cleanup: reset velocities and collisions for whitelisted parts
         for part in pairs(whitelistedParts) do
             if part and part:IsA("BasePart") and part.Parent then
                 if not part.Anchored then
-                    part.AssemblyLinearVelocity = Vector3.zero
+                    pcall(function() part.AssemblyLinearVelocity = Vector3.zero end)
                 end
                 part.CanCollide = true
                 for _, child in ipairs(part:GetChildren()) do
@@ -726,16 +767,20 @@ toggleBtn.MouseButton1Click:Connect(function()
                 end
             end
         end
+        -- release satellite ownership
         for part, _ in pairs(satelliteOwnedParts) do
             releaseSatelliteOwnership(part)
         end
+        -- cleanup player attachments
         for pl, att in pairs(playerAttachmentMap) do
             if att and att.Parent then att:Destroy() end
             playerAttachmentMap[pl] = nil
         end
+        -- stop all firing threads
         for pl, _ in pairs(playerTargetThreads) do
             playerTargetThreads[pl] = nil
         end
+        -- disable satellite attack flags
         for _, sat in ipairs(satellites) do
             sat.attackThreadFlag = false
             sat.targetPlayer = nil
@@ -746,6 +791,8 @@ toggleBtn.MouseButton1Click:Connect(function()
         pickedUpByFunnel = {}
         satelliteOwnedParts = {}
         satellites = {}
+        -- stop tornado thread gracefully
+        stopTornadoThread()
     end
 end)
 
