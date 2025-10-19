@@ -1,0 +1,576 @@
+-- Tornado (Friendly / Nightmare) LocalScript
+-- Paste into a LocalScript under StarterPlayerScripts or PlayerGui
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local localPlayer = Players.LocalPlayer
+
+-- Basic Tornado settings (editable via GUI)
+local enabled = false
+local tornadoSpinSpeed = 80
+local tornadoUpwardSpeed = 50
+local tornadoWindfield = 100
+local tornadoMoveSpeed = 10 -- kept in UI but tornado stays on player
+local tornadoInwardPullSpeed = 50
+
+local tornadoPosition = nil
+local pickedUpByFunnel = {}    -- parts currently lifted / orbiting
+local whitelistedParts = {}    -- parts we've flagged to manipulate
+local baseplateName = "Baseplate"
+
+-- Nightmare / Friendly mode
+local nightmareMode = false -- false = friendly, true = nightmare
+
+-- UI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "TornadoBlastGUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 100
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+local hideToggle = Instance.new("TextButton")
+hideToggle.Size = UDim2.new(0, 40, 0, 20)
+hideToggle.Position = UDim2.new(0, 10, 0.5, -10)
+hideToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+hideToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+hideToggle.Font = Enum.Font.SourceSansBold
+hideToggle.TextSize = 14
+hideToggle.Text = "Hide"
+hideToggle.Parent = screenGui
+
+local inputsVisible = true
+local function toggleInputs()
+    inputsVisible = not inputsVisible
+    for _, child in ipairs(screenGui:GetChildren()) do
+        if (child:IsA("TextBox") or child:IsA("TextLabel")) and not (child == hideToggle or child == toggleBtn or child == modeToggle) then
+            child.Visible = inputsVisible
+        end
+    end
+end
+
+hideToggle.MouseButton1Click:Connect(function()
+    toggleInputs()
+    hideToggle.Text = inputsVisible and "Hide" or "Show"
+end)
+
+local function createLabeledTextbox(labelText, default, index)
+    local perRow = 4
+    local row = math.floor(index / perRow)
+    local col = index % perRow
+    local xOffset = 0.02 + 0.25 * col
+    local yOffset = 60 + (row * 60)
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 160, 0, 16)
+    label.Position = UDim2.new(xOffset, 0, 0, yOffset)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Font = Enum.Font.SourceSans
+    label.TextSize = 14
+    label.ZIndex = 2
+    label.Parent = screenGui
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0, 160, 0, 20)
+    box.Position = UDim2.new(xOffset, 0, 0, yOffset + 18)
+    box.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+    box.TextColor3 = Color3.fromRGB(0, 0, 0)
+    box.Font = Enum.Font.SourceSans
+    box.TextSize = 14
+    box.Text = tostring(default)
+    box.ZIndex = 2
+    box.Parent = screenGui
+
+    return box
+end
+
+-- Input boxes: keep Spin Speed, Upward Speed, Windfield, Move Speed (kept), Inward Pull.
+local inputBoxes = {
+    {"Spin Speed", tornadoSpinSpeed},
+    {"Upward Speed", tornadoUpwardSpeed},
+    {"Windfield Radius", tornadoWindfield},
+    {"Tornado Movement Speed", tornadoMoveSpeed},
+    {"Inward Pull Speed", tornadoInwardPullSpeed},
+}
+
+local references = {}
+for i, data in ipairs(inputBoxes) do
+    references[i] = createLabeledTextbox(data[1], data[2], i - 1)
+end
+
+references[1].FocusLost:Connect(function() local v = tonumber(references[1].Text); if v then tornadoSpinSpeed = v end end)
+references[2].FocusLost:Connect(function() local v = tonumber(references[2].Text); if v then tornadoUpwardSpeed = v end end)
+references[3].FocusLost:Connect(function() local v = tonumber(references[3].Text); if v then tornadoWindfield = v end end)
+references[4].FocusLost:Connect(function() local v = tonumber(references[4].Text); if v then tornadoMoveSpeed = v end end)
+references[5].FocusLost:Connect(function() local v = tonumber(references[5].Text); if v then tornadoInwardPullSpeed = v end end)
+
+-- Tornado toggle button
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 24, 0, 24)
+toggleBtn.Position = UDim2.new(0.5, -130, 0, 10)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 16
+toggleBtn.Text = "O"
+toggleBtn.ZIndex = 2
+toggleBtn.Parent = screenGui
+
+-- Mode toggle: Friendly <-> Nightmare
+local modeToggle = Instance.new("TextButton")
+modeToggle.Size = UDim2.new(0, 120, 0, 24)
+modeToggle.Position = UDim2.new(0.5, -100, 0, 40)
+modeToggle.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
+modeToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+modeToggle.Font = Enum.Font.SourceSansBold
+modeToggle.TextSize = 14
+modeToggle.Text = "Mode: Friendly"
+modeToggle.Parent = screenGui
+
+modeToggle.MouseButton1Click:Connect(function()
+    nightmareMode = not nightmareMode
+    modeToggle.Text = nightmareMode and "Mode: Nightmare" or "Mode: Friendly"
+end)
+
+-- Helper functions to detect players / NPCs / local player exclusions
+local function isPlayerPart(part)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character and part:IsDescendantOf(plr.Character) then
+            return true
+        end
+    end
+    return false
+end
+
+local function isNPCPart(part)
+    if part:IsDescendantOf(localPlayer.Character) then return false end
+    if part.Name == baseplateName then return false end
+    local model = part:FindFirstAncestorOfClass("Model")
+    if model and model:FindFirstChildOfClass("Humanoid") then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Character == model then
+                return false
+            end
+        end
+        return true
+    end
+    return false
+end
+
+-- Keep track of anchored/frozen stuff removed (no Freeze Time functionality anymore)
+
+-- Mark/unmark picked-up parts (same logic as old script)
+local function processPartForFunnel(obj)
+    if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
+        if not whitelistedParts[obj] then
+            pickedUpByFunnel[obj] = true
+            whitelistedParts[obj] = true
+        end
+    end
+end
+
+-- Apply tornado forces to parts (friendly behavior)
+local function applyTornadoFriendly(position)
+    local parts = Workspace:GetPartBoundsInRadius(position, tornadoWindfield)
+    for _, obj in ipairs(parts) do
+        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
+            processPartForFunnel(obj)
+            if whitelistedParts[obj] then
+                local offset = obj.Position - position
+                local horizontalOffset = Vector3.new(offset.X, 0, offset.Z)
+                local distance = horizontalOffset.Magnitude
+                local dirToCenter = distance > 0 and horizontalOffset.Unit or Vector3.zero
+                local spinDir = Vector3.new(-dirToCenter.Z, 0, dirToCenter.X)
+
+                -- inward pull stronger the further away
+                local inwardPull = (distance > 0) and (-dirToCenter * tornadoInwardPullSpeed) or Vector3.zero
+                local upward = Vector3.new(0, tornadoUpwardSpeed, 0)
+                local rotational = spinDir * tornadoSpinSpeed
+
+                obj.CanCollide = false
+                obj.AssemblyLinearVelocity = rotational + inwardPull + upward
+            end
+        end
+    end
+end
+
+-- Apply tornado forces in nightmare mode (stronger spin + keep rotation)
+local function applyTornadoNightmare(position)
+    local parts = Workspace:GetPartBoundsInRadius(position, tornadoWindfield)
+    for _, obj in ipairs(parts) do
+        if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
+            processPartForFunnel(obj)
+            if whitelistedParts[obj] then
+                local offset = obj.Position - position
+                local horizontalOffset = Vector3.new(offset.X, 0, offset.Z)
+                local distance = horizontalOffset.Magnitude
+                local dirToCenter = distance > 0 and horizontalOffset.Unit or Vector3.zero
+                local spinDir = Vector3.new(-dirToCenter.Z, 0, dirToCenter.X)
+
+                -- Keep tornado rotation (but more violent)
+                local inwardPull = (distance > 0) and (-dirToCenter * (tornadoInwardPullSpeed * 1.1)) or Vector3.zero
+                local upward = Vector3.new(0, tornadoUpwardSpeed * 1.0, 0)
+                local rotational = spinDir * (tornadoSpinSpeed * 1.2)
+
+                obj.CanCollide = false
+                obj.AssemblyLinearVelocity = rotational + inwardPull + upward
+            end
+        end
+    end
+end
+
+-- Main tornado loop (tornado sticks to local player)
+local function tornadoLoop()
+    while enabled do
+        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            tornadoPosition = root.Position
+            if nightmareMode then
+                applyTornadoNightmare(tornadoPosition)
+            else
+                applyTornadoFriendly(tornadoPosition)
+            end
+        end
+        task.wait(0.1)
+    end
+end
+
+-- ========== Attachment-based Debris Targeting (when players enter windfield) ==========
+-- Uses AlignPosition + Attachment to "stick" debris to target players (copied/adapted from your attachment logic).
+local playerAttachmentMap = {}  -- player -> Attachment (on their HRP)
+local playerTargetThreads = {}  -- player -> coroutine flag / thread
+local debrisAttachedToPlayer = {} -- part -> player
+
+local function getPlayerAttachment(targetPlayer)
+    if not targetPlayer or not targetPlayer.Character then return nil end
+    if playerAttachmentMap[targetPlayer] and playerAttachmentMap[targetPlayer].Parent then
+        return playerAttachmentMap[targetPlayer]
+    end
+    local hrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local att = Instance.new("Attachment")
+    att.Name = "Tornado_TargetAttachment"
+    att.Parent = hrp
+    playerAttachmentMap[targetPlayer] = att
+    return att
+end
+
+-- Attach a debris part to a player using AlignPosition (one-time fire sticks until player leaves windfield)
+local function attachDebrisToPlayer(debrisPart, targetPlayer)
+    if not debrisPart or not debrisPart.Parent or not targetPlayer or not targetPlayer.Character then return end
+    if debrisAttachedToPlayer[debrisPart] then return end
+
+    -- safety: don't target local player
+    if targetPlayer == localPlayer then return end
+
+    local hrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    -- remove any problematic body movers on the debris
+    for _, x in next, debrisPart:GetChildren() do
+        if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro") or x:IsA("BodyPosition") or x:IsA("BodyThrust") or x:IsA("BodyVelocity") or x:IsA("RocketPropulsion") then
+            x:Destroy()
+        end
+    end
+
+    debrisPart.CanCollide = false
+
+    local attachDeb = Instance.new("Attachment")
+    attachDeb.Name = "Tornado_DebrisAttachment"
+    attachDeb.Parent = debrisPart
+
+    local align = Instance.new("AlignPosition")
+    align.MaxForce = math.huge
+    align.MaxVelocity = math.huge
+    align.Responsiveness = 200
+    align.Attachment0 = attachDeb
+    align.Attachment1 = getPlayerAttachment(targetPlayer)
+    align.Parent = debrisPart
+
+    -- small torque to keep it spinning
+    local torque = Instance.new("Torque")
+    torque.Attachment0 = attachDeb
+    torque.Parent = debrisPart
+
+    debrisAttachedToPlayer[debrisPart] = targetPlayer
+end
+
+-- Detach any debris that are attached to players who left the windfield (or cleanup)
+local function cleanupDebrisForPlayer(targetPlayer)
+    for part, pl in pairs(debrisAttachedToPlayer) do
+        if pl == targetPlayer then
+            -- remove AlignPosition + Attachment + Torque
+            if part and part.Parent then
+                for _, child in ipairs(part:GetChildren()) do
+                    if child:IsA("AlignPosition") or child:IsA("Attachment") or child:IsA("Torque") then
+                        child:Destroy()
+                    end
+                end
+                part.CanCollide = true
+            end
+            debrisAttachedToPlayer[part] = nil
+        end
+    end
+    -- remove player attachment
+    if playerAttachmentMap[targetPlayer] then
+        if playerAttachmentMap[targetPlayer].Parent then playerAttachmentMap[targetPlayer]:Destroy() end
+        playerAttachmentMap[targetPlayer] = nil
+    end
+end
+
+-- Start a coroutine that fires exactly 1 debris at that player every 3 seconds while they remain in the windfield
+local function startFiringAtPlayer(targetPlayer)
+    if playerTargetThreads[targetPlayer] then return end
+    playerTargetThreads[targetPlayer] = true
+    spawn(function()
+        while playerTargetThreads[targetPlayer] and targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") do
+            -- check distance to tornado windfield
+            local hrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp or not tornadoPosition then break end
+            local dist = (hrp.Position - tornadoPosition).Magnitude
+            if dist > tornadoWindfield then
+                break -- player left windfield
+            end
+
+            -- choose one debris to fire (prefer parts in pickedUpByFunnel / whitelistedParts that are not already attached)
+            local candidate = nil
+            for part in pairs(whitelistedParts) do
+                if part and part.Parent and not debrisAttachedToPlayer[part] then
+                    candidate = part
+                    break
+                end
+            end
+
+            if candidate then
+                -- Attach candidate to player (stays there until they leave)
+                attachDebrisToPlayer(candidate, targetPlayer)
+            end
+
+            local waitFor = 3
+            for i=1, waitFor*10 do
+                if not playerTargetThreads[targetPlayer] then break end
+                task.wait(0.1)
+            end
+        end
+        -- cleanup
+        cleanupDebrisForPlayer(targetPlayer)
+        playerTargetThreads[targetPlayer] = nil
+    end)
+end
+
+-- Stop the firing coroutine / cleanup
+local function stopFiringAtPlayer(targetPlayer)
+    playerTargetThreads[targetPlayer] = nil
+    cleanupDebrisForPlayer(targetPlayer)
+end
+
+-- Monitor players entering / leaving windfield and start/stop the firing logic
+local function windfieldWatcher()
+    while true do
+        if tornadoPosition then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= localPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                    local hrp = plr.Character.HumanoidRootPart
+                    local dist = (hrp.Position - tornadoPosition).Magnitude
+                    if dist <= tornadoWindfield then
+                        -- ensure not already firing
+                        if not playerTargetThreads[plr] then
+                            startFiringAtPlayer(plr)
+                        end
+                    else
+                        if playerTargetThreads[plr] then
+                            stopFiringAtPlayer(plr)
+                        end
+                    end
+                end
+            end
+        end
+        task.wait(1)
+    end
+end
+
+-- ========== Nightmare Launch Behavior (debris fling toward nearest non-local player) ==========
+local function findNearestOtherPlayer(pos)
+    local best, bestDist = nil, math.huge
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= localPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local d = (plr.Character.HumanoidRootPart.Position - pos).Magnitude
+            if d < bestDist then
+                bestDist = d
+                best = plr
+            end
+        end
+    end
+    return best, bestDist
+end
+
+-- Periodically launch some orbiting debris toward nearest player at high speed (nightmare only)
+local function nightmareLauncherLoop()
+    while true do
+        if enabled and nightmareMode and tornadoPosition then
+            -- pick random whitelisted part that is not already attached to a player
+            local pool = {}
+            for part in pairs(whitelistedParts) do
+                if part and part.Parent and not debrisAttachedToPlayer[part] then
+                    table.insert(pool, part)
+                end
+            end
+            if #pool > 0 then
+                local part = pool[math.random(1, #pool)]
+                local targetPlr, d = findNearestOtherPlayer(part.Position)
+                if targetPlr and targetPlr.Character and targetPlr.Character:FindFirstChild("HumanoidRootPart") then
+                    -- fling part toward target player
+                    local dir = (targetPlr.Character.HumanoidRootPart.Position - part.Position)
+                    local unit = dir.Unit
+                    local launchSpeed = 300 + math.random(0,200) -- large speed to fling
+                    part.AssemblyLinearVelocity = unit * launchSpeed + Vector3.new(0, 50, 0)
+                    -- small delay to avoid spamming
+                end
+            end
+        end
+        task.wait(4 + math.random()) -- every ~4-5 seconds
+    end
+end
+
+-- ========== Sub-vortices and Horizontal Vortices (Nightmare) ==========
+-- Simple implementation: select a handful of parts and force them to orbit sideways around tornadoPosition.
+local horizontalVortexParts = {}
+local function spawnHorizontalVortices()
+    -- pick up to 6 parts around the tornado that are not local-player parts
+    local count = 0
+    for part in pairs(whitelistedParts) do
+        if count >= 6 then break end
+        if part and part.Parent and not part:IsDescendantOf(localPlayer.Character) then
+            horizontalVortexParts[part] = {
+                radius = 15 + math.random(0,20),
+                speed = 60 + math.random(0,60),
+                phase = math.random() * math.pi * 2
+            }
+            count = count + 1
+        end
+    end
+end
+
+-- Update horizontal vortex parts each heartbeat to create sideways orbit
+RunService.Heartbeat:Connect(function(delta)
+    if enabled and nightmareMode and tornadoPosition then
+        for part, meta in pairs(horizontalVortexParts) do
+            if part and part.Parent then
+                -- compute desired orbit center and tangent velocity
+                local center = tornadoPosition + Vector3.new(0, 0, 0)
+                local toPart = part.Position - center
+                local horiz = Vector3.new(toPart.X, 0, toPart.Z)
+                local r = meta.radius
+                local angle = (tick() * (meta.speed / 30)) + meta.phase
+                local targetPos = center + Vector3.new(math.cos(angle) * r, 0, math.sin(angle) * r) + Vector3.new(0, 10, 0)
+                local vel = (targetPos - part.Position) / math.max(delta, 0.016)
+                -- apply movement
+                if not part.Anchored then
+                    part.AssemblyLinearVelocity = Vector3.new(vel.X, math.clamp(vel.Y, -80, 80), vel.Z)
+                end
+                -- check for players at ~50 studs from the windfield (and not local)
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= localPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                        local dToWindfield = (plr.Character.HumanoidRootPart.Position - tornadoPosition).Magnitude
+                        if dToWindfield >= 50 and dToWindfield <= tornadoWindfield then
+                            -- attempt to attach this horizontal vortex part to that player
+                            if not debrisAttachedToPlayer[part] then
+                                -- attach only in nightmare mode
+                                attachDebrisToPlayer(part, plr)
+                                break
+                            end
+                        end
+                    end
+                end
+            else
+                horizontalVortexParts[part] = nil
+            end
+        end
+    end
+end)
+
+-- spawn / refresh horizontal vortices every once in a while when in nightmare
+spawn(function()
+    while true do
+        if enabled and nightmareMode and tornadoPosition then
+            spawnHorizontalVortices()
+        else
+            horizontalVortexParts = {}
+        end
+        task.wait(6 + math.random() * 4)
+    end
+end)
+
+-- ========== Monitor Workspace additions to pick up parts as they appear ==========
+Workspace.DescendantAdded:Connect(function(desc)
+    if desc and desc:IsA("BasePart") then
+        task.defer(function() 
+            if enabled and tornadoPosition and (desc.Position - tornadoPosition).Magnitude <= tornadoWindfield then
+                processPartForFunnel(desc)
+            end
+        end)
+    end
+end)
+
+-- Also periodically scan nearby parts to pick them up (keeps tornado full)
+spawn(function()
+    while true do
+        if enabled and tornadoPosition then
+            local parts = Workspace:GetPartBoundsInRadius(tornadoPosition, tornadoWindfield)
+            for _, p in ipairs(parts) do
+                if p and p:IsA("BasePart") then
+                    processPartForFunnel(p)
+                end
+            end
+        end
+        task.wait(1)
+    end
+end)
+
+-- Start windfield watcher
+spawn(windfieldWatcher)
+-- Start nightmare launcher loop
+spawn(nightmareLauncherLoop)
+
+-- Tornado toggle logic
+toggleBtn.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    toggleBtn.Text = enabled and "X" or "O"
+    if enabled then
+        pickedUpByFunnel = {}
+        whitelistedParts = {}
+        -- start tornado
+        spawn(tornadoLoop)
+    else
+        -- cleanup: reset velocities and collisions for whitelisted parts
+        for part in pairs(whitelistedParts) do
+            if part and part:IsA("BasePart") and part.Parent then
+                part.AssemblyLinearVelocity = Vector3.zero
+                part.CanCollide = true
+                -- remove any AlignPosition / Attachment we added
+                for _, child in ipairs(part:GetChildren()) do
+                    if child:IsA("AlignPosition") or child:IsA("Attachment") or child:IsA("Torque") then
+                        child:Destroy()
+                    end
+                end
+            end
+        end
+        -- cleanup player attachments
+        for pl, att in pairs(playerAttachmentMap) do
+            if att and att.Parent then att:Destroy() end
+            playerAttachmentMap[pl] = nil
+        end
+        -- stop all firing threads
+        for pl, _ in pairs(playerTargetThreads) do
+            playerTargetThreads[pl] = nil
+        end
+        debrisAttachedToPlayer = {}
+        whitelistedParts = {}
+        pickedUpByFunnel = {}
+        horizontalVortexParts = {}
+    end
+end)
+
+-- End of script
