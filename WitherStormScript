@@ -1,0 +1,719 @@
+-- Tornado (Friendly / Nightmare) - LocalScript
+-- Targets UNANCHORED debris only (not anchored/custom parts). Does NOT target local player.
+-- Features:
+--  * Minimal GUI: Spin Speed, Upward Speed, Windfield, Move Speed, Max Distance, Inward Pull Speed
+--  * Tornado follows local player (stays onto player)
+--  * Friendly mode: current behavior (orbit + inward + upward)
+--  * Nightmare mode: debris orbit normally, then every 3s ONE debris is launched per remote player into them (massive launch),
+--       then STICKS to that player (using attachments/AlignPosition) until player leaves the windfield.
+--  * Sub-vortices (small vortexes) and horizontal vortices spawned in nightmare and can target players ~50 studs outside windfield.
+--  * Debris never launched at the local player.
+--  * Operates only on unanchored parts that are not part of player characters.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Debris = game:GetService("Debris")
+local localPlayer = Players.LocalPlayer
+
+-- Settings (defaults shown in GUI)
+local enabled = false
+local nightmareMode = false -- false = Friendly, true = Nightmare
+
+local tornadoSpinSpeed = 80
+local tornadoUpwardSpeed = 50
+local tornadoWindfield = 100
+local tornadoMoveSpeed = 10
+local maxWanderDistance = 500
+local tornadoInwardPullSpeed = 50
+
+local tornadoPosition = nil
+local pickedUpByFunnel = {}     -- parts that are currently controlled by the tornado
+local whitelistedParts = {}     -- same as pickedUp
+local baseplateName = "Baseplate"
+
+-- NIGHTMARE-specific state
+local orbitingParts = {}        -- parts that are orbiting (entry: part -> orbitData)
+local playerLocks = {}          -- player -> { partsAttached = {part = true, ...}, coroutine = ...}
+local playerLockCoroutines = {} -- player -> coroutine that fires a debris every 3 seconds while inside windfield
+local horizontalVortexPool = {} -- pool of active horizontal vortices (for cleanup)
+local SUB_VORTEX_INTERVAL = 6   -- seconds between sub-vortex spawns when in nightmare
+local HORIZONTAL_VORTEX_INTERVAL = 8
+
+-- Utility functions
+local function isPlayerPart(part)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character and part:IsDescendantOf(plr.Character) then
+            return true
+        end
+    end
+    return false
+end
+
+local function isNPCPart(part)
+    if not part then return false end
+    if part:IsDescendantOf(localPlayer.Character) then
+        return false
+    end
+    if part.Name == baseplateName then
+        return false
+    end
+    local model = part:FindFirstAncestorOfClass("Model")
+    if model and model:FindFirstChildOfClass("Humanoid") then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Character == model then
+                return false
+            end
+        end
+        return true
+    end
+    return false
+end
+
+-- Only pick up unanchored debris and not player's parts
+local function isValidDebrisCandidate(part)
+    if not part or not part:IsA("BasePart") then return false end
+    if part.Anchored then return false end
+    if part.Name == "Handle" then return false end
+    if isPlayerPart(part) then return false end
+    if part:IsDescendantOf(localPlayer.Character) then return false end
+    -- Exclude common root/baseplate
+    if part.Name == baseplateName then return false end
+    return true
+end
+
+-- Cleanly restore a part after tornado finishes using it
+local function restorePart(part)
+    if not part or not part.Parent then return end
+    -- remove AlignPosition / AlignOrientation / Torque created by this script
+    for _, child in ipairs(part:GetChildren()) do
+        if child:IsA("AlignPosition") or child:IsA("AlignOrientation") or child:IsA("Attachment") or child:IsA("Torque") or child:IsA("VectorForce") or child:IsA("BodyVelocity") then
+            child:Destroy()
+        end
+    end
+    part.CanCollide = true
+    pickedUpByFunnel[part] = nil
+    whitelistedParts[part] = nil
+    orbitingParts[part] = nil
+end
+
+-- Attachment + Align helpers for sticking parts to a player's humanoid root (used in nightmare lock)
+local function attachPartToPlayer(part, player)
+    if not part or not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = player.Character.HumanoidRootPart
+
+    -- create attachment on player HRP
+    local attOnPlayer = Instance.new("Attachment")
+    attOnPlayer.Name = "TornadoStick_Attachment"
+    attOnPlayer.Parent = hrp
+
+    -- create attachment on part
+    local attOnPart = Instance.new("Attachment")
+    attOnPart.Name = "TornadoStick_Attachment"
+    attOnPart.Parent = part
+
+    -- AlignPosition to clamp the part to the player attachment
+    local alignPos = Instance.new("AlignPosition")
+    alignPos.Name = "TornadoStick_AlignPos"
+    alignPos.Parent = part
+    alignPos.Attachment0 = attOnPart
+    alignPos.Attachment1 = attOnPlayer
+    alignPos.MaxForce = 1e6
+    alignPos.MaxVelocity = math.huge
+    alignPos.Responsiveness = 200
+
+    -- AlignOrientation to keep orientation reasonable
+    local alignOri = Instance.new("AlignOrientation")
+    alignOri.Name = "TornadoStick_AlignOri"
+    alignOri.Parent = part
+    alignOri.Attachment0 = attOnPart
+    alignOri.Attachment1 = attOnPlayer
+    alignOri.MaxTorque = 1e6
+    alignOri.Responsiveness = 200
+
+    -- make the part non-collidable so it won't clip player geometry weirdly
+    part.CanCollide = false
+
+    -- mark it as attached in our table
+    if not playerLocks[player] then playerLocks[player] = {partsAttached = {}} end
+    playerLocks[player].partsAttached[part] = {
+        attOnPlayer = attOnPlayer,
+        attOnPart = attOnPart,
+        alignPos = alignPos,
+        alignOri = alignOri,
+    }
+end
+
+local function detachAllPartsFromPlayer(player)
+    if not player or not playerLocks[player] then return end
+    for part, meta in pairs(playerLocks[player].partsAttached) do
+        if part and part.Parent then
+            if meta.alignPos then meta.alignPos:Destroy() end
+            if meta.alignOri then meta.alignOri:Destroy() end
+            if meta.attOnPart then meta.attOnPart:Destroy() end
+            if meta.attOnPlayer then meta.attOnPlayer:Destroy() end
+            part.CanCollide = true
+            -- Do not unmark from pickedUpByFunnel here - they might still be orbiting elsewhere.
+            pickedUpByFunnel[part] = nil
+            whitelistedParts[part] = nil
+            orbitingParts[part] = nil
+        end
+    end
+    playerLocks[player].partsAttached = {}
+end
+
+-- Launch part at player with big speed, then stick it (nightmare behavior)
+local function launchAndStickPartAtPlayer(part, player)
+    if not isValidDebrisCandidate(part) or not player or player == localPlayer then return end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+
+    local hrp = player.Character.HumanoidRootPart
+
+    -- compute direction and launch speed
+    local dir = (hrp.Position - part.Position)
+    if dir.Magnitude <= 0.01 then
+        dir = Vector3.new(0, 1, 0)
+    end
+    local launchSpeed = 200 + math.random(0, 150) -- massive speed to fling
+    part.AssemblyLinearVelocity = dir.Unit * launchSpeed + Vector3.new(0, 50, 0) -- slight upward
+    part.CanCollide = false
+
+    -- after small delay, attach to player (simulate it hitting and sticking)
+    task.delay(0.18, function()
+        if part and part.Parent and player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            attachPartToPlayer(part, player)
+        end
+    end)
+end
+
+-- Create/maintain orbit for a part (circular motion around tornadoPosition)
+local function ensureOrbitForPart(part)
+    if not part or not part.Parent then return end
+    if orbitingParts[part] then return end
+
+    -- store orbit parameters
+    local data = {
+        angle = math.random() * math.pi * 2,
+        radiusOffset = math.clamp((part.Position - (tornadoPosition or Vector3.new())).Magnitude * (0.6 + math.random() * 0.8), 6, tornadoWindfield),
+        spinDir = (math.random() > 0.5) and 1 or -1,
+        verticalBias = (math.random() - 0.5) * 20,
+        lastUpdate = tick(),
+    }
+    orbitingParts[part] = data
+end
+
+-- Update velocities for orbiting parts each tick (keeps tornado rotation even in nightmare)
+local function updateOrbitingParts(dt)
+    if not tornadoPosition then return end
+    for part, data in pairs(orbitingParts) do
+        if not part or not part.Parent then
+            orbitingParts[part] = nil
+        else
+            -- update angle and compute new position/velocity to approximate orbit
+            data.angle = data.angle + dt * (tornadoSpinSpeed / 60) * data.spinDir
+            local targetX = tornadoPosition.X + math.cos(data.angle) * data.radiusOffset
+            local targetZ = tornadoPosition.Z + math.sin(data.angle) * data.radiusOffset
+            local targetY = tornadoPosition.Y + data.verticalBias + math.sin(tick() * 0.5 + data.angle) * 6
+
+            local targetPos = Vector3.new(targetX, targetY, targetZ)
+            local desiredVel = (targetPos - part.Position) * math.clamp(10, 1, 100) -- proportional velocity toward orbit point
+            -- Add inward pull stronger the further away:
+            local horizontalOffset = Vector3.new(part.Position.X - tornadoPosition.X, 0, part.Position.Z - tornadoPosition.Z)
+            local distance = horizontalOffset.Magnitude
+            local dirToCenter = (distance > 0) and horizontalOffset.Unit or Vector3.zero
+            local inwardPull = (distance > 0) and (-dirToCenter * tornadoInwardPullSpeed) or Vector3.zero
+            local upward = Vector3.new(0, tornadoUpwardSpeed, 0)
+            -- set final linear velocity
+            part.AssemblyLinearVelocity = desiredVel + inwardPull + upward
+            part.CanCollide = false
+        end
+    end
+end
+
+-- Collect candidate unanchored parts in windfield and ensure they orbit
+local function sweepAndClaimDebris(position)
+    if not position then return end
+    local parts = Workspace:GetPartBoundsInRadius(position, tornadoWindfield)
+    for _, obj in ipairs(parts) do
+        if isValidDebrisCandidate(obj) then
+            if not pickedUpByFunnel[obj] then
+                pickedUpByFunnel[obj] = true
+                whitelistedParts[obj] = true
+                ensureOrbitForPart(obj)
+            end
+        end
+    end
+end
+
+-- Track players inside windfield and manage per-player launching coroutines
+local function playersInWindfield(position)
+    local list = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= localPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = plr.Character.HumanoidRootPart
+            local horizontalDistance = Vector3.new(hrp.Position.X - position.X, 0, hrp.Position.Z - position.Z).Magnitude
+            if horizontalDistance <= tornadoWindfield then
+                table.insert(list, plr)
+            end
+        end
+    end
+    return list
+end
+
+-- Start per-player loop: every 3 seconds fire one debris at the player that will stick until they leave windfield
+local function startPlayerLockLoop(player)
+    if not player or player == localPlayer then return end
+    if playerLockCoroutines[player] then return end
+
+    local co = coroutine.create(function()
+        while enabled and nightmareMode and player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") do
+            -- If player leaves windfield, break
+            if not tornadoPosition then break end
+            local hrp = player.Character.HumanoidRootPart
+            local horizontalDistance = Vector3.new(hrp.Position.X - tornadoPosition.X, 0, hrp.Position.Z - tornadoPosition.Z).Magnitude
+            if horizontalDistance > tornadoWindfield then break end
+
+            -- find an orbiting, unassigned part to launch
+            local candidate = nil
+            for part, _ in pairs(orbitingParts) do
+                if isValidDebrisCandidate(part) and not (playerLocks[player] and playerLocks[player].partsAttached and playerLocks[player].partsAttached[part]) and not part:IsDescendantOf(player.Character) then
+                    candidate = part
+                    break
+                end
+            end
+            if candidate then
+                -- launch & stick
+                launchAndStickPartAtPlayer(candidate, player)
+                -- mark as assigned so we won't reuse it for other players
+                if not playerLocks[player] then playerLocks[player] = {partsAttached = {}} end
+                playerLocks[player].partsAttached[candidate] = true -- will be replaced by the real meta when attach completes
+            end
+
+            -- wait 3 seconds before launching next debris at this player
+            local waited = 0
+            local keepGoing = true
+            while waited < 3 and keepGoing do
+                if not enabled or not nightmareMode then keepGoing = false break end
+                if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then keepGoing = false break end
+                if tornadoPosition then
+                    local dist = Vector3.new(player.Character.HumanoidRootPart.Position.X - tornadoPosition.X, 0, player.Character.HumanoidRootPart.Position.Z - tornadoPosition.Z).Magnitude
+                    if dist > tornadoWindfield then keepGoing = false break end
+                end
+                task.wait(0.2); waited = waited + 0.2
+            end
+            if not keepGoing then break end
+        end
+
+        -- player left or nightmare turned off: detach everything for that player
+        if player then
+            detachAllPartsFromPlayer(player)
+            playerLockCoroutines[player] = nil
+            playerLocks[player] = nil
+        end
+    end)
+    playerLockCoroutines[player] = co
+    coroutine.resume(co)
+end
+
+-- Stop per-player loop when they leave windfield or nightmare toggled off
+local function stopPlayerLockLoop(player)
+    if not player then return end
+    if playerLockCoroutines[player] then
+        -- coroutine will exit naturally since we clear playerLocks and set enabled/nightmareMode conditions
+        -- but to be safe, detach
+        detachAllPartsFromPlayer(player)
+        playerLockCoroutines[player] = nil
+        playerLocks[player] = nil
+    end
+end
+
+-- Spawn sub-vortex: pick a few nearby orbiting parts and make them orbit locally (smaller radius)
+local function spawnSubVortex()
+    if not tornadoPosition then return end
+    local candidates = {}
+    for part, data in pairs(orbitingParts) do
+        if isValidDebrisCandidate(part) then
+            table.insert(candidates, part)
+        end
+    end
+    if #candidates < 6 then return end
+    -- pick up to 6 parts
+    local picks = {}
+    for i=1,6 do
+        local idx = math.random(1,#candidates)
+        table.insert(picks, table.remove(candidates, idx))
+        if #candidates == 0 then break end
+    end
+
+    -- compute sub vortex center slightly offset from tornado center
+    local angle = math.random() * math.pi * 2
+    local radius = math.random(15, math.min(40, tornadoWindfield/2))
+    local center = tornadoPosition + Vector3.new(math.cos(angle)*radius, math.random(-8, 8), math.sin(angle)*radius)
+
+    for i, part in ipairs(picks) do
+        if part and part.Parent then
+            -- temporarily override orbit params to orbit around sub-vortex center
+            orbitingParts[part] = {
+                angle = math.random() * math.pi * 2,
+                radiusOffset = 6 + i * 2,
+                spinDir = (math.random() > 0.5) and 1 or -1,
+                verticalBias = (math.random() - 0.5) * 6,
+                subCenter = center,
+                lastUpdate = tick(),
+                isSubVortex = true,
+            }
+        end
+    end
+
+    -- sub vortex will naturally be updated by updateOrbitingParts as it sees subCenter in data
+end
+
+-- Spawn horizontal vortex that targets players about 50 studs outside windfield
+local function spawnHorizontalVortex()
+    if not tornadoPosition then return end
+    -- find players roughly 50 studs outside windfield (between windfield+40 and windfield+60)
+    local candidates = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= localPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = plr.Character.HumanoidRootPart
+            local dist = Vector3.new(hrp.Position.X - tornadoPosition.X, 0, hrp.Position.Z - tornadoPosition.Z).Magnitude
+            if dist >= (tornadoWindfield + 40) and dist <= (tornadoWindfield + 60) then
+                table.insert(candidates, plr)
+            end
+        end
+    end
+    if #candidates == 0 then return end
+    local target = candidates[math.random(1,#candidates)]
+
+    -- choose a few nearby orbiting parts to form the horizontal vortex
+    local partsPool = {}
+    for part, _ in pairs(orbitingParts) do
+        if isValidDebrisCandidate(part) then
+            table.insert(partsPool, part)
+        end
+    end
+    -- pick up to 8 parts
+    if #partsPool == 0 then return end
+    local picks = {}
+    for i=1, math.min(8, #partsPool) do
+        local idx = math.random(1, #partsPool)
+        table.insert(picks, table.remove(partsPool, idx))
+    end
+
+    -- For each picked part, make it orbit horizontally and impart a sideways spin toward the target:
+    for i, part in ipairs(picks) do
+        if part and part.Parent and target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local data = {
+                angle = math.random() * math.pi * 2,
+                radiusOffset = 6 + i * 2,
+                spinDir = (math.random() > 0.5) and 1 or -1,
+                verticalBias = 0, -- horizontal orbit, no vertical bias
+                lastUpdate = tick(),
+                horizontalTarget = target,
+                horizontalMode = true,
+            }
+            orbitingParts[part] = data
+        end
+    end
+end
+
+-- Periodic spawners for sub/horizontal vortices in nightmare
+local function nightmareSpawnerLoop()
+    while enabled and nightmareMode do
+        spawn(function()
+            spawnSubVortex()
+        end)
+        task.wait(SUB_VORTEX_INTERVAL)
+        spawn(function()
+            spawnHorizontalVortex()
+        end)
+        task.wait(HORIZONTAL_VORTEX_INTERVAL)
+    end
+end
+
+-- Main tornado application (applies to picked up parts)
+local function applyTornado(position)
+    if not position then return end
+    -- claim debris to orbit
+    sweepAndClaimDebris(position)
+    -- ensure orbits for newly claimed parts
+    -- update orbit targets (some orbits may reference subCenter or horizontalTarget)
+    -- choose to update orbiting parts in a separate RunService step for smoother motion
+end
+
+-- Tornado main loop
+local tornadoLoopActive = false
+local function tornadoLoop()
+    if tornadoLoopActive then return end
+    tornadoLoopActive = true
+    local lastTick = tick()
+    while enabled do
+        local now = tick()
+        local dt = math.clamp(now - lastTick, 0, 0.1)
+        lastTick = now
+
+        -- tornado follows local player
+        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            tornadoPosition = root.Position
+        end
+
+        if tornadoPosition then
+            applyTornado(tornadoPosition)
+            -- update orbiting parts velocities
+            for part, data in pairs(orbitingParts) do
+                if data and data.isSubVortex and data.subCenter then
+                    -- sub vortex orbit around its center
+                    data.angle = data.angle + dt * (tornadoSpinSpeed / 60) * data.spinDir
+                    local tx = data.subCenter.X + math.cos(data.angle) * data.radiusOffset
+                    local tz = data.subCenter.Z + math.sin(data.angle) * data.radiusOffset
+                    local ty = data.subCenter.Y + data.verticalBias
+                    local targetPos = Vector3.new(tx, ty, tz)
+                    if part and part.Parent then
+                        local desiredVel = (targetPos - part.Position) * 8
+                        part.AssemblyLinearVelocity = desiredVel + Vector3.new(0, tornadoUpwardSpeed * 0.2, 0)
+                        part.CanCollide = false
+                    end
+                elseif data and data.horizontalMode and data.horizontalTarget and data.horizontalTarget.Character and data.horizontalTarget.Character:FindFirstChild("HumanoidRootPart") then
+                    -- horizontal orbit that moves toward horizontalTarget
+                    data.angle = data.angle + dt * (tornadoSpinSpeed / 80) * data.spinDir
+                    local centerToTarget = data.horizontalTarget.Character.HumanoidRootPart.Position
+                    local tx = centerToTarget.X + math.cos(data.angle) * data.radiusOffset
+                    local tz = centerToTarget.Z + math.sin(data.angle) * data.radiusOffset
+                    local ty = centerToTarget.Y + 0
+                    local targetPos = Vector3.new(tx, ty, tz)
+                    if part and part.Parent then
+                        local desiredVel = (targetPos - part.Position) * 8
+                        part.AssemblyLinearVelocity = desiredVel
+                        part.CanCollide = false
+                    end
+                else
+                    -- default behavior: orbit about tornadoPosition but allow upward + inward pull
+                    if part and part.Parent then
+                        data.angle = data.angle + dt * (tornadoSpinSpeed / 60) * data.spinDir
+                        local targetX = tornadoPosition.X + math.cos(data.angle) * data.radiusOffset
+                        local targetZ = tornadoPosition.Z + math.sin(data.angle) * data.radiusOffset
+                        local targetY = tornadoPosition.Y + data.verticalBias + math.sin(tick() * 0.5 + data.angle) * 6
+                        local targetPos = Vector3.new(targetX, targetY, targetZ)
+                        local desiredVel = (targetPos - part.Position) * 10
+                        local horizontalOffset = Vector3.new(part.Position.X - tornadoPosition.X, 0, part.Position.Z - tornadoPosition.Z)
+                        local distance = horizontalOffset.Magnitude
+                        local dirToCenter = (distance > 0) and horizontalOffset.Unit or Vector3.zero
+                        local inwardPull = (distance > 0) and (-dirToCenter * tornadoInwardPullSpeed) or Vector3.zero
+                        local upward = Vector3.new(0, tornadoUpwardSpeed, 0)
+                        part.AssemblyLinearVelocity = desiredVel + inwardPull + upward
+                        part.CanCollide = false
+                    end
+                end
+            end
+
+            -- handle player locks in nightmare: start loops for players inside
+            if nightmareMode then
+                local inside = playersInWindfield(tornadoPosition)
+                local insideSet = {}
+                for _, p in ipairs(inside) do insideSet[p] = true end
+
+                -- start loops for newly-inside players
+                for _, p in ipairs(inside) do
+                    if p ~= localPlayer then
+                        if not playerLockCoroutines[p] then
+                            startPlayerLockLoop(p)
+                        end
+                    end
+                end
+
+                -- stop loops for players that left
+                for p, _ in pairs(playerLockCoroutines) do
+                    if not insideSet[p] then
+                        stopPlayerLockLoop(p)
+                    end
+                end
+            else
+                -- if not nightmare, ensure all player locks stopped
+                for p, _ in pairs(playerLockCoroutines) do
+                    stopPlayerLockLoop(p)
+                end
+            end
+        end
+
+        task.wait(0.1)
+    end
+
+    -- cleaning up after tornado disables
+    tornadoLoopActive = false
+end
+
+-- Cleanup on disable
+local function cleanupAll()
+    enabled = false
+    nightmareMode = false
+    -- restore orbiting parts
+    for part, _ in pairs(orbitingParts) do
+        if part and part.Parent then
+            restorePart(part)
+        end
+    end
+    orbitingParts = {}
+    -- detach all player locks
+    for p, _ in pairs(playerLockCoroutines) do
+        stopPlayerLockLoop(p)
+    end
+    -- clear picked lists
+    pickedUpByFunnel = {}
+    whitelistedParts = {}
+end
+
+-- GUI creation (minimal per request)
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "TornadoBlastGUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 100
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+local function createLabeledTextbox(parent, labelText, default, posY)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 180, 0, 18)
+    label.Position = UDim2.new(0, 10, 0, posY)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Color3.new(1,1,1)
+    label.Font = Enum.Font.SourceSans
+    label.TextSize = 14
+    label.Parent = parent
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0, 180, 0, 22)
+    box.Position = UDim2.new(0, 10, 0, posY + 20)
+    box.BackgroundColor3 = Color3.fromRGB(240,240,240)
+    box.TextColor3 = Color3.fromRGB(0,0,0)
+    box.Font = Enum.Font.SourceSans
+    box.TextSize = 14
+    box.Text = tostring(default)
+    box.Parent = parent
+    return box
+end
+
+-- toggles & buttons
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 36, 0, 26)
+toggleBtn.Position = UDim2.new(0, 210, 0, 10)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+toggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 16
+toggleBtn.Text = "O"
+toggleBtn.Parent = screenGui
+
+local nightmareToggle = Instance.new("TextButton")
+nightmareToggle.Size = UDim2.new(0, 140, 0, 26)
+nightmareToggle.Position = UDim2.new(0, 10, 0, 10)
+nightmareToggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
+nightmareToggle.TextColor3 = Color3.fromRGB(255,255,255)
+nightmareToggle.Font = Enum.Font.SourceSansBold
+nightmareToggle.TextSize = 14
+nightmareToggle.Text = "Mode: Friendly"
+nightmareToggle.Parent = screenGui
+
+-- Create the requested input boxes only (no rotation radius, no pathing, no freeze time)
+local inputsY = 50
+local spinBox = createLabeledTextbox(screenGui, "Spin Speed", tornadoSpinSpeed, inputsY); inputsY = inputsY + 50
+local upBox = createLabeledTextbox(screenGui, "Upward Speed", tornadoUpwardSpeed, inputsY); inputsY = inputsY + 50
+local windBox = createLabeledTextbox(screenGui, "Windfield Radius", tornadoWindfield, inputsY); inputsY = inputsY + 50
+local moveBox = createLabeledTextbox(screenGui, "Tornado Movement Speed", tornadoMoveSpeed, inputsY); inputsY = inputsY + 50
+local maxDistBox = createLabeledTextbox(screenGui, "Max Distance from Player", maxWanderDistance, inputsY); inputsY = inputsY + 50
+local inwardBox = createLabeledTextbox(screenGui, "Inward Pull Speed", tornadoInwardPullSpeed, inputsY); inputsY = inputsY + 50
+
+-- FocusLost listeners to update variables
+spinBox.FocusLost:Connect(function() local v = tonumber(spinBox.Text); if v then tornadoSpinSpeed = v end end)
+upBox.FocusLost:Connect(function() local v = tonumber(upBox.Text); if v then tornadoUpwardSpeed = v end end)
+windBox.FocusLost:Connect(function() local v = tonumber(windBox.Text); if v then tornadoWindfield = v end end)
+moveBox.FocusLost:Connect(function() local v = tonumber(moveBox.Text); if v then tornadoMoveSpeed = v end end)
+maxDistBox.FocusLost:Connect(function() local v = tonumber(maxDistBox.Text); if v then maxWanderDistance = v end end)
+inwardBox.FocusLost:Connect(function() local v = tonumber(inwardBox.Text); if v then tornadoInwardPullSpeed = v end end)
+
+-- Toggle handlers
+toggleBtn.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    toggleBtn.Text = enabled and "X" or "O"
+    if enabled then
+        -- Reset states
+        pickedUpByFunnel = {}
+        whitelistedParts = {}
+        orbitingParts = {}
+        playerLocks = {}
+        playerLockCoroutines = {}
+
+        -- Kick off main tornado loop
+        task.spawn(function()
+            tornadoLoop()
+        end)
+        -- If nightmare, start spawner
+        if nightmareMode then
+            task.spawn(function() nightmareSpawnerLoop() end)
+        end
+    else
+        cleanupAll()
+    end
+end)
+
+nightmareToggle.MouseButton1Click:Connect(function()
+    nightmareMode = not nightmareMode
+    nightmareToggle.Text = nightmareMode and "Mode: Nightmare" or "Mode: Friendly"
+
+    -- If enabling nightmare while tornado is already on, start spawners
+    if enabled and nightmareMode then
+        task.spawn(function() nightmareSpawnerLoop() end)
+    end
+
+    -- if disabling nightmare, stop all player locks
+    if not nightmareMode then
+        for p, _ in pairs(playerLockCoroutines) do
+            stopPlayerLockLoop(p)
+        end
+    end
+end)
+
+-- Clean up when parts are removed to avoid leaks
+Workspace.DescendantRemoving:Connect(function(obj)
+    if orbitingParts[obj] then orbitingParts[obj] = nil end
+    if pickedUpByFunnel[obj] then pickedUpByFunnel[obj] = nil end
+    if whitelistedParts[obj] then whitelistedParts[obj] = nil end
+    -- remove from any playerLocks
+    for p, meta in pairs(playerLocks) do
+        if meta.partsAttached and meta.partsAttached[obj] then
+            meta.partsAttached[obj] = nil
+        end
+    end
+end)
+
+-- Ensure any attachments created on player HRP are cleaned when their character dies/respawns
+Players.PlayerRemoving:Connect(function(plr)
+    stopPlayerLockLoop(plr)
+end)
+Players.PlayerAdded:Connect(function(plr)
+    -- nothing special; loops auto-start when they enter windfield
+end)
+
+-- Ensure tornadoPosition tracks character added/removed
+local function onCharacterAdded(char)
+    tornadoPosition = (char and char:FindFirstChild("HumanoidRootPart")) and char.HumanoidRootPart.Position or tornadoPosition
+end
+localPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+-- Helper to force-check and claim new debris that spawn inside the windfield while tornado is active
+Workspace.DescendantAdded:Connect(function(desc)
+    if enabled and tornadoPosition and desc:IsA("BasePart") and isValidDebrisCandidate(desc) then
+        local hdist = Vector3.new(desc.Position.X - tornadoPosition.X, 0, desc.Position.Z - tornadoPosition.Z).Magnitude
+        if hdist <= tornadoWindfield then
+            pickedUpByFunnel[desc] = true
+            whitelistedParts[desc] = true
+            ensureOrbitForPart(desc)
+        end
+    end
+end)
+
+-- Final note: this script works on unanchored debris only. It will not convert anchored parts or special "custom" items.
+-- If you need different launch speeds or attach timings, tweak launchSpeed, the delay before attach, or the AlignPosition settings above.
+
+print("Tornado script loaded. Use the GUI to toggle and switch modes.")
