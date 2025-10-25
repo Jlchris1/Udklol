@@ -114,7 +114,7 @@ local MIN_CLEARANCE = 1.6 -- studs
 local UNDER_GAP = 0.2 -- studs: the player's top will be npcBottomY - UNDER_GAP
 
 -- RAISE_OFFSET: raise the computed local player position by this many studs
-local RAISE_OFFSET = 4 -- <<< raised 2 more studs (total +4)
+local RAISE_OFFSET = 2 -- <<< user requested: raise by 2 studs
 
 -- Helpers
 local function findNearestNPC()
