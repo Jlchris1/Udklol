@@ -1,0 +1,492 @@
+-- Control NPC LocalScript
+-- StarterPlayerScripts
+-- Features:
+--  * Teleports local player 6 studs below NPC model bottom
+--  * WalkTo is built-in and enabled by default while controlling an NPC
+--  * While player walks (WSAD / thumbstick), NPC MoveTo updates every Heartbeat
+--  * When player stops walking: NPC WalkSpeed -> 0 and MoveTo canceled (MoveTo to current pos)
+--  * Jump synchronizes: player jump -> npcHumanoid.Jump = true
+--  * Attempts to destroy scripts inside NPC and disable collisions locally (best-effort)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+local ContextActionService = game:GetService("ContextActionService")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- UI (compact)
+local gui = Instance.new("ScreenGui")
+gui.Name = "ControlNPCGui"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 220, 0, 94)
+frame.Position = UDim2.new(0, 10, 0, 10)
+frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+frame.BorderSizePixel = 0
+frame.Parent = gui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 24)
+title.BackgroundTransparency = 1
+title.Text = "NPC Control"
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 16
+title.Parent = frame
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(1, -8, 0, 28)
+toggleBtn.Position = UDim2.new(0, 4, 0, 28)
+toggleBtn.Text = "Toggle Control: OFF"
+toggleBtn.Font = Enum.Font.SourceSans
+toggleBtn.TextSize = 14
+toggleBtn.Parent = frame
+
+local walkToggle = Instance.new("TextButton")
+walkToggle.Size = UDim2.new(0.48, -6, 0, 22)
+walkToggle.Position = UDim2.new(0, 4, 0, 60)
+walkToggle.Text = "WalkTo: Off"
+walkToggle.Font = Enum.Font.SourceSans
+walkToggle.TextSize = 13
+walkToggle.Parent = frame
+
+local killBtn = Instance.new("TextButton")
+killBtn.Size = UDim2.new(0.48, -6, 0, 22)
+killBtn.Position = UDim2.new(0.52, 2, 0, 60)
+killBtn.Text = "Kill NPC"
+killBtn.Font = Enum.Font.SourceSans
+killBtn.TextSize = 13
+killBtn.Parent = frame
+
+-- State
+local active = false
+local controlledNPC = nil
+local npcHumanoid = nil
+local npcRoot = nil
+local heartbeatConn = nil
+local jumpConn = nil
+local charAddedConn = nil
+local playerDiedConn = nil
+
+-- Walk control defaults: WalkTo is standard (enabled by default on enableControl)
+local walkEnabled = true
+walkToggle.Text = "WalkTo: On"
+
+-- Camera params (scripted camera that behaves like :view with higher sensitivity)
+local SENSITIVITY = 3.0
+local orbitYaw = 0
+local orbitPitch = math.rad(-10)
+local orbitDistance = 6
+local minDistance, maxDistance = 1, 80
+local isDragging = false
+local lastPos = nil
+local touchPoints = {}
+
+-- store NPC original WalkSpeed so we can restore before disabling
+local npcOriginalWalkSpeed = nil
+
+-- Helpers
+local function isNPC(model)
+    if not model or not model:IsA("Model") then return false end
+    if Players:GetPlayerFromCharacter(model) then return false end
+    if model:FindFirstChildOfClass("Humanoid") then
+        if model:FindFirstChildWhichIsA("BasePart", true) or model.PrimaryPart then
+            return true
+        end
+    end
+    return false
+end
+
+local function findNearestNPC()
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local myPos = hrp.Position
+    local nearest, nd = nil, math.huge
+    for _,m in ipairs(workspace:GetDescendants()) do
+        if m:IsA("Model") then
+            local hum = m:FindFirstChildOfClass("Humanoid")
+            local root = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
+            if hum and root and hum.Health > 0 and Players:GetPlayerFromCharacter(m) == nil then
+                local d = (root.Position - myPos).Magnitude
+                if d < nd then
+                    nd = d
+                    nearest = m
+                end
+            end
+        end
+    end
+    return nearest
+end
+
+local function modelHeight(model)
+    local ok, size = pcall(function() return model:GetExtentsSize() end)
+    if ok and size then return size.Y end
+    return 5
+end
+
+local localPlatform = nil
+local function createLocalPlatform(pos)
+    if localPlatform and localPlatform.Parent then
+        localPlatform.Position = pos
+        return
+    end
+    localPlatform = Instance.new("Part")
+    localPlatform.Name = "LocalPlatform_ControlNPC"
+    localPlatform.Size = Vector3.new(6,1,6)
+    localPlatform.Anchored = true
+    localPlatform.CanCollide = true
+    localPlatform.Transparency = 0.45
+    localPlatform.Position = pos
+    localPlatform.Parent = workspace
+end
+
+-- Delete scripts in NPC and disable collisions locally (best-effort)
+local function neutralizeNPC(model)
+    if not model then return end
+    for _,desc in ipairs(model:GetDescendants()) do
+        if desc:IsA("Script") or desc:IsA("LocalScript") or desc:IsA("ModuleScript") then
+            pcall(function() desc:Destroy() end)
+        end
+        if desc:IsA("BasePart") then
+            pcall(function()
+                desc.CanCollide = false
+                if pcall(function() return desc.CanTouch end) then
+                    pcall(function() desc.CanTouch = false end)
+                end
+            end)
+        end
+    end
+end
+
+local function restoreCamera()
+    camera.CameraType = Enum.CameraType.Custom
+    pcall(function()
+        if player.Character then
+            local hum = player.Character:FindFirstChildWhichIsA("Humanoid")
+            if hum then camera.CameraSubject = hum end
+        end
+    end)
+end
+
+local function cleanup()
+    active = false
+    walkEnabled = false
+    -- try to restore NPC WalkSpeed if possible
+    if npcHumanoid and npcOriginalWalkSpeed then
+        pcall(function() npcHumanoid.WalkSpeed = npcOriginalWalkSpeed end)
+    end
+
+    if heartbeatConn then heartbeatConn:Disconnect() heartbeatConn = nil end
+    if jumpConn then jumpConn:Disconnect() jumpConn = nil end
+    if charAddedConn then charAddedConn:Disconnect() charAddedConn = nil end
+    if playerDiedConn then playerDiedConn:Disconnect() playerDiedConn = nil end
+
+    restoreCamera()
+
+    if localPlatform and localPlatform.Parent then
+        localPlatform:Destroy()
+        localPlatform = nil
+    end
+
+    controlledNPC = nil
+    npcHumanoid = nil
+    npcRoot = nil
+    npcOriginalWalkSpeed = nil
+
+    toggleBtn.Text = "Toggle Control: OFF"
+    walkToggle.Text = "WalkTo: Off"
+end
+
+-- Kill attempt for controlled NPC
+local function killControlledNPC()
+    if npcHumanoid then
+        pcall(function() npcHumanoid.Health = 100 end)
+        task.wait(0.03)
+        pcall(function()
+            if pcall(function() return npcHumanoid.TakeDamage end) then
+                pcall(function() npcHumanoid:TakeDamage(math.huge) end)
+            else
+                npcHumanoid.Health = -math.huge
+            end
+        end)
+    end
+end
+
+-- Input handlers for camera orbit / zoom
+local function onInputBegan(input)
+    if not active then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        isDragging = true
+        lastPos = Vector2.new(input.Position.X, input.Position.Y)
+    elseif input.UserInputType == Enum.UserInputType.Touch then
+        touchPoints[input.UserInputId] = Vector2.new(input.Position.X, input.Position.Y)
+        if #touchPoints == 1 then lastPos = Vector2.new(input.Position.X, input.Position.Y) end
+    end
+end
+local function onInputEnded(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        isDragging = false
+        lastPos = nil
+    elseif input.UserInputType == Enum.UserInputType.Touch then
+        touchPoints[input.UserInputId] = nil
+        if #touchPoints == 0 then lastPos = nil end
+    end
+end
+local function onInputChanged(input)
+    if not active then return end
+    if input.UserInputType == Enum.UserInputType.MouseWheel then
+        local delta = input.Position.Z
+        orbitDistance = math.clamp(orbitDistance - delta * 0.1, minDistance, maxDistance)
+        return
+    end
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        if isDragging and lastPos then
+            local cur = Vector2.new(input.Position.X, input.Position.Y)
+            local d = cur - lastPos
+            orbitYaw = orbitYaw - d.X * 0.002 * SENSITIVITY
+            orbitPitch = math.clamp(orbitPitch - d.Y * 0.002 * SENSITIVITY, math.rad(-80), math.rad(80))
+            lastPos = cur
+        end
+    end
+    if input.UserInputType == Enum.UserInputType.Touch then
+        if touchPoints[input.UserInputId] then
+            touchPoints[input.UserInputId] = Vector2.new(input.Position.X, input.Position.Y)
+        end
+        local ids = {}
+        for k,_ in pairs(touchPoints) do table.insert(ids,k) end
+        if #ids == 1 then
+            local cur = touchPoints[ids[1]]
+            if lastPos then
+                local d = cur - lastPos
+                orbitYaw = orbitYaw - d.X * 0.003 * SENSITIVITY
+                orbitPitch = math.clamp(orbitPitch - d.Y * 0.003 * SENSITIVITY, math.rad(-80), math.rad(80))
+            end
+            lastPos = cur
+        elseif #ids >= 2 then
+            local p1 = touchPoints[ids[1]]
+            local p2 = touchPoints[ids[2]]
+            if p1 and p2 then
+                local curDist = (p1 - p2).Magnitude
+                if lastPos and typeof(lastPos) == "Vector2" and lastPos.X ~= 0 then
+                    local prev = lastPos.X
+                    local delta = curDist - prev
+                    orbitDistance = math.clamp(orbitDistance - delta * 0.02, minDistance, maxDistance)
+                end
+                lastPos = Vector2.new(curDist, 0)
+            end
+        end
+    end
+end
+
+UserInputService.InputBegan:Connect(onInputBegan)
+UserInputService.InputEnded:Connect(onInputEnded)
+UserInputService.InputChanged:Connect(onInputChanged)
+
+-- Jump sync: when local player jumps, set npcHumanoid.Jump = true
+local function onJumpRequest()
+    if active and npcHumanoid then
+        pcall(function() npcHumanoid.Jump = true end)
+    end
+end
+
+-- Heartbeat logic
+local WALK_THRESHOLD = 0.02
+local MOVE_DISTANCE = 100
+
+local function heartbeat(dt)
+    if not active then return end
+    if not controlledNPC or not controlledNPC.Parent then
+        cleanup()
+        return
+    end
+    if not npcHumanoid or npcHumanoid.Health <= 0 then
+        cleanup()
+        return
+    end
+
+    local myChar = player.Character
+    if not myChar or not myChar.Parent then
+        -- player died -> try kill npc and cleanup
+        if npcHumanoid and npcHumanoid.Health > 0 then
+            pcall(function() npcHumanoid.Health = 0 end)
+        end
+        cleanup()
+        return
+    end
+
+    local myHum = myChar:FindFirstChildWhichIsA("Humanoid")
+    local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+    if not myHum or not myHRP then return end
+
+    -- Camera: orbit around NPC head (scriptable)
+    local head = controlledNPC:FindFirstChild("Head") or npcRoot
+    if head and head.Parent then
+        camera.CameraType = Enum.CameraType.Scriptable
+        local headPos = head.Position
+        local offset = CFrame.Angles(orbitPitch, orbitYaw, 0) * CFrame.new(0, 0, orbitDistance)
+        camera.CFrame = CFrame.new(headPos) * offset
+    end
+
+    -- Teleport local player under NPC: 6 studs below full model hitbox
+    if npcRoot and npcRoot.Parent then
+        local extY = modelHeight(controlledNPC)
+        local bottomY = npcRoot.Position.Y - (extY / 2)
+        local targetY = bottomY - 6 -- <-- 6 studs below
+        local targetPos = Vector3.new(npcRoot.Position.X, targetY, npcRoot.Position.Z)
+        local targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(90), 0)
+        pcall(function()
+            myHRP.Velocity = Vector3.new(0,0,0)
+            myHRP.RotVelocity = Vector3.new(0,0,0)
+            myHRP.CFrame = targetCFrame
+        end)
+        -- ensure local-only platform 7 studs under player
+        createLocalPlatform(targetPos - Vector3.new(0,7,0))
+    end
+
+    -- WalkTo update at Heartbeat:
+    -- If the local player is actively walking, update MoveTo every heartbeat and ensure NPC has walk speed.
+    -- If the local player is not walking, stop NPC by setting WalkSpeed = 0 and MoveTo to current position.
+    if npcHumanoid and npcRoot and npcHumanoid.Health > 0 then
+        local md = myHum.MoveDirection
+        if md and md.Magnitude > WALK_THRESHOLD and walkEnabled then
+            -- ensure NPC has usable WalkSpeed
+            if npcOriginalWalkSpeed then
+                pcall(function() npcHumanoid.WalkSpeed = npcOriginalWalkSpeed end)
+            else
+                pcall(function() npcHumanoid.WalkSpeed = 16 end)
+            end
+
+            -- compute flat direction and update MoveTo
+            local dirFlat = Vector3.new(md.X, 0, md.Z)
+            if dirFlat.Magnitude < 1e-4 then
+                dirFlat = Vector3.new(npcRoot.CFrame.LookVector.X, 0, npcRoot.CFrame.LookVector.Z)
+            end
+            dirFlat = dirFlat.Unit
+            local destination = npcRoot.Position + dirFlat * MOVE_DISTANCE
+            pcall(function() npcHumanoid:MoveTo(destination) end)
+        else
+            -- player stopped walking -> stop NPC movement
+            pcall(function()
+                npcHumanoid:MoveTo(npcRoot.Position) -- cancel destination
+            end)
+            -- set speed to zero so it halts
+            pcall(function() npcHumanoid.WalkSpeed = 0 end)
+        end
+    end
+end
+
+-- Enable control on nearest NPC
+local function enableControl()
+    if active then return end
+    local char = player.Character
+    if not char then
+        StarterGui:SetCore("ChatMakeSystemMessage", {Text = "No character found."})
+        return
+    end
+
+    local npc = findNearestNPC()
+    if not npc then
+        StarterGui:SetCore("ChatMakeSystemMessage", {Text = "No NPC found nearby."})
+        return
+    end
+
+    local hum = npc:FindFirstChildOfClass("Humanoid")
+    local hrp = npc:FindFirstChild("HumanoidRootPart") or npc.PrimaryPart
+    if not hum or not hrp then
+        StarterGui:SetCore("ChatMakeSystemMessage", {Text = "Nearest NPC missing Humanoid/RootPart."})
+        return
+    end
+
+    controlledNPC = npc
+    npcHumanoid = hum
+    npcRoot = hrp
+    active = true
+    toggleBtn.Text = "Toggle Control: ON"
+
+    -- set walkEnabled default ON
+    walkEnabled = true
+    walkToggle.Text = "WalkTo: On"
+
+    -- store original walk speed (best-effort)
+    npcOriginalWalkSpeed = nil
+    pcall(function() npcOriginalWalkSpeed = npcHumanoid.WalkSpeed end)
+
+    -- neutralize NPC locally (delete scripts, disable collisions)
+    neutralizeNPC(controlledNPC)
+
+    -- camera defaults
+    orbitDistance = 6
+    orbitYaw = 0
+    orbitPitch = math.rad(-10)
+
+    -- connect heartbeat and jump
+    if not heartbeatConn then
+        heartbeatConn = RunService.Heartbeat:Connect(heartbeat)
+    end
+    if not jumpConn then
+        jumpConn = UserInputService.JumpRequest:Connect(onJumpRequest)
+    end
+
+    -- attach player death: try to kill npc and cleanup
+    local function attachPlayerSignals()
+        local myChar = player.Character
+        if not myChar then return end
+        local myHum = myChar:FindFirstChildWhichIsA("Humanoid")
+        if myHum then
+            if playerDiedConn then playerDiedConn:Disconnect(); playerDiedConn = nil end
+            playerDiedConn = myHum.Died:Connect(function()
+                if npcHumanoid and npcHumanoid.Health > 0 then
+                    pcall(function() npcHumanoid.Health = 0 end)
+                end
+                cleanup()
+            end)
+        end
+    end
+    attachPlayerSignals()
+    if not charAddedConn then
+        charAddedConn = player.CharacterAdded:Connect(function()
+            task.wait(0.1)
+            attachPlayerSignals()
+        end)
+    end
+
+    -- if npc dies, cleanup
+    npcHumanoid.Died:Connect(function() cleanup() end)
+end
+
+local function disableControl()
+    cleanup()
+end
+
+-- GUI bindings
+toggleBtn.MouseButton1Click:Connect(function()
+    if active then disableControl() else enableControl() end
+end)
+
+walkToggle.MouseButton1Click:Connect(function()
+    walkEnabled = not walkEnabled
+    walkToggle.Text = "WalkTo: " .. (walkEnabled and "On" or "Off")
+    -- if disabling WalkTo immediately stop NPC
+    if not walkEnabled and npcHumanoid and npcRoot then
+        pcall(function()
+            npcHumanoid:MoveTo(npcRoot.Position)
+            npcHumanoid.WalkSpeed = 0
+        end)
+    end
+end)
+
+killBtn.MouseButton1Click:Connect(function()
+    killControlledNPC()
+end)
+
+-- Restore cleanup on script removal
+script.AncestryChanged:Connect(function(_, parent)
+    if not parent then cleanup() end
+end)
+
+StarterGui:SetCore("ChatMakeSystemMessage", {Text = "[ControlNPC] Ready. Use Toggle Control near an NPC. Walk to command the NPC; stopping walking stops the NPC."})
