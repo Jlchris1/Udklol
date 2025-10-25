@@ -24,6 +24,10 @@ local ALIGN_MAX_FORCE = 1e5
 local ALIGN_RESPONSIVENESS = 30
 local ALIGN_MAX_TORQUE = 1e5
 
+-- Stability tuning
+local STABILITY_SNAP_DISTANCE = 0.6   -- if HRP is this far from the target, snap it back
+local STABILITY_VEL_THRESHOLD = 0.1   -- if linear vel is above this, zero it and consider snap
+
 -- UI (smaller, responsive for mobile) + persistent visibility toggle (always visible)
 local gui = Instance.new("ScreenGui")
 gui.Name = "ControlNPCGui"
@@ -31,7 +35,6 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = player:WaitForChild("PlayerGui")
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
--- Use a very high DisplayOrder so this ScreenGui is drawn above most others
 pcall(function() gui.DisplayOrder = 9999 end)
 
 local isTouch = UserInputService.TouchEnabled
@@ -164,8 +167,9 @@ local npcOriginalWalkSpeed = nil
 local changedNPCParts = {}
 local changedPlayerParts = {}
 
--- store original jumppower to restore later
+-- store original jumppower and autorotate to restore later
 local myOriginalJumpPower = nil
+local myOriginalAutoRotate = nil
 
 -- movement transition helper
 local wasPlayerMoving = false
@@ -388,6 +392,55 @@ local function clampCharacterPartsBelow(character, clampY)
     end
 end
 
+-- Enforce additional stability so the player can't be knocked off balance beneath the NPC
+local function enforcePlayerStability(finalY)
+    local myChar = player.Character
+    if not myChar then return end
+    local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+    local myHum = myChar:FindFirstChildWhichIsA("Humanoid")
+    if not myHRP or not myHum or not npcRoot then return end
+
+    -- desired target position + orientation
+    local targetPos = Vector3.new(npcRoot.Position.X, finalY, npcRoot.Position.Z)
+    local targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, FIXED_YAW_RAD, 0)
+
+    -- if HRP gets noticeably displaced from the target, snap it back
+    local dist = (myHRP.Position - targetPos).Magnitude
+    local linVelMag = 0
+    pcall(function() linVelMag = myHRP.AssemblyLinearVelocity.Magnitude end)
+
+    if dist > STABILITY_SNAP_DISTANCE or linVelMag > STABILITY_VEL_THRESHOLD then
+        pcall(function()
+            myHRP.CFrame = targetCFrame
+            myHRP.Velocity = Vector3.new(0,0,0)
+            myHRP.AssemblyLinearVelocity = Vector3.new(0,0,0)
+            myHRP.RotVelocity = Vector3.new(0,0,0)
+            myHRP.AssemblyAngularVelocity = Vector3.new(0,0,0)
+        end)
+    else
+        -- even when not snapping, keep velocities zeroed to avoid drift/pushes
+        pcall(function()
+            myHRP.Velocity = Vector3.new(0,0,0)
+            myHRP.AssemblyLinearVelocity = Vector3.new(0,0,0)
+            myHRP.RotVelocity = Vector3.new(0,0,0)
+            myHRP.AssemblyAngularVelocity = Vector3.new(0,0,0)
+        end)
+    end
+
+    -- zero other parts velocities as extra protection
+    for _,part in ipairs(myChar:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            pcall(function()
+                part.Velocity = Vector3.new(0,0,0)
+                part.RotVelocity = Vector3.new(0,0,0)
+            end)
+        end
+    end
+
+    -- ensure Humanoid doesn't fight rotation while under control
+    pcall(function() myHum.AutoRotate = false end)
+end
+
 -- Heartbeat: follow under NPC using Align constraints + velocity zero as backup
 local function heartbeat(dt)
     if not active then return end
@@ -464,6 +517,9 @@ local function heartbeat(dt)
 
         -- ensure movement still allowed: do NOT set PlatformStand or anchor here
         pcall(function() myHum.PlatformStand = false end)
+
+        -- extra stability enforcement so local player can't be knocked off balance under the NPC
+        enforcePlayerStability(finalY)
     end
 
     -- WalkTo & speed logic with transition detection
@@ -519,6 +575,7 @@ local function heartbeat(dt)
                 hrp.Velocity = Vector3.new(0,0,0)
                 hrp.RotVelocity = Vector3.new(0,0,0)
                 hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                hrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
             end)
         end
     end
@@ -634,6 +691,14 @@ local function enableControl()
             pcall(function()
                 myOriginalJumpPower = myHum.JumpPower
                 myHum.JumpPower = 50
+
+                -- save and disable autorotate for stability under NPC (we'll restore in cleanup)
+                if pcall then
+                    pcall(function()
+                        myOriginalAutoRotate = myHum.AutoRotate
+                        myHum.AutoRotate = false
+                    end)
+                end
             end)
         end
 
@@ -736,6 +801,13 @@ function cleanup()
             pcall(function()
                 if myOriginalJumpPower then myHum.JumpPower = myOriginalJumpPower end
                 myHum.PlatformStand = false
+                -- restore AutoRotate if we saved it earlier
+                if myOriginalAutoRotate ~= nil then
+                    pcall(function() myHum.AutoRotate = myOriginalAutoRotate end)
+                    myOriginalAutoRotate = nil
+                else
+                    pcall(function() myHum.AutoRotate = true end)
+                end
             end)
         end
         -- clear velocities (no anchoring)
