@@ -1,5 +1,6 @@
 -- Control NPC LocalScript (constraint follow, no anchoring)
 -- Place in StarterPlayer > StarterPlayerScripts
+-- NOTE: this script explicitly does NOT anchor the local player. It enforces Anchored = false where applicable.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -13,7 +14,7 @@ local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 
 -- CONFIG
-local HAIR_GAP = 0.05         -- desired gap from NPC feet to top of player's head/hair
+local HAIR_GAP = 0.05         -- desired gap from NPC feet to top of player's head/hair (used for underground mode)
 local MIN_CLEARANCE = 1.6
 local WALK_THRESHOLD = 0.02
 local MOVE_DISTANCE = 100
@@ -27,6 +28,9 @@ local ALIGN_MAX_TORQUE = 1e5
 -- Stability tuning
 local STABILITY_SNAP_DISTANCE = 0.6   -- if HRP is this far from the target, snap it back
 local STABILITY_VEL_THRESHOLD = 0.1   -- if linear vel is above this, zero it and consider snap
+
+-- How much of the head is exposed in peek mode (meters above NPC bottom)
+local PEEK_HEAD_EXPOSE = 0.18
 
 -- UI (smaller, responsive for mobile) + persistent visibility toggle (always visible)
 local gui = Instance.new("ScreenGui")
@@ -91,14 +95,14 @@ killBtn.Font = Enum.Font.SourceSans
 killBtn.TextSize = (isTouch and 14 or 12)
 killBtn.ZIndex = 1001
 
--- New HRP center toggle (teleports only HRP to NPC center)
-local hrpCenterToggle = Instance.new("TextButton", frame)
-hrpCenterToggle.Size = UDim2.new(0.32, -6, 0, (isTouch and 28 or 18))
-hrpCenterToggle.Position = UDim2.new(0.68, 0, 0, (isTouch and 66 or 54))
-hrpCenterToggle.Text = "Center HRP: Off"
-hrpCenterToggle.Font = Enum.Font.SourceSans
-hrpCenterToggle.TextSize = (isTouch and 14 or 12)
-hrpCenterToggle.ZIndex = 1001
+-- Peek toggle (head peeks out vs entirely underground)
+local peekToggle = Instance.new("TextButton", frame)
+peekToggle.Size = UDim2.new(0.32, -6, 0, (isTouch and 28 or 18))
+peekToggle.Position = UDim2.new(0.68, 0, 0, (isTouch and 66 or 54))
+peekToggle.Text = "Peek: On"
+peekToggle.Font = Enum.Font.SourceSans
+peekToggle.TextSize = (isTouch and 14 or 12)
+peekToggle.ZIndex = 1001
 
 local speedLabel = Instance.new("TextLabel", frame)
 speedLabel.Size = UDim2.new(0.5, -6, 0, (isTouch and 20 or 16))
@@ -147,14 +151,12 @@ visibilityToggle.AnchorPoint = Vector2.new(1, 0)
 visibilityToggle.Position = UDim2.new(1, -8, 0, 8) -- top-right corner of the screen
 visibilityToggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
 visibilityToggle.BorderSizePixel = 0
-visibilityToggle.Text = "▣" -- small icon-like label (can be changed)
+visibilityToggle.Text = "▣"
 visibilityToggle.Font = Enum.Font.SourceSansBold
 visibilityToggle.TextSize = (isTouch and 20 or 18)
 visibilityToggle.Parent = gui
-visibilityToggle.ZIndex = 1100 -- ensure it's above the main panel and most other UI
+visibilityToggle.ZIndex = 1100
 visibilityToggle.AutoButtonColor = true
-
--- Make sure this toggle is interactive even if other GUIs try to capture input (best-effort)
 visibilityToggle.Active = true
 visibilityToggle.Selectable = true
 
@@ -189,8 +191,8 @@ local npcAttachment = nil
 local alignPos = nil
 local alignOri = nil
 
--- HRP center toggle state
-local hrpCenterEnabled = false
+-- Peek toggle state: true => head peeks out; false => entirely underground
+local peekModeEnabled = true
 
 -- Helpers
 local function modelHeight(model)
@@ -226,6 +228,7 @@ local function safeSetPartPropsAsNoCollision(part)
         if pcall(function() return part.CanTouch end) then
             pcall(function() part.CanTouch = false end)
         end
+        -- keep Massless allowed (not anchoring)
         pcall(function() part.Massless = true end)
     end)
 end
@@ -334,16 +337,37 @@ local lastPlayerGroundPart = nil
 local lastPlayerGroundY = nil
 
 -- Prevent local player from jumping / peeking and compute desired finalY so hair touches feet
+local function ensureCharacterUnanchored(character)
+    if not character then return end
+    for _,p in ipairs(character:GetDescendants()) do
+        if p:IsA("BasePart") then
+            pcall(function() p.Anchored = false end)
+        end
+    end
+end
+
 local function immediateClampUnderNPC()
     local myChar = player.Character
     local myHum = myChar and myChar:FindFirstChildWhichIsA("Humanoid")
     local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
     if not (myChar and myHum and myHRP and controlledNPC and npcRoot) then return end
 
+    -- make sure nothing becomes anchored
+    ensureCharacterUnanchored(myChar)
+
     local extY = modelHeight(controlledNPC)
     local bottomY = npcRoot.Position.Y - (extY / 2) -- NPC bottom (approx feet)
     local playerH = modelHeight(myChar)
-    local desiredHRPY = bottomY - HAIR_GAP - (playerH * 0.5) -- position HRP so top of player's model is ~HAIR_GAP below feet
+
+    -- compute desired HRP nominal target depending on peek mode
+    local nominalHRPY
+    if peekModeEnabled then
+        -- peek: center HRP so top of player's model is bottomY + PEEK_HEAD_EXPOSE
+        nominalHRPY = bottomY + PEEK_HEAD_EXPOSE - (playerH * 0.5)
+    else
+        -- underground: center HRP so top of player's model is bottomY - HAIR_GAP
+        nominalHRPY = bottomY - HAIR_GAP - (playerH * 0.5)
+    end
 
     -- ground under player (update last known)
     local groundY, groundPart = getGroundYAtPosition(Vector3.new(myHRP.Position.X, 0, myHRP.Position.Z))
@@ -352,24 +376,34 @@ local function immediateClampUnderNPC()
         lastPlayerGroundY = groundY
     end
 
-    -- nominal target is desiredHRPY; keep existing clearance logic (fallbacks)
-    local finalY = desiredHRPY
+    -- choose final HRP center Y using MIN_CLEARANCE fallback (keeps previous safety behavior)
+    local finalHRPY = nominalHRPY
     if lastPlayerGroundY then
-        finalY = math.min(finalY, lastPlayerGroundY - MIN_CLEARANCE)
+        finalHRPY = math.min(finalHRPY, lastPlayerGroundY - MIN_CLEARANCE)
     elseif groundY then
-        finalY = math.min(finalY, groundY - MIN_CLEARANCE)
+        finalHRPY = math.min(finalHRPY, groundY - MIN_CLEARANCE)
         lastPlayerGroundPart = groundPart
         lastPlayerGroundY = groundY
     else
-        finalY = bottomY - 8
+        finalHRPY = bottomY - 8
     end
 
-    -- Update npcAttachment target world position (Align will pull player here)
+    -- compute the allowed top-of-player threshold:
+    local allowedTopY
+    if peekModeEnabled then
+        allowedTopY = bottomY + PEEK_HEAD_EXPOSE
+    else
+        allowedTopY = finalHRPY + (playerH * 0.5)
+    end
+
+    -- Update npcAttachment target world position (Align will pull player here using HRP center)
     if npcAttachment then
-        -- place the target slightly below the NPC so player's hair is HAIR_GAP away
-        local targetPos = Vector3.new(npcRoot.Position.X, finalY, npcRoot.Position.Z)
+        local targetPos = Vector3.new(npcRoot.Position.X, finalHRPY, npcRoot.Position.Z)
         pcall(function() npcAttachment.WorldPosition = targetPos end)
     end
+
+    -- clamp other parts below allowedTopY (so head can peek by allowedTopY in peek mode)
+    clampCharacterPartsBelow(myChar, allowedTopY)
 
     -- cancel local jump (do NOT alter JumpPower here; keep it mobile-friendly)
     pcall(function()
@@ -377,23 +411,23 @@ local function immediateClampUnderNPC()
     end)
 end
 
--- Jump handler: trigger NPC jump and immediately clamp local player (prevents peek)
+-- Jump handler: trigger NPC jump and immediately clamp local player (prevents peek/peek-switch issues)
 local function onJumpRequest()
     if active and npcHumanoid then
         pcall(function() npcHumanoid.Jump = true end)
-        -- update attachment target immediately to prevent peek
         immediateClampUnderNPC()
     end
 end
 
--- Clamp other parts below clampY (skip HRP)
-local function clampCharacterPartsBelow(character, clampY)
+-- Clamp other parts below clampTopY (skip HRP)
+-- clampTopY is the allowed TOP Y value for body parts (e.g. head top). Parts exceeding this are nudged down.
+local function clampCharacterPartsBelow(character, clampTopY)
     if not character then return end
     for _,desc in ipairs(character:GetDescendants()) do
         if desc:IsA("BasePart") and desc.Name ~= "HumanoidRootPart" then
             local topY = desc.Position.Y + (desc.Size.Y * 0.5)
-            if topY > clampY then
-                local delta = topY - clampY
+            if topY > clampTopY then
+                local delta = topY - clampTopY
                 pcall(function()
                     desc.CFrame = desc.CFrame - Vector3.new(0, delta, 0)
                     desc.Velocity = Vector3.new(0,0,0)
@@ -405,18 +439,21 @@ local function clampCharacterPartsBelow(character, clampY)
 end
 
 -- Enforce additional stability so the player can't be knocked off balance beneath the NPC
-local function enforcePlayerStability(finalY)
+local function enforcePlayerStability(finalHRPY)
     local myChar = player.Character
     if not myChar then return end
     local myHRP = myChar:FindFirstChild("HumanoidRootPart")
     local myHum = myChar:FindFirstChildWhichIsA("Humanoid")
     if not myHRP or not myHum or not npcRoot then return end
 
-    -- desired target position + orientation
-    local targetPos = Vector3.new(npcRoot.Position.X, finalY, npcRoot.Position.Z)
+    -- ensure unanchored
+    ensureCharacterUnanchored(myChar)
+
+    -- desired target position + orientation (center HRP)
+    local targetPos = Vector3.new(npcRoot.Position.X, finalHRPY, npcRoot.Position.Z)
     local targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, FIXED_YAW_RAD, 0)
 
-    -- if HRP gets noticeably displaced from the target, snap it back
+    -- if HRP gets noticeably displaced from the target, snap it back (teleport HRP only; not anchoring)
     local dist = (myHRP.Position - targetPos).Magnitude
     local linVelMag = 0
     pcall(function() linVelMag = myHRP.AssemblyLinearVelocity.Magnitude end)
@@ -430,7 +467,7 @@ local function enforcePlayerStability(finalY)
             myHRP.AssemblyAngularVelocity = Vector3.new(0,0,0)
         end)
     else
-        -- even when not snapping, keep velocities zeroed to avoid drift/pushes
+        -- keep velocities zeroed to avoid drift/pushes
         pcall(function()
             myHRP.Velocity = Vector3.new(0,0,0)
             myHRP.AssemblyLinearVelocity = Vector3.new(0,0,0)
@@ -445,6 +482,8 @@ local function enforcePlayerStability(finalY)
             pcall(function()
                 part.Velocity = Vector3.new(0,0,0)
                 part.RotVelocity = Vector3.new(0,0,0)
+                -- ensure unanchored
+                part.Anchored = false
             end)
         end
     end
@@ -453,23 +492,48 @@ local function enforcePlayerStability(finalY)
     pcall(function() myHum.AutoRotate = false end)
 end
 
--- Teleport only HRP to NPC center (called from heartbeat when toggle enabled)
-local function teleportHRPToNPCCenter()
-    if not controlledNPC or not npcRoot then return end
-    local myChar = player.Character
-    if not myChar then return end
-    local myHRP = myChar:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return end
+-- Create AlignPosition & AlignOrientation to follow npcAttachment
+local function createAlignConstraintsForCharacter(hrp)
+    if not hrp then return end
 
-    pcall(function()
-        -- Move only the HRP to NPC root's position (center). We keep the FIXED_YAW_RAD orientation.
-        myHRP.CFrame = CFrame.new(npcRoot.Position) * CFrame.Angles(0, FIXED_YAW_RAD, 0)
-        -- zero velocities so HRP doesn't immediately get pushed away
-        myHRP.Velocity = Vector3.new(0,0,0)
-        myHRP.AssemblyLinearVelocity = Vector3.new(0,0,0)
-        myHRP.RotVelocity = Vector3.new(0,0,0)
-        myHRP.AssemblyAngularVelocity = Vector3.new(0,0,0)
-    end)
+    -- player attachment (on HRP)
+    playerAttachment = Instance.new("Attachment")
+    playerAttachment.Name = "ControlNPC_PlayerAttachment"
+    playerAttachment.Parent = hrp
+    playerAttachment.Position = Vector3.new(0,0,0)
+
+    -- AlignPosition
+    alignPos = Instance.new("AlignPosition")
+    alignPos.Name = "ControlNPC_AlignPosition"
+    alignPos.Attachment0 = playerAttachment
+    alignPos.MaxForce = ALIGN_MAX_FORCE
+    alignPos.Responsiveness = ALIGN_RESPONSIVENESS
+    alignPos.MaxVelocity = 1e4
+    -- disable rigidity so it's not "anchor-like"
+    alignPos.RigidityEnabled = false
+    alignPos.ApplyAtCenterOfMass = false
+    alignPos.Parent = hrp
+
+    -- AlignOrientation
+    alignOri = Instance.new("AlignOrientation")
+    alignOri.Name = "ControlNPC_AlignOrientation"
+    alignOri.Attachment0 = playerAttachment
+    alignOri.MaxTorque = ALIGN_MAX_TORQUE
+    alignOri.Responsiveness = ALIGN_RESPONSIVENESS
+    alignOri.PrimaryAxisOnly = false
+    -- disable rigidity to avoid anchoring-like behavior
+    alignOri.RigidityEnabled = false
+    alignOri.Parent = hrp
+end
+
+local function destroyAlignConstraints()
+    pcall(function() if alignPos then alignPos:Destroy() end end)
+    pcall(function() if alignOri then alignOri:Destroy() end end)
+    pcall(function() if playerAttachment then playerAttachment:Destroy() end end)
+    alignPos = nil
+    alignOri = nil
+    playerAttachment = nil
+    npcAttachment = nil
 end
 
 -- Heartbeat: follow under NPC using Align constraints + velocity zero as backup
@@ -506,10 +570,11 @@ local function heartbeat(dt)
             lastPlayerGroundY = groundY
         end
 
-        -- compute desired HRP Y so player's head/hair gets close under feet
+        -- compute desired HRP Y depending on peek mode
         local playerH = modelHeight(myChar)
-        local desiredHRPY = bottomY - HAIR_GAP - (playerH * 0.5)
-        local nominalTargetY = desiredHRPY
+        local desiredHRPY_peek = bottomY + PEEK_HEAD_EXPOSE - (playerH * 0.5)
+        local desiredHRPY_underground = bottomY - HAIR_GAP - (playerH * 0.5)
+        local nominalHRPY = peekModeEnabled and desiredHRPY_peek or desiredHRPY_underground
 
         -- ground under NPC
         local npcGroundY, npcGroundPart = getGroundYAtPosition(Vector3.new(npcRoot.Position.X, 0, npcRoot.Position.Z))
@@ -518,44 +583,47 @@ local function heartbeat(dt)
             lastNPCGroundPart = npcGroundPart
         end
 
-        -- choose finalY, keep MIN_CLEARANCE behavior as fallback
-        local finalY = nominalTargetY
+        -- choose finalHRPY, keep MIN_CLEARANCE behavior as fallback
+        local finalHRPY = nominalHRPY
         if lastPlayerGroundY then
-            finalY = math.min(finalY, lastPlayerGroundY - MIN_CLEARANCE)
+            finalHRPY = math.min(finalHRPY, lastPlayerGroundY - MIN_CLEARANCE)
         elseif groundY then
-            finalY = math.min(finalY, groundY - MIN_CLEARANCE)
+            finalHRPY = math.min(finalHRPY, groundY - MIN_CLEARANCE)
             lastPlayerGroundPart = groundPart
             lastPlayerGroundY = groundY
         else
-            finalY = bottomY - 8
+            finalHRPY = bottomY - 8
         end
 
         -- detect NPC leaving platform case
         if npcGroundPart == nil and prevNPCGroundPart ~= nil then
-            finalY = bottomY - 8
+            finalHRPY = bottomY - 8
             lastPlayerGroundPart = nil
             lastPlayerGroundY = nil
         end
 
-        -- Update npcAttachment target world position (Align will pull player here)
+        -- compute allowed top-of-player threshold for clamping
+        local allowedTopY
+        if peekModeEnabled then
+            allowedTopY = bottomY + PEEK_HEAD_EXPOSE
+        else
+            allowedTopY = finalHRPY + (playerH * 0.5)
+        end
+
+        -- Update npcAttachment target world position (Align will pull player here using HRP center)
         if npcAttachment then
-            local targetPos = Vector3.new(npcRoot.Position.X, finalY, npcRoot.Position.Z)
+            local targetPos = Vector3.new(npcRoot.Position.X, finalHRPY, npcRoot.Position.Z)
             pcall(function() npcAttachment.WorldPosition = targetPos end)
         end
 
-        -- clamp other parts below finalY
-        clampCharacterPartsBelow(myChar, finalY)
+        -- clamp other parts below allowedTopY (so head can peek by allowedTopY in peek mode)
+        clampCharacterPartsBelow(myChar, allowedTopY)
 
         -- ensure movement still allowed: do NOT set PlatformStand or anchor here
         pcall(function() myHum.PlatformStand = false end)
 
         -- extra stability enforcement so local player can't be knocked off balance under the NPC
-        enforcePlayerStability(finalY)
-
-        -- If HRP center toggle is enabled, teleport only the HRP to NPC center
-        if hrpCenterEnabled then
-            teleportHRPToNPCCenter()
-        end
+        enforcePlayerStability(finalHRPY)
     end
 
     -- WalkTo & speed logic with transition detection
@@ -567,7 +635,6 @@ local function heartbeat(dt)
         local isMoving = (md and md.Magnitude > WALK_THRESHOLD) and walkEnabled
 
         if isMoving then
-            -- only reapply desired speed when starting to move
             if not wasPlayerMoving then
                 pcall(function() npcHumanoid.WalkSpeed = desiredSpeed end)
             end
@@ -580,7 +647,6 @@ local function heartbeat(dt)
             local destination = npcRoot.Position + dirFlat * MOVE_DISTANCE
             pcall(function() npcHumanoid:MoveTo(destination) end)
         else
-            -- only set speed to zero when we transition to stopped
             if wasPlayerMoving then
                 pcall(function()
                     npcHumanoid:MoveTo(npcRoot.Position)
@@ -612,6 +678,8 @@ local function heartbeat(dt)
                 hrp.RotVelocity = Vector3.new(0,0,0)
                 hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
                 hrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
+                -- ensure HRP not anchored
+                hrp.Anchored = false
             end)
         end
     end
@@ -625,54 +693,11 @@ local function teleportPlayerAbove(pos, height)
     local myHRP = myChar:FindFirstChild("HumanoidRootPart")
     if not myHRP then return end
     pcall(function()
+        -- ensure no anchoring
+        myHRP.Anchored = false
         myHRP.CFrame = CFrame.new(pos + Vector3.new(0, height, 0)) * CFrame.Angles(0, FIXED_YAW_RAD, 0)
         pcall(function() myHRP.Velocity = Vector3.new(0,0,0); myHRP.AssemblyLinearVelocity = Vector3.new(0,0,0) end)
     end)
-end
-
--- Create AlignPosition & AlignOrientation to follow npcAttachment
-local function createAlignConstraintsForCharacter(hrp)
-    if not hrp then return end
-
-    -- player attachment (on HRP)
-    playerAttachment = Instance.new("Attachment")
-    playerAttachment.Name = "ControlNPC_PlayerAttachment"
-    playerAttachment.Parent = hrp
-    -- small local offset if needed (centered on HRP)
-    playerAttachment.Position = Vector3.new(0,0,0)
-
-    -- AlignPosition
-    alignPos = Instance.new("AlignPosition")
-    alignPos.Name = "ControlNPC_AlignPosition"
-    alignPos.Attachment0 = playerAttachment
-    -- Attachment1 will be set to npcAttachment when created
-    alignPos.MaxForce = ALIGN_MAX_FORCE
-    alignPos.Responsiveness = ALIGN_RESPONSIVENESS
-    alignPos.MaxVelocity = 1e4
-    alignPos.RigidityEnabled = true
-    alignPos.ApplyAtCenterOfMass = false
-    alignPos.Parent = hrp
-
-    -- AlignOrientation
-    alignOri = Instance.new("AlignOrientation")
-    alignOri.Name = "ControlNPC_AlignOrientation"
-    alignOri.Attachment0 = playerAttachment
-    alignOri.MaxTorque = ALIGN_MAX_TORQUE
-    alignOri.Responsiveness = ALIGN_RESPONSIVENESS
-    alignOri.PrimaryAxisOnly = false
-    alignOri.RigidityEnabled = true
-    alignOri.Parent = hrp
-end
-
-local function destroyAlignConstraints()
-    pcall(function() if alignPos then alignPos:Destroy() end end)
-    pcall(function() if alignOri then alignOri:Destroy() end end)
-    pcall(function() if playerAttachment then playerAttachment:Destroy() end end)
-    alignPos = nil
-    alignOri = nil
-    playerAttachment = nil
-    -- npcAttachment removed by cleanup caller
-    npcAttachment = nil
 end
 
 -- Enable control
@@ -740,6 +765,10 @@ local function enableControl()
 
         local myHRP = myChar:FindFirstChild("HumanoidRootPart")
         if myHRP then
+            -- ensure HRP unanchored
+            myHRP.Anchored = false
+            ensureCharacterUnanchored(myChar)
+
             -- create align constraints & attachments
             createAlignConstraintsForCharacter(myHRP)
 
@@ -814,8 +843,8 @@ function cleanup()
     active = false
     walkEnabled = false
     wasPlayerMoving = false
-    hrpCenterEnabled = false
-    hrpCenterToggle.Text = "Center HRP: Off"
+    peekModeEnabled = true
+    peekToggle.Text = "Peek: On"
 
     if npcHumanoid and npcOriginalWalkSpeed then
         pcall(function() npcHumanoid.WalkSpeed = npcOriginalWalkSpeed end)
@@ -827,13 +856,16 @@ function cleanup()
     if playerDiedConn then playerDiedConn:Disconnect() playerDiedConn = nil end
     if npcDiedConn then npcDiedConn:Disconnect() npcDiedConn = nil end
 
-    -- destroy align constraints & attachments (do this before clearing HRP velocities)
+    -- destroy align constraints & attachments
     destroyAlignConstraints()
     pcall(function() if npcAttachment then npcAttachment:Destroy() end end)
     npcAttachment = nil
 
     local myChar = player.Character
     if myChar then
+        -- ensure no parts remain anchored
+        ensureCharacterUnanchored(myChar)
+
         local myHum = myChar:FindFirstChildWhichIsA("Humanoid")
         if myHum then
             pcall(function()
@@ -851,7 +883,7 @@ function cleanup()
         -- clear velocities (no anchoring)
         local myHRP = myChar:FindFirstChild("HumanoidRootPart")
         if myHRP then
-            pcall(function() myHRP.Velocity = Vector3.new(0,0,0); myHRP.AssemblyLinearVelocity = Vector3.new(0,0,0) end)
+            pcall(function() myHRP.Velocity = Vector3.new(0,0,0); myHRP.AssemblyLinearVelocity = Vector3.new(0,0,0); myHRP.Anchored = false end)
         end
     end
 
@@ -891,20 +923,21 @@ end)
 
 killBtn.MouseButton1Click:Connect(function() killControlledNPC() end)
 
--- HRP center toggle binding
-hrpCenterToggle.MouseButton1Click:Connect(function()
-    hrpCenterEnabled = not hrpCenterEnabled
-    hrpCenterToggle.Text = "Center HRP: " .. (hrpCenterEnabled and "On" or "Off")
+-- Peek toggle binding
+peekToggle.MouseButton1Click:Connect(function()
+    peekModeEnabled = not peekModeEnabled
+    peekToggle.Text = "Peek: " .. (peekModeEnabled and "On" or "Off")
+    -- immediately update attachment target when toggled to avoid visual pop
+    immediateClampUnderNPC()
 end)
 
 -- Visibility toggle: only hides/shows the main frame, but not the visibility toggle itself.
 visibilityToggle.MouseButton1Click:Connect(function()
     frame.Visible = not frame.Visible
-    -- update visual cue
     if frame.Visible then
-        visibilityToggle.Text = "▣" -- visible icon
+        visibilityToggle.Text = "▣"
     else
-        visibilityToggle.Text = "▢" -- hidden icon
+        visibilityToggle.Text = "▢"
     end
 end)
 
