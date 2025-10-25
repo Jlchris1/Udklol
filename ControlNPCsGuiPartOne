@@ -1,7 +1,13 @@
--- NPC Control GUI (Fast Detection + Compact Fling Version)
+-- NPC Control GUI (Universal Humanoid Detection + True simultaneous Kill + Chase Canceller)
+-- Features:
+--  * Detects ANY non-player Model that contains a Humanoid (renamed Humanoids supported).
+--  * Kill applies to ALL detected NPCs at the same time (set Health=100 first, then break via TakeDamage / -math.huge).
+--  * Fling uses AssemblyLinearVelocity with fallbacks.
+--  * Cancel-Chase toggle: on Heartbeat, cancels MoveTo for ALL detected NPCs (no WalkSpeed fallback).
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
@@ -9,46 +15,67 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 -- CONFIG
 local LOOP_DELAY = 0.5
 local GUI_WIDTH = 200
+local SCAN_INTERVAL = 0.5
+local CHASE_CANCEL_RADIUS = 50 -- (kept for config but not used in the new cancel-chase behavior)
 
--- Live NPC cache
+-- Live NPC cache (keys are Model instances)
 local NPCs = {}
 
 -- Helper: determines if a model is an NPC
 local function isNPC(model)
-	if not model:IsA("Model") then return false end
-	if Players:GetPlayerFromCharacter(model) then return false end
-	local hum = model:FindFirstChildOfClass("Humanoid")
-	local hrp = model:FindFirstChild("HumanoidRootPart")
-	return hum and hrp
+    if not model or not model:IsA("Model") then return false end
+    -- exclude player characters (works even if character model is renamed)
+    if Players:GetPlayerFromCharacter(model) then return false end
+    -- detect Humanoid regardless of instance name
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if not hum then return false end
+    -- ensure there's at least one physical part
+    local anyPart = model:FindFirstChildWhichIsA("BasePart", true) or model.PrimaryPart
+    return hum and anyPart and true or false
 end
 
 -- Populate NPCs initially
-for _,desc in ipairs(workspace:GetDescendants()) do
-	if desc:IsA("Humanoid") then
-		local model = desc.Parent
-		if isNPC(model) then
-			NPCs[model] = true
-		end
-	end
+local function scanAddNPCs()
+    for _,desc in ipairs(workspace:GetDescendants()) do
+        if desc:IsA("Humanoid") and desc.Parent and desc.Parent:IsA("Model") then
+            local model = desc.Parent
+            if isNPC(model) then
+                NPCs[model] = true
+            end
+        end
+    end
+end
+scanAddNPCs()
+
+local function cleanNPCs()
+    for model,_ in pairs(NPCs) do
+        if not model or not model.Parent or not isNPC(model) then
+            NPCs[model] = nil
+        end
+    end
 end
 
--- Detect new/removed NPCs in real time
+-- Live detection
 workspace.DescendantAdded:Connect(function(obj)
-	if obj:IsA("Humanoid") then
-		local model = obj.Parent
-		if isNPC(model) then
-			NPCs[model] = true
-		end
-	end
+    if obj:IsA("Humanoid") and obj.Parent and obj.Parent:IsA("Model") then
+        local model = obj.Parent
+        if isNPC(model) then
+            NPCs[model] = true
+        end
+    end
 end)
 
 workspace.DescendantRemoving:Connect(function(obj)
-	if obj:IsA("Humanoid") then
-		local model = obj.Parent
-		if NPCs[model] then
-			NPCs[model] = nil
-		end
-	end
+    if obj:IsA("Humanoid") and obj.Parent and obj.Parent:IsA("Model") then
+        local model = obj.Parent
+        if NPCs[model] then
+            -- only remove if there is no other Humanoid left in the model
+            local otherHum = model:FindFirstChildOfClass("Humanoid")
+            if not otherHum then
+                NPCs[model] = nil
+            end
+        end
+    end
 end)
 
 -- GUI Setup
@@ -67,226 +94,395 @@ MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
 
 local ToggleButton = Instance.new("TextButton")
-ToggleButton.Size = UDim2.new(1,0,0,30)
-ToggleButton.BackgroundColor3 = Color3.fromRGB(44,44,44)
+ToggleButton.Size = UDim2.new(1, 0, 0, 30)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(44, 44, 44)
 ToggleButton.BorderSizePixel = 0
 ToggleButton.Font = Enum.Font.GothamBold
 ToggleButton.TextSize = 14
-ToggleButton.TextColor3 = Color3.new(1,1,1)
+ToggleButton.TextColor3 = Color3.new(1, 1, 1)
 ToggleButton.Text = "☰ NPC Controls"
 ToggleButton.Parent = MainFrame
 
 local Options = Instance.new("Frame")
-Options.Size = UDim2.new(1,0,0,220)
-Options.Position = UDim2.new(0,0,0,30)
-Options.BackgroundColor3 = Color3.fromRGB(32,32,32)
+Options.Size = UDim2.new(1, 0, 0, 260)
+Options.Position = UDim2.new(0, 0, 0, 30)
+Options.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
 Options.BorderSizePixel = 0
 Options.Visible = false
 Options.Parent = MainFrame
 
--- Helper UI functions
+-- UI helpers
 local function makeRow(y)
-	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1, -8, 0, 28)
-	row.Position = UDim2.new(0, 4, 0, y)
-	row.BackgroundTransparency = 1
-	row.Parent = Options
-	return row
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -8, 0, 28)
+    row.Position = UDim2.new(0, 4, 0, y)
+    row.BackgroundTransparency = 1
+    row.Parent = Options
+    return row
 end
 
-local function makeActionButton(parent,text)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0.65,0,1,0)
-	btn.Position = UDim2.new(0,0,0,0)
-	btn.BackgroundColor3 = Color3.fromRGB(58,58,58)
-	btn.BorderSizePixel = 0
-	btn.Font = Enum.Font.Gotham
-	btn.TextSize = 13
-	btn.TextColor3 = Color3.new(1,1,1)
-	btn.Text = text
-	btn.Parent = parent
-	return btn
+local function makeActionButton(parent, text)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.65, 0, 1, 0)
+    btn.Position = UDim2.new(0, 0, 0, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(58, 58, 58)
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 13
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Text = text
+    btn.Parent = parent
+    return btn
 end
 
-local function makeSmallToggle(parent)
-	local tog = Instance.new("TextButton")
-	tog.Size = UDim2.new(0.32,0,1,0)
-	tog.Position = UDim2.new(0.67,4,0,0)
-	tog.BackgroundColor3 = Color3.fromRGB(40,40,40)
-	tog.BorderSizePixel = 0
-	tog.Font = Enum.Font.Gotham
-	tog.TextSize = 11
-	tog.TextColor3 = Color3.new(1,1,1)
-	tog.Text = "Loop: Off"
-	tog.Parent = parent
-	return tog
+local function makeSmallToggle(parent, text)
+    local tog = Instance.new("TextButton")
+    tog.Size = UDim2.new(0.32, 0, 1, 0)
+    tog.Position = UDim2.new(0.67, 4, 0, 0)
+    tog.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    tog.BorderSizePixel = 0
+    tog.Font = Enum.Font.Gotham
+    tog.TextSize = 11
+    tog.TextColor3 = Color3.new(1, 1, 1)
+    tog.Text = text or "Loop: Off"
+    tog.Parent = parent
+    return tog
 end
 
 -- GUI Rows
 local y = 6
-local killRow = makeRow(y); y=y+34
-local KillBtn = makeActionButton(killRow,"Kill NPCs")
-local KillLoop = makeSmallToggle(killRow)
+local killRow = makeRow(y); y = y + 34
+local KillBtn = makeActionButton(killRow, "Kill NPCs (All-at-once)")
+local KillLoop = makeSmallToggle(killRow, "Loop: Off")
 
-local psRow = makeRow(y); y=y+34
-local PSBtn = makeActionButton(psRow,"PlatformStand")
-local PSLoop = makeSmallToggle(psRow)
+local psRow = makeRow(y); y = y + 34
+local PSBtn = makeActionButton(psRow, "PlatformStand")
+local PSLoop = makeSmallToggle(psRow, "Loop: Off")
 
-local sitRow = makeRow(y); y=y+34
-local SitBtn = makeActionButton(sitRow,"Sit NPCs")
-local SitLoop = makeSmallToggle(sitRow)
+local sitRow = makeRow(y); y = y + 34
+local SitBtn = makeActionButton(sitRow, "Sit NPCs")
+local SitLoop = makeSmallToggle(sitRow, "Loop: Off")
 
-local anchorRow = makeRow(y); y=y+34
-local AnchorBtn = makeActionButton(anchorRow,"Anchor NPCs")
-local AnchorLoop = makeSmallToggle(anchorRow)
+local anchorRow = makeRow(y); y = y + 34
+local AnchorBtn = makeActionButton(anchorRow, "Anchor NPCs")
+local AnchorLoop = makeSmallToggle(anchorRow, "Loop: Off")
 
-local flingRow = makeRow(y); y=y+34
+local flingRow = makeRow(y); y = y + 34
 local FlingBox = Instance.new("TextBox")
-FlingBox.Size=UDim2.new(0.55,0,1,0)
-FlingBox.Position=UDim2.new(0,0,0,0)
-FlingBox.PlaceholderText="Power"
-FlingBox.BackgroundColor3=Color3.fromRGB(50,50,50)
-FlingBox.TextColor3=Color3.new(1,1,1)
-FlingBox.Text="200"
-FlingBox.BorderSizePixel=0
-FlingBox.Font=Enum.Font.Gotham
-FlingBox.TextSize=13
-FlingBox.Parent=flingRow
+FlingBox.Size = UDim2.new(0.55, 0, 1, 0)
+FlingBox.Position = UDim2.new(0, 0, 0, 0)
+FlingBox.PlaceholderText = "Power"
+FlingBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+FlingBox.TextColor3 = Color3.new(1, 1, 1)
+FlingBox.Text = "200"
+FlingBox.BorderSizePixel = 0
+FlingBox.Font = Enum.Font.Gotham
+FlingBox.TextSize = 13
+FlingBox.Parent = flingRow
 
 local FlingBtn = Instance.new("TextButton")
-FlingBtn.Size = UDim2.new(0.42,-4,1,0)
-FlingBtn.Position = UDim2.new(0.55,4,0,0)
-FlingBtn.BackgroundColor3 = Color3.fromRGB(100,50,50)
-FlingBtn.Text="Fling"
-FlingBtn.Font=Enum.Font.Gotham
-FlingBtn.TextSize=13
-FlingBtn.TextColor3=Color3.new(1,1,1)
-FlingBtn.BorderSizePixel=0
-FlingBtn.Parent=flingRow
+FlingBtn.Size = UDim2.new(0.42, -4, 1, 0)
+FlingBtn.Position = UDim2.new(0.55, 4, 0, 0)
+FlingBtn.BackgroundColor3 = Color3.fromRGB(100, 50, 50)
+FlingBtn.Text = "Fling"
+FlingBtn.Font = Enum.Font.Gotham
+FlingBtn.TextSize = 13
+FlingBtn.TextColor3 = Color3.new(1, 1, 1)
+FlingBtn.BorderSizePixel = 0
+FlingBtn.Parent = flingRow
 
-local FlingLoopToggle = makeSmallToggle(flingRow)
-FlingLoopToggle.Position = UDim2.new(0.55,70,0,0)
+local FlingLoopToggle = makeSmallToggle(flingRow, "Loop: Off")
+FlingLoopToggle.Position = UDim2.new(0.55, 70, 0, 0)
+
+-- Chase Canceller row
+local chaseRow = makeRow(y); y = y + 34
+local CancelChaseBtn = makeActionButton(chaseRow, "Cancel Chases (Toggle)")
+local CancelChaseToggle = makeSmallToggle(chaseRow, "Off")
+CancelChaseToggle.Position = UDim2.new(0.67, 4, 0, 0)
 
 -- Logic
-local loops = {kill=false,ps=false,sit=false,anchor=false,fling=false}
+local loops = { kill = false, ps = false, sit = false, anchor = false, fling = false }
 local loopRunners = {}
+local cancelChaseEnabled = false
 
-local function iterateHumanoidParts(npc,fn)
-	for _,p in ipairs(npc:GetDescendants()) do
-		if p:IsA("BasePart") then
-			pcall(function() fn(p) end)
-		end
-	end
+local function iterateHumanoidParts(npc, fn)
+    for _, p in ipairs(npc:GetDescendants()) do
+        if p:IsA("BasePart") then
+            pcall(function() fn(p) end)
+        end
+    end
+end
+
+-- Kill implementation: truly simultaneous
+-- 1) collect all humanoids
+-- 2) set Health = 100 for all humanoids (pcall)
+-- 3) wait a small tick
+-- 4) apply TakeDamage(math.huge) OR set Health = -math.huge for all humanoids
+local function killAllSimultaneous()
+    local humanoids = {}
+    for model,_ in pairs(NPCs) do
+        if model and model.Parent and isNPC(model) then
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            if hum then
+                humanoids[#humanoids+1] = hum
+            end
+        end
+    end
+
+    -- Step 1: set to 100
+    for _,hum in ipairs(humanoids) do
+        pcall(function()
+            -- Some games protect direct assignment; we still attempt it
+            hum.Health = 100
+        end)
+    end
+
+    -- small wait to ensure change registers
+    task.wait(0.04)
+
+    -- Step 2: break health for all at (almost) the same time
+    for _,hum in ipairs(humanoids) do
+        pcall(function()
+            local ok = pcall(function() hum:TakeDamage(math.huge) end)
+            if not ok then
+                pcall(function() hum.Health = -math.huge end)
+            else
+                pcall(function() hum.Health = 0 end)
+            end
+        end)
+    end
 end
 
 local function killNPC(npc)
-	local hum = npc:FindFirstChildOfClass("Humanoid")
-	if hum then
-		pcall(function()
-			hum.Health = 100
-			task.wait(0.05)
-			hum:TakeDamage(math.huge)
-		end)
-	end
+    -- single-npc kill (kept for manual per-npc usage)
+    local hum = npc and npc:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    pcall(function() hum.Health = 100 end)
+    task.wait(0.02)
+    pcall(function()
+        local ok = pcall(function() hum:TakeDamage(math.huge) end)
+        if not ok then
+            hum.Health = -math.huge
+        else
+            hum.Health = 0
+        end
+    end)
 end
 
 local function enablePlatformStand(npc)
-	local hum = npc:FindFirstChildOfClass("Humanoid")
-	if hum then pcall(function() hum.PlatformStand = true end) end
+    local hum = npc and npc:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum.PlatformStand = true end) end
 end
 
 local function makeSit(npc)
-	local hum = npc:FindFirstChildOfClass("Humanoid")
-	if hum then pcall(function() hum.Sit = true end) end
+    local hum = npc and npc:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum.Sit = true end) end
 end
 
 local anchoredNPCs = {}
 local function toggleAnchor(npc)
-	if anchoredNPCs[npc] then
-		iterateHumanoidParts(npc,function(p) p.Anchored=false end)
-		anchoredNPCs[npc]=nil
-	else
-		iterateHumanoidParts(npc,function(p) p.Anchored=true end)
-		anchoredNPCs[npc]=true
-	end
+    if not npc then return end
+    if anchoredNPCs[npc] then
+        iterateHumanoidParts(npc, function(p) p.Anchored = false end)
+        anchoredNPCs[npc] = nil
+    else
+        iterateHumanoidParts(npc, function(p) p.Anchored = true end)
+        anchoredNPCs[npc] = true
+    end
 end
 
-local function flingNPC(npc,power)
-	local hrp = npc:FindFirstChild("HumanoidRootPart")
-	local localHRP = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not hrp or not localHRP then return end
-	local dir = (hrp.Position - localHRP.Position).Unit
-	local velocity = dir * power + Vector3.new(0, power * 0.3, 0)
-	iterateHumanoidParts(npc, function(p)
-		p.Velocity = velocity
-	end)
+local function getNPCPosition(npc)
+    if not npc then return nil end
+    local hrp = npc:FindFirstChild("HumanoidRootPart")
+    if hrp and hrp:IsA("BasePart") then return hrp.Position end
+    if npc.PrimaryPart and npc.PrimaryPart:IsA("BasePart") then return npc.PrimaryPart.Position end
+    local anyPart = npc:FindFirstChildWhichIsA("BasePart", true)
+    if anyPart then return anyPart.Position end
+    local ok, cf = pcall(function() return npc:GetModelCFrame() end)
+    if ok and cf then return cf.p end
+    return nil
 end
 
--- Fast Loop System
-local function startLoop(key,action)
-	if loopRunners[key] then return end
-	loops[key] = true
-	local co = coroutine.create(function()
-		while loops[key] do
-			for npc,_ in pairs(NPCs) do
-				if npc.Parent then pcall(function() action(npc) end) end
-			end
-			task.wait(LOOP_DELAY)
-		end
-		loopRunners[key] = nil
-	end)
-	loopRunners[key] = co
-	coroutine.resume(co)
+local function flingNPC(npc, power)
+    if not npc or not power then return end
+    local localHRP = player.Character and (player.Character:FindFirstChild("HumanoidRootPart") or player.Character.PrimaryPart)
+    if not localHRP or not localHRP:IsA("BasePart") then return end
+
+    local targetPos = getNPCPosition(npc)
+    if not targetPos then return end
+
+    local dirVec = targetPos - localHRP.Position
+    if dirVec.Magnitude <= 0.001 then
+        dirVec = Vector3.new(0, 1, 0)
+    else
+        dirVec = dirVec.Unit
+    end
+
+    local velocity = dirVec * power + Vector3.new(0, power * 0.45, 0)
+
+    iterateHumanoidParts(npc, function(p)
+        if p and p:IsA("BasePart") and not p.Anchored then
+            pcall(function()
+                -- prefer AssemblyLinearVelocity (newer) but fallback to Velocity if necessary
+                if p.AssemblyLinearVelocity ~= nil then
+                    p.AssemblyLinearVelocity = velocity
+                else
+                    p.Velocity = velocity
+                end
+            end)
+        end
+    end)
+end
+
+-- Loop system (uses per-npc action for loops)
+local function startLoop(key, action)
+    if loopRunners[key] then return end
+    loops[key] = true
+    local co = coroutine.create(function()
+        while loops[key] do
+            for npc,_ in pairs(NPCs) do
+                if npc and npc.Parent and isNPC(npc) then
+                    pcall(function() action(npc) end)
+                end
+            end
+            task.wait(LOOP_DELAY)
+        end
+        loopRunners[key] = nil
+    end)
+    loopRunners[key] = co
+    coroutine.resume(co)
 end
 
 local function stopLoop(key)
-	loops[key] = false
+    loops[key] = false
 end
 
 -- Button actions
 KillBtn.MouseButton1Click:Connect(function()
-	for npc,_ in pairs(NPCs) do killNPC(npc) end
+    -- apply simultaneous kill once
+    killAllSimultaneous()
 end)
+
 PSBtn.MouseButton1Click:Connect(function()
-	for npc,_ in pairs(NPCs) do enablePlatformStand(npc) end
+    for npc,_ in pairs(NPCS) do
+        if isNPC(npc) then enablePlatformStand(npc) end
+    end
 end)
+
 SitBtn.MouseButton1Click:Connect(function()
-	for npc,_ in pairs(NPCs) do makeSit(npc) end
+    for npc,_ in pairs(NPCs) do
+        if isNPC(npc) then makeSit(npc) end
+    end
 end)
+
 AnchorBtn.MouseButton1Click:Connect(function()
-	for npc,_ in pairs(NPCs) do toggleAnchor(npc) end
+    for npc,_ in pairs(NPCs) do
+        if isNPC(npc) then toggleAnchor(npc) end
+    end
 end)
+
 FlingBtn.MouseButton1Click:Connect(function()
-	local s = tonumber(FlingBox.Text) or 200
-	for npc,_ in pairs(NPCs) do flingNPC(npc,s) end
+    local s = tonumber(FlingBox.Text) or 200
+    for npc,_ in pairs(NPCs) do
+        if isNPC(npc) then flingNPC(npc, s) end
+    end
 end)
 
 -- Loop toggles
-local function linkLoop(button,key,action)
-	button.MouseButton1Click:Connect(function()
-		loops[key]=not loops[key]
-		button.Text="Loop: "..(loops[key] and "On" or "Off")
-		if loops[key] then startLoop(key,action) else stopLoop(key) end
-	end)
+local function linkLoop(button, key, action)
+    button.MouseButton1Click:Connect(function()
+        loops[key] = not loops[key]
+        button.Text = "Loop: " .. (loops[key] and "On" or "Off")
+        if loops[key] then startLoop(key, action) else stopLoop(key) end
+    end)
 end
 
-linkLoop(KillLoop,"kill",killNPC)
-linkLoop(PSLoop,"ps",enablePlatformStand)
-linkLoop(SitLoop,"sit",makeSit)
-linkLoop(AnchorLoop,"anchor",toggleAnchor)
-linkLoop(FlingLoopToggle,"fling",function(n)
-	local s=tonumber(FlingBox.Text) or 200
-	flingNPC(n,s)
+-- Replace kill loop with a simultaneous-kill loop (runs killAllSimultaneous each tick)
+KillLoop.MouseButton1Click:Connect(function()
+    loops.kill = not loops.kill
+    KillLoop.Text = "Loop: " .. (loops.kill and "On" or "Off")
+    if loops.kill then
+        -- start a dedicated coroutine that calls killAllSimultaneous each loop tick
+        if loopRunners.kill then return end
+        local co = coroutine.create(function()
+            while loops.kill do
+                pcall(killAllSimultaneous)
+                task.wait(LOOP_DELAY)
+            end
+            loopRunners.kill = nil
+        end)
+        loopRunners.kill = co
+        coroutine.resume(co)
+    else
+        loops.kill = false
+    end
+end)
+
+linkLoop(PSLoop, "ps", enablePlatformStand)
+linkLoop(SitLoop, "sit", makeSit)
+linkLoop(AnchorLoop, "anchor", toggleAnchor)
+linkLoop(FlingLoopToggle, "fling", function(n)
+    local s = tonumber(FlingBox.Text) or 200
+    flingNPC(n, s)
+end)
+
+-- Cancel-Chase toggle & heartbeat canceller
+local function cancelChaseForNPC(npc)
+    if not npc then return end
+    local hum = npc:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    -- get NPC current position
+    local npcPos = getNPCPosition(npc)
+    if not npcPos then return end
+
+    pcall(function()
+        -- Attempt to cancel MoveTo by telling humanoid to MoveTo its own position.
+        -- No WalkSpeed fallback — only try MoveTo (keeps behavior non-invasive).
+        if typeof(hum.MoveTo) == "function" then
+            hum:MoveTo(npcPos)
+        else
+            -- Some custom Humanoids may expose MoveTo as a callable field; attempt pcall to be safe
+            pcall(function() hum:MoveTo(npcPos) end)
+        end
+    end)
+end
+
+CancelChaseBtn.MouseButton1Click:Connect(function()
+    cancelChaseEnabled = not cancelChaseEnabled
+    CancelChaseToggle.Text = cancelChaseEnabled and "On" or "Off"
 end)
 
 -- GUI toggle
-local open=false
+local open = false
 ToggleButton.MouseButton1Click:Connect(function()
-	open=not open
-	local targetSize=open and UDim2.new(0,GUI_WIDTH,0,270) or UDim2.new(0,GUI_WIDTH,0,30)
-	TweenService:Create(MainFrame,TweenInfo.new(0.22,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),{Size=targetSize}):Play()
-	task.wait(0.08)
-	Options.Visible=open
+    open = not open
+    local targetSize = open and UDim2.new(0, GUI_WIDTH, 0, 290) or UDim2.new(0, GUI_WIDTH, 0, 30)
+    TweenService:Create(MainFrame, TweenInfo.new(0.22, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { Size = targetSize }):Play()
+    task.wait(0.08)
+    Options.Visible = open
 end)
 
-print("[NPCControlGUI] Fast detection version loaded.")
+-- Background scans + heartbeat tasks
+local scanAccumulator = 0
+RunService.Heartbeat:Connect(function(dt)
+    -- scanning accumulator
+    scanAccumulator = scanAccumulator + dt
+    if scanAccumulator >= SCAN_INTERVAL then
+        scanAccumulator = 0
+        scanAddNPCs()
+        cleanNPCs()
+    end
+
+    -- cancel-chase behavior runs each heartbeat if enabled
+    if cancelChaseEnabled then
+        -- iterate ALL NPCs and attempt to cancel their MoveTo (no radius check)
+        for npc,_ in pairs(NPCs) do
+            if npc and npc.Parent and isNPC(npc) then
+                pcall(function() cancelChaseForNPC(npc) end)
+            end
+        end
+    end
+end)
+
+print("[NPCControlGUI] Loaded: universal detection, simultaneous kill (looped option), fling, and global chase-canceller.")
