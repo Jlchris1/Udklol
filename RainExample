@@ -1,0 +1,65 @@
+--// Rain Script: Creates camera-attached rain emitters that stay upright
+--// Recommended: Place this in StarterPlayerScripts as a LocalScript
+
+-- Remove old emitter if it exists
+if workspace.Camera:FindFirstChild("__RainEmitter") then
+	workspace.Camera.__RainEmitter:Destroy()
+end
+
+-- Create the main invisible emitter part
+local emitterPart = Instance.new("Part")
+emitterPart.Name = "__RainEmitter"
+emitterPart.Anchored = true
+emitterPart.CanCollide = false
+emitterPart.Transparency = 1
+emitterPart.Size = Vector3.new(40, 40, 82.7160873413086)
+emitterPart.Parent = workspace.Camera
+
+-- Keep emitter following the camera’s *position* but not rotation
+local RunService = game:GetService("RunService")
+
+RunService.RenderStepped:Connect(function()
+	local cam = workspace.CurrentCamera
+	if cam and emitterPart then
+		-- Only follow camera position, keep upright orientation
+		local camPos = cam.CFrame.Position
+		emitterPart.CFrame = CFrame.new(camPos) * CFrame.Angles(0, 0, 0)
+	end
+end)
+
+-- Helper function to create emitters
+local function createEmitter(name, textureId, sizeSeq)
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = name
+	emitter.Texture = textureId
+	emitter.LightInfluence = 0
+	emitter.LockedToPart = false
+	emitter.EmissionDirection = Enum.NormalId.Bottom
+	emitter.Lifetime = NumberRange.new(0.8, 0.8)
+	emitter.Rate = 600
+	emitter.Speed = NumberRange.new(60, 60)
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.1, 0),
+		NumberSequenceKeypoint.new(0.9, 0),
+		NumberSequenceKeypoint.new(1, 1)
+	})
+	emitter.Size = sizeSeq
+	emitter.Color = ColorSequence.new(Color3.new(1, 1, 1))
+	emitter.Parent = emitterPart
+	return emitter
+end
+
+-- Create RainStraight emitter
+createEmitter("RainStraight", "rbxassetid://1822883048", NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 10),
+	NumberSequenceKeypoint.new(1, 10)
+}))
+
+-- Create RainTopDown emitter
+createEmitter("RainTopDown", "rbxassetid://1822856633", NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 5.33),
+	NumberSequenceKeypoint.new(1, 5.33)
+}))
+
+print("[Rain Script] Upright camera rain emitter successfully created.")
