@@ -1,0 +1,997 @@
+-- Control NPC LocalScript (underground + stable platform; no anchoring of player)
+-- Place in StarterPlayer > StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+local Workspace = game:GetService("Workspace")
+local PhysicsService = game:GetService("PhysicsService")
+local ContextActionService = game:GetService("ContextActionService")
+
+local player = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
+
+-- CONFIG
+local DEFAULT_HEIGHT_GAP = 0.05         -- default gap from NPC feet to top of player's head/hair
+local MIN_CLEARANCE = 1.6
+local WALK_THRESHOLD = 0.02
+local MOVE_DISTANCE = 100
+local FIXED_YAW_RAD = math.rad(90)
+
+-- Align constraint tuning
+local ALIGN_MAX_FORCE = 1e5
+local ALIGN_RESPONSIVENESS = 30
+local ALIGN_MAX_TORQUE = 1e5
+
+-- Stability tuning
+local STABILITY_SNAP_DISTANCE = 0.6   -- if HRP is this far from the target, snap it back
+local STABILITY_VEL_THRESHOLD = 0.1   -- if linear vel is above this, zero it and consider snap
+
+-- Platform tuning
+local PLATFORM_SIZE = Vector3.new(10, 1, 10) -- wide enough to catch pushes
+local PLATFORM_Y_OFFSET = 0.5                -- how far below player's lowest point the platform sits
+
+-- Behavior: always allow underground (local player will track under NPC)
+local allowUnderground = true
+
+-- UI (responsive)
+local gui = Instance.new("ScreenGui")
+gui.Name = "ControlNPCGui"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = player:WaitForChild("PlayerGui")
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+pcall(function() gui.DisplayOrder = 9999 end)
+
+local isTouch = UserInputService.TouchEnabled
+
+-- Main panel
+local frame = Instance.new("Frame")
+frame.Name = "ControlPanel"
+frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+frame.BorderSizePixel = 0
+frame.AnchorPoint = Vector2.new(0,0)
+frame.ZIndex = 1000
+frame.Parent = gui
+frame.Visible = true
+
+if isTouch then
+    frame.Size = UDim2.new(0, 340, 0, 220)
+    frame.Position = UDim2.new(0, 8, 0, 8)
+else
+    frame.Size = UDim2.new(0, 240, 0, 180)
+    frame.Position = UDim2.new(0, 10, 0, 10)
+end
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 20)
+title.BackgroundTransparency = 1
+title.Text = "NPC Control"
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = (isTouch and 16 or 14)
+title.ZIndex = 1001
+
+-- Toggle control button
+local toggleBtn = Instance.new("TextButton", frame)
+toggleBtn.Size = UDim2.new(1, -12, 0, (isTouch and 38 or 26))
+toggleBtn.Position = UDim2.new(0, 6, 0, 24)
+toggleBtn.Text = "Toggle Control: OFF"
+toggleBtn.Font = Enum.Font.SourceSans
+toggleBtn.TextSize = (isTouch and 16 or 13)
+toggleBtn.ZIndex = 1001
+
+-- Walk / Kill row
+local walkToggle = Instance.new("TextButton", frame)
+walkToggle.Size = UDim2.new(0.48, -6, 0, (isTouch and 30 or 20))
+walkToggle.Position = UDim2.new(0, 6, 0, (isTouch and 66 or 62))
+walkToggle.Text = "WalkTo: On"
+walkToggle.Font = Enum.Font.SourceSans
+walkToggle.TextSize = (isTouch and 14 or 12)
+walkToggle.ZIndex = 1001
+
+local killBtn = Instance.new("TextButton", frame)
+killBtn.Size = UDim2.new(0.48, -6, 0, (isTouch and 30 or 20))
+killBtn.Position = UDim2.new(0.52, 0, 0, (isTouch and 66 or 62))
+killBtn.Text = "Kill NPC"
+killBtn.Font = Enum.Font.SourceSans
+killBtn.TextSize = (isTouch and 14 or 12)
+killBtn.ZIndex = 1001
+
+-- HEIGHT controls
+local heightLabel = Instance.new("TextLabel", frame)
+heightLabel.Size = UDim2.new(0.6, -6, 0, (isTouch and 24 or 18))
+heightLabel.Position = UDim2.new(0, 6, 0, (isTouch and 102 or 92))
+heightLabel.Text = "Height Below (studs):"
+heightLabel.Font = Enum.Font.SourceSans
+heightLabel.TextSize = (isTouch and 14 or 12)
+heightLabel.TextColor3 = Color3.new(1,1,1)
+heightLabel.BackgroundTransparency = 1
+heightLabel.ZIndex = 1001
+
+local heightBox = Instance.new("TextBox", frame)
+heightBox.Size = UDim2.new(0.4, -6, 0, (isTouch and 24 or 18))
+heightBox.Position = UDim2.new(0.6, 0, 0, (isTouch and 102 or 92))
+heightBox.Text = tostring(DEFAULT_HEIGHT_GAP)
+heightBox.Font = Enum.Font.SourceSans
+heightBox.TextSize = (isTouch and 14 or 12)
+heightBox.ClearTextOnFocus = false
+heightBox.ZIndex = 1001
+
+-- Up / Down holdable buttons for adjusting height
+local upBtn = Instance.new("TextButton", frame)
+upBtn.Size = UDim2.new(0.195, -4, 0, (isTouch and 26 or 20))
+upBtn.Position = UDim2.new(0.6, 4, 0, (isTouch and 134 or 124))
+upBtn.Text = "▲"
+upBtn.Font = Enum.Font.SourceSansBold
+upBtn.TextSize = (isTouch and 16 or 14)
+upBtn.ZIndex = 1001
+
+local downBtn = Instance.new("TextButton", frame)
+downBtn.Size = UDim2.new(0.195, -4, 0, (isTouch and 26 or 20))
+downBtn.Position = UDim2.new(0.805, 0, 0, (isTouch and 134 or 124))
+downBtn.Text = "▼"
+downBtn.Font = Enum.Font.SourceSansBold
+downBtn.TextSize = (isTouch and 16 or 14)
+downBtn.ZIndex = 1001
+
+-- Speed & Jump UI
+local speedLabel = Instance.new("TextLabel", frame)
+speedLabel.Size = UDim2.new(0.5, -6, 0, (isTouch and 20 or 16))
+speedLabel.Position = UDim2.new(0, 6, 0, (isTouch and 164 or 152))
+speedLabel.Text = "NPC Speed:"
+speedLabel.Font = Enum.Font.SourceSans
+speedLabel.TextSize = (isTouch and 13 or 11)
+speedLabel.TextColor3 = Color3.new(1,1,1)
+speedLabel.BackgroundTransparency = 1
+speedLabel.ZIndex = 1001
+
+local speedBox = Instance.new("TextBox", frame)
+speedBox.Size = UDim2.new(0.5, -6, 0, (isTouch and 20 or 16))
+speedBox.Position = UDim2.new(0.5, 0, 0, (isTouch and 164 or 152))
+speedBox.Text = "16"
+speedBox.Font = Enum.Font.SourceSans
+speedBox.TextSize = (isTouch and 13 or 11)
+speedBox.ClearTextOnFocus = false
+speedBox.ZIndex = 1001
+
+local jumpLabel = Instance.new("TextLabel", frame)
+jumpLabel.Size = UDim2.new(0.5, -6, 0, (isTouch and 20 or 16))
+jumpLabel.Position = UDim2.new(0, 6, 0, (isTouch and 190 or 176))
+jumpLabel.Text = "NPC JumpPower:"
+jumpLabel.Font = Enum.Font.SourceSans
+jumpLabel.TextSize = (isTouch and 13 or 11)
+jumpLabel.TextColor3 = Color3.new(1,1,1)
+jumpLabel.BackgroundTransparency = 1
+jumpLabel.ZIndex = 1001
+
+local jumpBox = Instance.new("TextBox", frame)
+jumpBox.Size = UDim2.new(0.5, -6, 0, (isTouch and 20 or 16))
+jumpBox.Position = UDim2.new(0.5, 0, 0, (isTouch and 190 or 176))
+jumpBox.Text = "50"
+jumpBox.Font = Enum.Font.SourceSans
+jumpBox.TextSize = (isTouch and 13 or 11)
+jumpBox.ClearTextOnFocus = false
+jumpBox.ZIndex = 1001
+
+-- Visibility toggle
+local visibilityToggle = Instance.new("TextButton")
+visibilityToggle.Name = "VisibilityToggle"
+visibilityToggle.Size = UDim2.new(0, 40, 0, 40)
+visibilityToggle.AnchorPoint = Vector2.new(1, 0)
+visibilityToggle.Position = UDim2.new(1, -8, 0, 8)
+visibilityToggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
+visibilityToggle.BorderSizePixel = 0
+visibilityToggle.Text = "▣"
+visibilityToggle.Font = Enum.Font.SourceSansBold
+visibilityToggle.TextSize = (isTouch and 20 or 18)
+visibilityToggle.Parent = gui
+visibilityToggle.ZIndex = 1100
+visibilityToggle.AutoButtonColor = true
+visibilityToggle.Active = true
+visibilityToggle.Selectable = true
+
+-- State
+local active = false
+local controlledNPC = nil
+local npcHumanoid = nil
+local npcRoot = nil
+local heartbeatConn = nil
+local jumpConn = nil
+local charAddedConn = nil
+local playerDiedConn = nil
+local npcDiedConn = nil
+
+local walkEnabled = true
+local npcOriginalWalkSpeed = nil
+
+-- Track changed parts for cleanup
+local changedNPCParts = {}
+local changedPlayerParts = {}
+
+-- store original jumppower to restore later
+local myOriginalJumpPower = nil
+local myOriginalAutoRotate = nil
+
+-- movement transition helper
+local wasPlayerMoving = false
+
+-- Constraints & attachments (created on enable, removed on cleanup)
+local playerAttachment = nil
+local npcAttachment = nil
+local alignPos = nil
+local alignOri = nil
+
+-- Platform object (invisible anchored part that supports player under ground)
+local supportPlatform = nil
+
+-- dynamic height gap variable (how far below NPC feet the top of player's head should be)
+local heightBelow = DEFAULT_HEIGHT_GAP
+
+-- Helpers
+local function modelHeight(model)
+    if not model then return 5 end
+    local ok, size = pcall(function() return model:GetExtentsSize() end)
+    if ok and size then return size.Y end
+    return 5
+end
+
+local function findNearestNPC()
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local myPos = hrp.Position
+    local nearest, nd = nil, math.huge
+    for _,m in ipairs(workspace:GetDescendants()) do
+        if m:IsA("Model") then
+            local hum = m:FindFirstChildOfClass("Humanoid")
+            local root = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
+            if hum and root and hum.Health > 0 and Players:GetPlayerFromCharacter(m) == nil then
+                local d = (root.Position - myPos).Magnitude
+                if d < nd then nd = d nearest = m end
+            end
+        end
+    end
+    return nearest
+end
+
+local function safeSetPartPropsAsNoCollision(part)
+    if not part then return end
+    pcall(function()
+        table.insert(changedNPCParts, part)
+        part.CanCollide = false
+        if pcall(function() return part.CanTouch end) then
+            pcall(function() part.CanTouch = false end)
+        end
+        pcall(function() part.Massless = true end)
+    end)
+end
+
+local function neutralizeNPC(model)
+    if not model then return end
+    for _,desc in ipairs(model:GetDescendants()) do
+        if desc:IsA("Script") or desc:IsA("LocalScript") or desc:IsA("ModuleScript") then
+            pcall(function() desc:Destroy() end)
+        end
+        if desc:IsA("BasePart") then
+            safeSetPartPropsAsNoCollision(desc)
+            pcall(function()
+                if pcall(function() PhysicsService:GetCollisionGroups() end) then
+                    pcall(function() PhysicsService:CreateCollisionGroup("ControlNPC_NoPlayer") end)
+                    pcall(function() PhysicsService:CreateCollisionGroup("ControlNPC_PlayersGroup") end)
+                    pcall(function() PhysicsService:CollisionGroupSetCollidable("ControlNPC_NoPlayer", "ControlNPC_PlayersGroup", false) end)
+                    pcall(function() PhysicsService:SetPartCollisionGroup(desc, "ControlNPC_NoPlayer") end)
+                end
+            end)
+        end
+    end
+end
+
+local function assignCollisionGroupToModel(model, groupName)
+    if not model then return end
+    for _,desc in ipairs(model:GetDescendants()) do
+        if desc:IsA("BasePart") then
+            pcall(function()
+                PhysicsService:SetPartCollisionGroup(desc, groupName)
+            end)
+        end
+    end
+end
+
+local function assignPlayerPartsToPlayersGroup()
+    local char = player.Character
+    if not char then return end
+    for _,desc in ipairs(char:GetDescendants()) do
+        if desc:IsA("BasePart") then
+            pcall(function()
+                table.insert(changedPlayerParts, desc)
+                if pcall(function() PhysicsService:GetCollisionGroups() end) then
+                    pcall(function() PhysicsService:SetPartCollisionGroup(desc, "ControlNPC_PlayersGroup") end)
+                end
+            end)
+        end
+    end
+end
+
+local function revertCollisionGroups()
+    for _,part in ipairs(changedNPCParts) do
+        pcall(function()
+            if part and part.Parent then
+                part.CanCollide = false
+                if pcall(function() return part.CanTouch end) then
+                    pcall(function() part.CanTouch = true end)
+                end
+                pcall(function() PhysicsService:SetPartCollisionGroup(part, "Default") end)
+            end
+        end)
+    end
+    changedNPCParts = {}
+
+    for _,part in ipairs(changedPlayerParts) do
+        pcall(function()
+            if part and part.Parent then
+                pcall(function() PhysicsService:SetPartCollisionGroup(part, "Default") end)
+            end
+        end)
+    end
+    changedPlayerParts = {}
+end
+
+local function restoreCamera()
+    camera.CameraType = Enum.CameraType.Custom
+    pcall(function()
+        if player.Character then
+            local hum = player.Character:FindFirstChildWhichIsA("Humanoid")
+            if hum then camera.CameraSubject = hum end
+        end
+    end)
+end
+
+-- ground detection ignoring player and NPC
+local function getGroundYAtPosition(xzPosition)
+    local origin = Vector3.new(xzPosition.X, 5000, xzPosition.Z)
+    local direction = Vector3.new(0, -10000, 0)
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    local blacklist = {}
+    if controlledNPC then table.insert(blacklist, controlledNPC) end
+    if player and player.Character then table.insert(blacklist, player.Character) end
+    rayParams.FilterDescendantsInstances = blacklist
+    local result = Workspace:Raycast(origin, direction, rayParams)
+    if result and result.Position and result.Instance then
+        return result.Position.Y, result.Instance
+    else
+        return nil, nil
+    end
+end
+
+-- track ground info
+local lastNPCGroundPart = nil
+local lastPlayerGroundPart = nil
+local lastPlayerGroundY = nil
+
+-- Stability enforcement (snapping & zeroing velocities)
+local function enforcePlayerStability(finalY)
+    local myChar = player.Character
+    if not myChar then return end
+    local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+    local myHum = myChar:FindFirstChildWhichIsA("Humanoid")
+    if not myHRP or not myHum or not npcRoot then return end
+
+    local targetPos = Vector3.new(npcRoot.Position.X, finalY, npcRoot.Position.Z)
+    local targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, FIXED_YAW_RAD, 0)
+
+    local dist = (myHRP.Position - targetPos).Magnitude
+    local linVelMag = 0
+    pcall(function() linVelMag = myHRP.AssemblyLinearVelocity.Magnitude end)
+
+    if dist > STABILITY_SNAP_DISTANCE or linVelMag > STABILITY_VEL_THRESHOLD then
+        pcall(function()
+            myHRP.CFrame = targetCFrame
+            myHRP.Velocity = Vector3.new(0,0,0)
+            myHRP.AssemblyLinearVelocity = Vector3.new(0,0,0)
+            myHRP.RotVelocity = Vector3.new(0,0,0)
+            myHRP.AssemblyAngularVelocity = Vector3.new(0,0,0)
+        end)
+    else
+        pcall(function()
+            myHRP.Velocity = Vector3.new(0,0,0)
+            myHRP.AssemblyLinearVelocity = Vector3.new(0,0,0)
+            myHRP.RotVelocity = Vector3.new(0,0,0)
+            myHRP.AssemblyAngularVelocity = Vector3.new(0,0,0)
+        end)
+    end
+
+    -- zero other parts velocities as extra protection
+    for _,part in ipairs(myChar:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            pcall(function()
+                part.Velocity = Vector3.new(0,0,0)
+                part.RotVelocity = Vector3.new(0,0,0)
+            end)
+        end
+    end
+
+    pcall(function() myHum.AutoRotate = false end)
+end
+
+-- immediate clamping (used at start and on jump)
+local function immediateClampUnderNPC()
+    local myChar = player.Character
+    local myHum = myChar and myChar:FindFirstChildWhichIsA("Humanoid")
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not (myChar and myHum and myHRP and controlledNPC and npcRoot) then return end
+
+    local extY = modelHeight(controlledNPC)
+    local bottomY = npcRoot.Position.Y - (extY / 2)
+    local playerH = modelHeight(myChar)
+    -- HRP target so top of player's head is heightBelow under NPC feet
+    local desiredHRPY = bottomY - heightBelow - (playerH * 0.5)
+    local finalY = desiredHRPY
+
+    -- update ground info under player
+    local groundY, groundPart = getGroundYAtPosition(Vector3.new(myHRP.Position.X, 0, myHRP.Position.Z))
+    if groundPart ~= nil then
+        lastPlayerGroundPart = groundPart
+        lastPlayerGroundY = groundY
+    end
+
+    -- when not forcing underground, keep clearance; here we allow underground, but keep a fallback
+    if not allowUnderground then
+        if lastPlayerGroundY then
+            finalY = math.min(finalY, lastPlayerGroundY - MIN_CLEARANCE)
+        elseif groundY then
+            finalY = math.min(finalY, groundY - MIN_CLEARANCE)
+            lastPlayerGroundPart = groundPart
+            lastPlayerGroundY = groundY
+        else
+            finalY = bottomY - 8
+        end
+    end
+
+    -- update npcAttachment target (Align will pull player)
+    if npcAttachment then
+        local targetPos = Vector3.new(npcRoot.Position.X, finalY, npcRoot.Position.Z)
+        pcall(function() npcAttachment.WorldPosition = targetPos end)
+    end
+
+    -- also immediately snap HRP to target (strong immediate prevention of surfacing)
+    pcall(function()
+        if myHRP then
+            local targetPos = Vector3.new(npcRoot.Position.X, finalY, npcRoot.Position.Z)
+            myHRP.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, FIXED_YAW_RAD, 0)
+            myHRP.Velocity = Vector3.new(0,0,0)
+            myHRP.RotVelocity = Vector3.new(0,0,0)
+            myHRP.AssemblyLinearVelocity = Vector3.new(0,0,0)
+            myHRP.AssemblyAngularVelocity = Vector3.new(0,0,0)
+        end
+    end)
+
+    -- cancel jump
+    pcall(function() if myHum then myHum.Jump = false end end)
+end
+
+-- Jump handler
+local function onJumpRequest()
+    if active and npcHumanoid then
+        pcall(function() npcHumanoid.Jump = true end)
+        immediateClampUnderNPC()
+    end
+end
+
+-- clamp other parts below clampY (skip HRP)
+local function clampCharacterPartsBelow(character, clampY)
+    if not character then return end
+    for _,desc in ipairs(character:GetDescendants()) do
+        if desc:IsA("BasePart") and desc.Name ~= "HumanoidRootPart" then
+            local topY = desc.Position.Y + (desc.Size.Y * 0.5)
+            if topY > clampY then
+                local delta = topY - clampY
+                pcall(function()
+                    desc.CFrame = desc.CFrame - Vector3.new(0, delta, 0)
+                    desc.Velocity = Vector3.new(0,0,0)
+                    desc.RotVelocity = Vector3.new(0,0,0)
+                end)
+            end
+        end
+    end
+end
+
+-- Create or update support platform under player (anchored, invisible)
+local function createSupportPlatform()
+    if supportPlatform and supportPlatform.Parent then return end
+    supportPlatform = Instance.new("Part")
+    supportPlatform.Name = "ControlNPC_SupportPlatform"
+    supportPlatform.Size = PLATFORM_SIZE
+    supportPlatform.Anchored = true
+    supportPlatform.CanCollide = true
+    supportPlatform.Transparency = 1
+    supportPlatform.Locked = true
+    supportPlatform.CastShadow = false
+    supportPlatform.Parent = Workspace
+
+    -- Ensure physics groups exist and set platform to collide with player's group (and not NPC group)
+    pcall(function()
+        if pcall(function() PhysicsService:GetCollisionGroups() end) then
+            pcall(function() PhysicsService:CreateCollisionGroup("ControlNPC_NoPlayer") end)
+            pcall(function() PhysicsService:CreateCollisionGroup("ControlNPC_PlayersGroup") end)
+            pcall(function() PhysicsService:CollisionGroupSetCollidable("ControlNPC_NoPlayer", "ControlNPC_PlayersGroup", false) end)
+            pcall(function() PhysicsService:SetPartCollisionGroup(supportPlatform, "ControlNPC_PlayersGroup") end)
+        end
+    end)
+end
+
+-- Remove platform
+local function destroySupportPlatform()
+    if supportPlatform then
+        pcall(function() supportPlatform:Destroy() end)
+        supportPlatform = nil
+    end
+end
+
+-- Heartbeat
+local function heartbeat(dt)
+    if not active then return end
+    if not controlledNPC or not controlledNPC.Parent then cleanup(); return end
+    if not npcHumanoid or npcHumanoid.Health <= 0 then cleanup(); return end
+
+    local myChar = player.Character
+    if not myChar or not myChar.Parent then
+        if npcHumanoid and npcHumanoid.Health > 0 then pcall(function() npcHumanoid.Health = 0 end) end
+        cleanup()
+        return
+    end
+
+    local myHum = myChar:FindFirstChildWhichIsA("Humanoid")
+    local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+    if not myHum or not myHRP then return end
+
+    -- camera follows NPC while controlling
+    if npcHumanoid then
+        camera.CameraType = Enum.CameraType.Custom
+        pcall(function() camera.CameraSubject = npcHumanoid end)
+    end
+
+    if npcRoot and npcRoot.Parent then
+        local extY = modelHeight(controlledNPC)
+        local bottomY = npcRoot.Position.Y - (extY / 2)
+
+        -- update ground under player
+        local groundY, groundPart = getGroundYAtPosition(Vector3.new(myHRP.Position.X, 0, myHRP.Position.Z))
+        if groundPart ~= nil then
+            lastPlayerGroundPart = groundPart
+            lastPlayerGroundY = groundY
+        end
+
+        -- compute desired HRP Y
+        local playerH = modelHeight(myChar)
+        local desiredHRPY = bottomY - heightBelow - (playerH * 0.5)
+        local nominalTargetY = desiredHRPY
+
+        -- ground under NPC
+        local npcGroundY, npcGroundPart = getGroundYAtPosition(Vector3.new(npcRoot.Position.X, 0, npcRoot.Position.Z))
+        local prevNPCGroundPart = lastNPCGroundPart
+        if npcGroundPart ~= lastNPCGroundPart then
+            lastNPCGroundPart = npcGroundPart
+        end
+
+        -- choose finalY (allow underground by default, fallback if no data)
+        local finalY = nominalTargetY
+        if not allowUnderground then
+            if lastPlayerGroundY then
+                finalY = math.min(finalY, lastPlayerGroundY - MIN_CLEARANCE)
+            elseif groundY then
+                finalY = math.min(finalY, groundY - MIN_CLEARANCE)
+                lastPlayerGroundPart = groundPart
+                lastPlayerGroundY = groundY
+            else
+                finalY = bottomY - 8
+            end
+        else
+            if not nominalTargetY then finalY = bottomY - 8 end
+        end
+
+        -- detect NPC leaving platform case
+        if npcGroundPart == nil and prevNPCGroundPart ~= nil then
+            finalY = bottomY - 8
+            lastPlayerGroundPart = nil
+            lastPlayerGroundY = nil
+        end
+
+        -- Update npcAttachment target (Align will pull player here)
+        if npcAttachment then
+            local targetPos = Vector3.new(npcRoot.Position.X, finalY, npcRoot.Position.Z)
+            pcall(function() npcAttachment.WorldPosition = targetPos end)
+        end
+
+        -- Move support platform underneath the HRP so the player physically stays on an anchored surface
+        if supportPlatform then
+            pcall(function()
+                local platformY = finalY - (playerH * 0.5) - PLATFORM_Y_OFFSET
+                supportPlatform.CFrame = CFrame.new(npcRoot.Position.X, platformY, npcRoot.Position.Z)
+            end)
+        end
+
+        -- clamp other parts below finalY
+        clampCharacterPartsBelow(myChar, finalY)
+
+        -- ensure movement still allowed
+        pcall(function() myHum.PlatformStand = false end)
+
+        -- extra stability enforcement so local player can't be knocked off balance under the NPC
+        enforcePlayerStability(finalY)
+    end
+
+    -- WalkTo & speed logic
+    if npcHumanoid and npcRoot and npcHumanoid.Health > 0 then
+        local myHum = player.Character and player.Character:FindFirstChildWhichIsA("Humanoid")
+        local md = myHum and myHum.MoveDirection or Vector3.new(0,0,0)
+        local desiredSpeed = tonumber(speedBox.Text) or 16
+
+        local isMoving = (md and md.Magnitude > WALK_THRESHOLD) and walkEnabled
+
+        if isMoving then
+            if not wasPlayerMoving then
+                pcall(function() npcHumanoid.WalkSpeed = desiredSpeed end)
+            end
+
+            local dirFlat = Vector3.new(md.X, 0, md.Z)
+            if dirFlat.Magnitude < 1e-4 then
+                dirFlat = Vector3.new(npcRoot.CFrame.LookVector.X, 0, npcRoot.CFrame.LookVector.Z)
+            end
+            dirFlat = dirFlat.Unit
+            local destination = npcRoot.Position + dirFlat * MOVE_DISTANCE
+            pcall(function() npcHumanoid:MoveTo(destination) end)
+        else
+            if wasPlayerMoving then
+                pcall(function()
+                    npcHumanoid:MoveTo(npcRoot.Position)
+                    npcHumanoid.WalkSpeed = 0
+                end)
+            else
+                pcall(function()
+                    npcHumanoid:MoveTo(npcRoot.Position)
+                    npcHumanoid.WalkSpeed = 0
+                end)
+            end
+        end
+
+        wasPlayerMoving = isMoving
+    end
+
+    -- NPC JumpPower
+    if npcHumanoid then
+        local jp = tonumber(jumpBox.Text)
+        if jp and jp > 0 then pcall(function() npcHumanoid.JumpPower = jp end) end
+    end
+
+    -- Backup: zero velocities every heartbeat as a last resort
+    if player.Character then
+        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            pcall(function()
+                hrp.Velocity = Vector3.new(0,0,0)
+                hrp.RotVelocity = Vector3.new(0,0,0)
+                hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                hrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
+            end)
+        end
+    end
+end
+
+-- teleport local player above a world position (no anchoring)
+local function teleportPlayerAbove(pos, height)
+    height = height or 10
+    local myChar = player.Character
+    if not myChar then return end
+    local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+    pcall(function()
+        myHRP.CFrame = CFrame.new(pos + Vector3.new(0, height, 0)) * CFrame.Angles(0, FIXED_YAW_RAD, 0)
+        pcall(function() myHRP.Velocity = Vector3.new(0,0,0); myHRP.AssemblyLinearVelocity = Vector3.new(0,0,0) end)
+    end)
+end
+
+-- Create AlignPosition & AlignOrientation to follow npcAttachment
+local function createAlignConstraintsForCharacter(hrp)
+    if not hrp then return end
+
+    playerAttachment = Instance.new("Attachment")
+    playerAttachment.Name = "ControlNPC_PlayerAttachment"
+    playerAttachment.Parent = hrp
+    playerAttachment.Position = Vector3.new(0,0,0)
+
+    alignPos = Instance.new("AlignPosition")
+    alignPos.Name = "ControlNPC_AlignPosition"
+    alignPos.Attachment0 = playerAttachment
+    alignPos.MaxForce = ALIGN_MAX_FORCE
+    alignPos.Responsiveness = ALIGN_RESPONSIVENESS
+    alignPos.MaxVelocity = 1e4
+    alignPos.RigidityEnabled = true
+    alignPos.ApplyAtCenterOfMass = false
+    alignPos.Parent = hrp
+
+    alignOri = Instance.new("AlignOrientation")
+    alignOri.Name = "ControlNPC_AlignOrientation"
+    alignOri.Attachment0 = playerAttachment
+    alignOri.MaxTorque = ALIGN_MAX_TORQUE
+    alignOri.Responsiveness = ALIGN_RESPONSIVENESS
+    alignOri.PrimaryAxisOnly = false
+    alignOri.RigidityEnabled = true
+    alignOri.Parent = hrp
+end
+
+local function destroyAlignConstraints()
+    pcall(function() if alignPos then alignPos:Destroy() end end)
+    pcall(function() if alignOri then alignOri:Destroy() end end)
+    pcall(function() if playerAttachment then playerAttachment:Destroy() end end)
+    alignPos = nil
+    alignOri = nil
+    playerAttachment = nil
+    npcAttachment = nil
+end
+
+-- Enable control
+local function enableControl()
+    if active then return end
+    local char = player.Character
+    if not char then StarterGui:SetCore("ChatMakeSystemMessage", {Text = "No character found."}); return end
+
+    local npc = findNearestNPC()
+    if not npc then StarterGui:SetCore("ChatMakeSystemMessage", {Text = "No NPC found nearby."}); return end
+
+    local hum = npc:FindFirstChildOfClass("Humanoid")
+    local hrp = npc:FindFirstChild("HumanoidRootPart") or npc.PrimaryPart
+    if not hum or not hrp then StarterGui:SetCore("ChatMakeSystemMessage", {Text = "Nearest NPC missing Humanoid/RootPart."}); return end
+
+    controlledNPC = npc
+    npcHumanoid = hum
+    npcRoot = hrp
+    active = true
+    toggleBtn.Text = "Toggle Control: ON"
+    walkEnabled = true
+    walkToggle.Text = "WalkTo: On"
+
+    npcOriginalWalkSpeed = nil
+    pcall(function() npcOriginalWalkSpeed = npcHumanoid.WalkSpeed end)
+
+    neutralizeNPC(controlledNPC)
+
+    pcall(function()
+        if pcall(function() PhysicsService:GetCollisionGroups() end) then
+            pcall(function() PhysicsService:CreateCollisionGroup("ControlNPC_NoPlayer") end)
+            pcall(function() PhysicsService:CreateCollisionGroup("ControlNPC_PlayersGroup") end)
+            pcall(function() PhysicsService:CollisionGroupSetCollidable("ControlNPC_NoPlayer", "ControlNPC_PlayersGroup", false) end)
+            assignCollisionGroupToModel(controlledNPC, "ControlNPC_NoPlayer")
+            assignPlayerPartsToPlayersGroup()
+        end
+    end)
+
+    camera.CameraType = Enum.CameraType.Custom
+    pcall(function() camera.CameraSubject = npcHumanoid end)
+
+    if not heartbeatConn then heartbeatConn = RunService.Heartbeat:Connect(heartbeat) end
+    if not jumpConn then jumpConn = UserInputService.JumpRequest:Connect(onJumpRequest) end
+
+    local myChar = player.Character
+    if myChar then
+        local myHum = myChar:FindFirstChildWhichIsA("Humanoid")
+        if myHum then
+            pcall(function()
+                myOriginalJumpPower = myHum.JumpPower
+                myHum.JumpPower = 50
+
+                -- save and disable autorotate for stability
+                pcall(function()
+                    myOriginalAutoRotate = myHum.AutoRotate
+                    myHum.AutoRotate = false
+                end)
+            end)
+        end
+
+        local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+        if myHRP then
+            createAlignConstraintsForCharacter(myHRP)
+
+            npcAttachment = Instance.new("Attachment")
+            npcAttachment.Name = "ControlNPC_NPCAttachment"
+            npcAttachment.Parent = npcRoot
+
+            if alignPos then alignPos.Attachment1 = npcAttachment end
+            if alignOri then alignOri.Attachment1 = npcAttachment end
+
+            -- create the support platform (anchored, invisible)
+            createSupportPlatform()
+
+            -- initially clamp under NPC
+            immediateClampUnderNPC()
+        end
+    end
+
+    if isTouch then
+        local function dummyAction(actionName, inputState, inputObject)
+            return Enum.ContextActionResult.Sink
+        end
+        pcall(function() ContextActionService:BindAction("ControlNPC_Touch", dummyAction, false, Enum.KeyCode.ButtonR3) end)
+    end
+
+    local function attachPlayerSignals()
+        local myChar = player.Character
+        if not myChar then return end
+        local myHum = myChar:FindFirstChildWhichIsA("Humanoid")
+        if myHum then
+            if playerDiedConn then playerDiedConn:Disconnect(); playerDiedConn = nil end
+            playerDiedConn = myHum.Died:Connect(function()
+                if npcHumanoid and npcHumanoid.Health > 0 then pcall(function() npcHumanoid.Health = 0 end) end
+                cleanup()
+            end)
+        end
+    end
+    attachPlayerSignals()
+    if not charAddedConn then
+        charAddedConn = player.CharacterAdded:Connect(function()
+            task.wait(0.1)
+            attachPlayerSignals()
+        end)
+    end
+
+    if npcHumanoid then
+        if npcDiedConn then npcDiedConn:Disconnect(); npcDiedConn = nil end
+        npcDiedConn = npcHumanoid.Died:Connect(function()
+            local deathPos
+            pcall(function() deathPos = npcRoot and npcRoot.Position or controlledNPC.PrimaryPart and controlledNPC.PrimaryPart.Position end)
+            if deathPos then teleportPlayerAbove(deathPos, 10) end
+            cleanup()
+        end)
+    end
+end
+
+-- Disable control and cleanup
+local function disableControl()
+    if controlledNPC and npcRoot then
+        local pos
+        pcall(function() pos = npcRoot.Position end)
+        if not pos and controlledNPC and controlledNPC.PrimaryPart then pcall(function() pos = controlledNPC.PrimaryPart.Position end) end
+        if pos then teleportPlayerAbove(pos, 10) end
+    end
+    cleanup()
+end
+
+function cleanup()
+    active = false
+    walkEnabled = false
+    wasPlayerMoving = false
+
+    if npcHumanoid and npcOriginalWalkSpeed then
+        pcall(function() npcHumanoid.WalkSpeed = npcOriginalWalkSpeed end)
+    end
+
+    if heartbeatConn then heartbeatConn:Disconnect() heartbeatConn = nil end
+    if jumpConn then jumpConn:Disconnect() jumpConn = nil end
+    if charAddedConn then charAddedConn:Disconnect() charAddedConn = nil end
+    if playerDiedConn then playerDiedConn:Disconnect() playerDiedConn = nil end
+    if npcDiedConn then npcDiedConn:Disconnect() npcDiedConn = nil end
+
+    destroyAlignConstraints()
+    pcall(function() if npcAttachment then npcAttachment:Destroy() end end)
+    npcAttachment = nil
+
+    local myChar = player.Character
+    if myChar then
+        local myHum = myChar:FindFirstChildWhichIsA("Humanoid")
+        if myHum then
+            pcall(function()
+                if myOriginalJumpPower then myHum.JumpPower = myOriginalJumpPower end
+                myHum.PlatformStand = false
+                if myOriginalAutoRotate ~= nil then
+                    pcall(function() myHum.AutoRotate = myOriginalAutoRotate end)
+                    myOriginalAutoRotate = nil
+                else
+                    pcall(function() myHum.AutoRotate = true end)
+                end
+            end)
+        end
+        local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+        if myHRP then
+            pcall(function() myHRP.Velocity = Vector3.new(0,0,0); myHRP.AssemblyLinearVelocity = Vector3.new(0,0,0) end)
+        end
+    end
+
+    restoreCamera()
+
+    pcall(function() revertCollisionGroups() end)
+
+    destroySupportPlatform()
+
+    controlledNPC = nil
+    npcHumanoid = nil
+    npcRoot = nil
+    npcOriginalWalkSpeed = nil
+
+    toggleBtn.Text = "Toggle Control: OFF"
+    walkToggle.Text = "WalkTo: Off"
+end
+
+local function killControlledNPC()
+    if npcHumanoid then pcall(function() npcHumanoid.Health = 0 end) end
+end
+
+-- GUI bindings
+toggleBtn.MouseButton1Click:Connect(function()
+    if active then disableControl() else enableControl() end
+end)
+
+walkToggle.MouseButton1Click:Connect(function()
+    walkEnabled = not walkEnabled
+    walkToggle.Text = "WalkTo: " .. (walkEnabled and "On" or "Off")
+    if not walkEnabled and npcHumanoid and npcRoot then
+        pcall(function()
+            npcHumanoid:MoveTo(npcRoot.Position)
+            npcHumanoid.WalkSpeed = 0
+        end)
+    end
+end)
+
+killBtn.MouseButton1Click:Connect(function() killControlledNPC() end)
+
+-- Height TextBox focus lost: accept negative numbers
+heightBox.FocusLost:Connect(function()
+    local n = tonumber(heightBox.Text)
+    if n then
+        heightBelow = n
+    else
+        heightBox.Text = tostring(heightBelow)
+    end
+    if active then immediateClampUnderNPC() end
+end)
+
+-- Holdable up/down buttons to adjust heightBelow (negatives allowed)
+local adjusting = false
+local adjustConn = nil
+local ADJUST_STEP = 0.02
+local ADJUST_INTERVAL = 0.05
+
+local function startAdjusting(delta)
+    adjusting = true
+    if adjustConn then adjustConn:Disconnect() adjustConn = nil end
+    adjustConn = RunService.Heartbeat:Connect(function(dt)
+        if not adjusting then return end
+        heightBelow = heightBelow + delta * (dt / ADJUST_INTERVAL) * ADJUST_STEP
+        heightBox.Text = string.format("%.3f", heightBelow)
+        if active then immediateClampUnderNPC() end
+    end)
+end
+
+local function stopAdjusting()
+    adjusting = false
+    if adjustConn then adjustConn:Disconnect() adjustConn = nil end
+end
+
+upBtn.MouseButton1Down:Connect(function() startAdjusting(1) end)
+upBtn.MouseButton1Up:Connect(stopAdjusting)
+upBtn.MouseLeave:Connect(stopAdjusting)
+
+downBtn.MouseButton1Down:Connect(function() startAdjusting(-1) end)
+downBtn.MouseButton1Up:Connect(stopAdjusting)
+downBtn.MouseLeave:Connect(stopAdjusting)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        stopAdjusting()
+    end
+end)
+
+visibilityToggle.MouseButton1Click:Connect(function()
+    frame.Visible = not frame.Visible
+    if frame.Visible then
+        visibilityToggle.Text = "▣"
+    else
+        visibilityToggle.Text = "▢"
+    end
+end)
+
+script.AncestryChanged:Connect(function(_, parent)
+    if not parent then cleanup() end
+end)
+
+StarterGui:SetCore("ChatMakeSystemMessage", {Text = "[ControlNPC] Ready. Control an NPC — local player will remain under it (underground), platform support enabled."})
