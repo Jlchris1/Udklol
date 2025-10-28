@@ -1,8 +1,7 @@
--- Control NPC LocalScript (underground + stable platform; velocity resetting + player platform)
--- Modified to: 1) ensure local player always remains under NPC surface even if NPC is very thin
---             2) make player platform follow the local player continuously, recreate after respawn
---             3) destroy platforms when toggle is turned off and recreate on toggle on (works after respawn)
--- Place this in StarterPlayer > StarterPlayerScripts
+-- Control NPC LocalScript (stable freeze-under-NPC behaviour)
+-- Ensures the local player stands entirely still directly underneath the NPC.
+-- Improved: when NPC stands on a thin part, player Y locks to the top face of that thin part
+-- (so heightBelow textbox behaves identically for thin vs thick supports).
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,33 +9,32 @@ local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
 local PhysicsService = game:GetService("PhysicsService")
-local ContextActionService = game:GetService("ContextActionService")
 
 local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 
 -- CONFIG
 local DEFAULT_HEIGHT_GAP = 0.05         -- positive -> player sits below NPC surface by this amount
-local MIN_CLEARANCE = 1.6
 local WALK_THRESHOLD = 0.02
 local MOVE_DISTANCE = 100
 local FIXED_YAW_RAD = math.rad(90)
 
--- Align tuning
-local ALIGN_MAX_FORCE = 1e5
-local ALIGN_RESPONSIVENESS = 30
-local ALIGN_MAX_TORQUE = 1e5
+-- Align tuning (made very aggressive for a rock-solid lock)
+local ALIGN_MAX_FORCE = 1e12
+local ALIGN_RESPONSIVENESS = 200
+local ALIGN_MAX_TORQUE = 1e12
+local ALIGN_MAX_VELOCITY = 1e6
 
 -- Platform tuning
-local NPC_PLATFORM_SIZE = Vector3.new(10, 1, 10)
-local PLAYER_PLATFORM_SIZE = Vector3.new(6, 1, 6) -- smaller platform under player
+local NPC_PLATFORM_SIZE = Vector3.new(16, 2, 16)
+local PLAYER_PLATFORM_SIZE = Vector3.new(6, 1, 6)
 local PLATFORM_Y_OFFSET = 0.5
-local PLAYER_PLATFORM_DEPTH = 3 -- user requested "3 underneath local player"
+local PLAYER_PLATFORM_DEPTH = 3
 
 -- Behavior
 local allowUnderground = true
 
--- UI (kept minimal from previous)
+-- UI (omitted comment — same as previous; UI creation identical to earlier script)
 local gui = Instance.new("ScreenGui")
 gui.Name = "ControlNPCGui"
 gui.ResetOnSpawn = false
@@ -44,8 +42,6 @@ gui.IgnoreGuiInset = true
 gui.Parent = player:WaitForChild("PlayerGui")
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 pcall(function() gui.DisplayOrder = 9999 end)
-
-local isTouch = UserInputService.TouchEnabled
 
 local frame = Instance.new("Frame")
 frame.Name = "ControlPanel"
@@ -55,7 +51,7 @@ frame.AnchorPoint = Vector2.new(0,0)
 frame.ZIndex = 1000
 frame.Parent = gui
 frame.Visible = true
-frame.Size = UDim2.new(0, 260, 0, 220)
+frame.Size = UDim2.new(0, 320, 0, 190)
 frame.Position = UDim2.new(0, 10, 0, 10)
 
 local title = Instance.new("TextLabel", frame)
@@ -77,7 +73,7 @@ toggleBtn.ZIndex = 1001
 
 local walkToggle = Instance.new("TextButton", frame)
 walkToggle.Size = UDim2.new(0.48, -6, 0, 20)
-walkToggle.Position = UDim2.new(0, 6, 0, 62)
+walkToggle.Position = UDim2.new(0, 6, 0, 56)
 walkToggle.Text = "WalkTo: On"
 walkToggle.Font = Enum.Font.SourceSans
 walkToggle.TextSize = 12
@@ -85,15 +81,23 @@ walkToggle.ZIndex = 1001
 
 local killBtn = Instance.new("TextButton", frame)
 killBtn.Size = UDim2.new(0.48, -6, 0, 20)
-killBtn.Position = UDim2.new(0.52, 0, 0, 62)
+killBtn.Position = UDim2.new(0.52, 0, 0, 56)
 killBtn.Text = "Kill NPC"
 killBtn.Font = Enum.Font.SourceSans
 killBtn.TextSize = 12
 killBtn.ZIndex = 1001
 
+local noclipBtn = Instance.new("TextButton", frame)
+noclipBtn.Size = UDim2.new(0.48, -6, 0, 20)
+noclipBtn.Position = UDim2.new(0.02, 0, 0, 86)
+noclipBtn.Text = "NPC Noclip: Off"
+noclipBtn.Font = Enum.Font.SourceSans
+noclipBtn.TextSize = 12
+noclipBtn.ZIndex = 1001
+
 local heightLabel = Instance.new("TextLabel", frame)
 heightLabel.Size = UDim2.new(0.6, -6, 0, 18)
-heightLabel.Position = UDim2.new(0, 6, 0, 92)
+heightLabel.Position = UDim2.new(0.5, 6, 0, 86)
 heightLabel.Text = "Height Below (studs):"
 heightLabel.Font = Enum.Font.SourceSans
 heightLabel.TextSize = 12
@@ -103,7 +107,7 @@ heightLabel.ZIndex = 1001
 
 local heightBox = Instance.new("TextBox", frame)
 heightBox.Size = UDim2.new(0.4, -6, 0, 18)
-heightBox.Position = UDim2.new(0.6, 0, 0, 92)
+heightBox.Position = UDim2.new(0.8, -54, 0, 86)
 heightBox.Text = tostring(DEFAULT_HEIGHT_GAP)
 heightBox.Font = Enum.Font.SourceSans
 heightBox.TextSize = 12
@@ -113,7 +117,7 @@ heightBox.TextEditable = true
 
 local upBtn = Instance.new("TextButton", frame)
 upBtn.Size = UDim2.new(0.195, -4, 0, 20)
-upBtn.Position = UDim2.new(0.6, 4, 0, 118)
+upBtn.Position = UDim2.new(0.5, 4, 0, 112)
 upBtn.Text = "▲"
 upBtn.Font = Enum.Font.SourceSansBold
 upBtn.TextSize = 14
@@ -121,7 +125,7 @@ upBtn.ZIndex = 1001
 
 local downBtn = Instance.new("TextButton", frame)
 downBtn.Size = UDim2.new(0.195, -4, 0, 20)
-downBtn.Position = UDim2.new(0.805, 0, 0, 118)
+downBtn.Position = UDim2.new(0.705, 0, 0, 112)
 downBtn.Text = "▼"
 downBtn.Font = Enum.Font.SourceSansBold
 downBtn.TextSize = 14
@@ -165,26 +169,6 @@ jumpBox.TextSize = 11
 jumpBox.ClearTextOnFocus = false
 jumpBox.ZIndex = 1001
 
-local jumpCountLabel = Instance.new("TextLabel", frame)
-jumpCountLabel.Size = UDim2.new(0.5, -6, 0, 16)
-jumpCountLabel.Position = UDim2.new(0, 6, 0, 184)
-jumpCountLabel.Text = "Jumps: 0"
-jumpCountLabel.Font = Enum.Font.SourceSans
-jumpCountLabel.TextSize = 11
-jumpCountLabel.BackgroundTransparency = 1
-jumpCountLabel.TextColor3 = Color3.new(1,1,1)
-jumpCountLabel.ZIndex = 1001
-
-local fallCountLabel = Instance.new("TextLabel", frame)
-fallCountLabel.Size = UDim2.new(0.5, -6, 0, 16)
-fallCountLabel.Position = UDim2.new(0.5, 0, 0, 184)
-fallCountLabel.Text = "Falls: 0"
-fallCountLabel.Font = Enum.Font.SourceSans
-fallCountLabel.TextSize = 11
-fallCountLabel.BackgroundTransparency = 1
-fallCountLabel.TextColor3 = Color3.new(1,1,1)
-fallCountLabel.ZIndex = 1001
-
 local visibilityToggle = Instance.new("TextButton")
 visibilityToggle.Name = "VisibilityToggle"
 visibilityToggle.Size = UDim2.new(0, 40, 0, 40)
@@ -211,6 +195,7 @@ local jumpConn = nil
 local charAddedConn = nil
 local playerDiedConn = nil
 local npcDiedConn = nil
+local npcPlatformStandConn = nil
 
 local walkEnabled = true
 local npcOriginalWalkSpeed = nil
@@ -220,6 +205,7 @@ local changedPlayerParts = {}
 
 local myOriginalJumpPower = nil
 local myOriginalAutoRotate = nil
+local myOriginalWalkSpeed = nil
 
 local wasPlayerMoving = false
 
@@ -234,14 +220,34 @@ local playerSupportPlatform = nil
 
 local heightBelow = DEFAULT_HEIGHT_GAP
 
--- Jump/fall detection
-local jumpCount = 0
-local fallCount = 0
-local prevVy = 0
-local lastEventTime = 0
-local EVENT_COOLDOWN = 0.18
-local JUMP_VY_THRESHOLD = 2
-local FALL_VY_THRESHOLD = -2
+-- NPC noclip
+local npcNoclipToggle = false
+local npcNoclipParts = {}
+local function setNpcNoClip(enabled)
+    if not controlledNPC or not npcRoot then return end
+    if enabled then
+        createNpcSupportPlatform()
+        pcall(function()
+            npcSupportPlatform.Size = NPC_PLATFORM_SIZE
+            npcSupportPlatform.CFrame = CFrame.new(npcRoot.Position.X, npcRoot.Position.Y - 1 - PLATFORM_Y_OFFSET, npcRoot.Position.Z)
+        end)
+
+        npcNoclipParts = {}
+        for _,v in ipairs(controlledNPC:GetDescendants()) do
+            if v:IsA("BasePart") then
+                table.insert(npcNoclipParts, {part = v, prev = v.CanCollide})
+                pcall(function() v.CanCollide = false end)
+            end
+        end
+    else
+        for _,row in ipairs(npcNoclipParts) do
+            local p = row.part
+            local prev = row.prev
+            pcall(function() if p and p.Parent then p.CanCollide = prev end end)
+        end
+        npcNoclipParts = {}
+    end
+end
 
 -- Utility functions
 local function modelHeight(model)
@@ -267,6 +273,94 @@ local function findNearestNPC()
         end
     end
     return nearest
+end
+
+-- Raycast downward from a given origin, blacklisting NPC/player
+local function rayDown(origin, distance)
+    local dir = Vector3.new(0, -math.abs(distance), 0)
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    local blacklist = {}
+    if controlledNPC then
+        for _, v in ipairs(controlledNPC:GetDescendants()) do if v:IsA("BasePart") then table.insert(blacklist, v) end end
+    end
+    if player and player.Character then
+        for _, v in ipairs(player.Character:GetDescendants()) do if v:IsA("BasePart") then table.insert(blacklist, v) end end
+    end
+    rayParams.FilterDescendantsInstances = blacklist
+    return Workspace:Raycast(origin, dir, rayParams)
+end
+
+-- Improved supporting-surface finder:
+-- For each NPC basepart, cast down starting just above the part's bottom; when a part is hit,
+-- compute its top Y (hitPart.Position.Y + hitPart.Size.Y/2) and treat that as the candidate surface Y.
+-- Only accept candidate tops that are actually below the NPC part bottom (prevents overhangs)
+-- and pick the highest candidate top across all parts.
+local function findSupportingSurface()
+    if not controlledNPC then return nil, nil end
+    local bestY = nil
+    local bestPart = nil
+    local EPSILON = 0.04
+    local TOL = 0.02
+
+    for _,p in ipairs(controlledNPC:GetDescendants()) do
+        if p:IsA("BasePart") then
+            -- bottom Y of the NPC part in worldspace
+            local partBottomY = p.Position.Y - (p.Size.Y * 0.5)
+            -- ray origin just above that bottom face
+            local origin = Vector3.new(p.Position.X, partBottomY + EPSILON, p.Position.Z)
+            local res = rayDown(origin, 500)
+            if res and res.Instance then
+                -- If hit a BasePart-like instance, derive the part top Y explicitly.
+                if res.Instance:IsA("BasePart") then
+                    local hitPart = res.Instance
+                    local hitTopY = hitPart.Position.Y + (hitPart.Size.Y * 0.5)
+                    -- accept only if the part top is below (or essentially equal) to the NPC part bottom
+                    if hitTopY <= partBottomY + TOL then
+                        -- sanity: ensure the top is actually below the ray origin (avoids weird above hits)
+                        if hitTopY < origin.Y - 1e-5 then
+                            if (not bestY) or (hitTopY > bestY) then
+                                bestY = hitTopY
+                                bestPart = hitPart
+                            end
+                        end
+                    end
+                else
+                    -- fallback: for non-BasePart hits use exact hit point if it's below the part bottom
+                    local hitY = res.Position and res.Position.Y
+                    if hitY and hitY <= partBottomY + TOL and hitY < origin.Y - 1e-5 then
+                        if (not bestY) or (hitY > bestY) then
+                            bestY = hitY
+                            bestPart = res.Instance
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- fallback long ray from above NPC root if no part-level hits were accepted
+    if not bestY and npcRoot then
+        local origin = Vector3.new(npcRoot.Position.X, npcRoot.Position.Y + 50, npcRoot.Position.Z)
+        local res = rayDown(origin, 500)
+        if res and res.Instance then
+            if res.Instance:IsA("BasePart") then
+                local hitPart = res.Instance
+                local hitTopY = hitPart.Position.Y + (hitPart.Size.Y * 0.5)
+                if hitTopY < npcRoot.Position.Y - 1e-4 then
+                    bestY = hitTopY
+                    bestPart = hitPart
+                end
+            else
+                if res.Position and res.Position.Y < npcRoot.Position.Y - 1e-4 then
+                    bestY = res.Position.Y
+                    bestPart = res.Instance
+                end
+            end
+        end
+    end
+
+    return bestY, bestPart
 end
 
 local function safeSetPartPropsAsNoCollision(part)
@@ -350,41 +444,7 @@ local function restoreCamera()
     end)
 end
 
--- Raycast ground ignoring player and NPC, with a maxAllowedY filter so we don't accept hits above NPC
-local function getGroundYAtPosition(xzPosition, maxAllowedY)
-    local origin = Vector3.new(xzPosition.X, 5000, xzPosition.Z)
-    local direction = Vector3.new(0, -10000, 0)
-    local rayParams = RaycastParams.new()
-    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-    local blacklist = {}
-
-    -- blacklist all BaseParts from controlledNPC (safer)
-    if controlledNPC then
-        for _, v in ipairs(controlledNPC:GetDescendants()) do
-            if v:IsA("BasePart") then table.insert(blacklist, v) end
-        end
-    end
-    -- blacklist all BaseParts from the player character
-    if player and player.Character then
-        for _, v in ipairs(player.Character:GetDescendants()) do
-            if v:IsA("BasePart") then table.insert(blacklist, v) end
-        end
-    end
-
-    rayParams.FilterDescendantsInstances = blacklist
-    local result = Workspace:Raycast(origin, direction, rayParams)
-    if result and result.Position and result.Instance then
-        -- if caller provided a maxAllowedY, reject hits that are higher than that
-        if maxAllowedY and result.Position.Y > maxAllowedY then
-            return nil, nil
-        end
-        return result.Position.Y, result.Instance
-    else
-        return nil, nil
-    end
-end
-
--- Create/destroy NPC platform (anchored under NPC)
+-- Create/destroy NPC platform
 local function createNpcSupportPlatform()
     if npcSupportPlatform and npcSupportPlatform.Parent then return end
     npcSupportPlatform = Instance.new("Part")
@@ -410,7 +470,7 @@ local function destroyNpcSupportPlatform()
     end
 end
 
--- Create/destroy player platform (anchored under the local player)
+-- Create/destroy player platform
 local function createPlayerSupportPlatform()
     if playerSupportPlatform and playerSupportPlatform.Parent then return end
     playerSupportPlatform = Instance.new("Part")
@@ -418,7 +478,7 @@ local function createPlayerSupportPlatform()
     playerSupportPlatform.Size = PLAYER_PLATFORM_SIZE
     playerSupportPlatform.Anchored = true
     playerSupportPlatform.CanCollide = true
-    playerSupportPlatform.Transparency = 1  -- invisible
+    playerSupportPlatform.Transparency = 1
     playerSupportPlatform.Locked = true
     playerSupportPlatform.CastShadow = false
     playerSupportPlatform.Parent = Workspace
@@ -436,7 +496,7 @@ local function destroyPlayerSupportPlatform()
     end
 end
 
--- Helper to zero velocities on a character
+-- zero velocities helper
 local function zeroCharacterVelocities(character)
     if not character then return end
     for _,desc in ipairs(character:GetDescendants()) do
@@ -444,7 +504,6 @@ local function zeroCharacterVelocities(character)
             pcall(function()
                 desc.Velocity = Vector3.new(0,0,0)
                 desc.RotVelocity = Vector3.new(0,0,0)
-                -- Assembly velocities (newer API) as extra fallback
                 if pcall(function() return desc.AssemblyLinearVelocity end) then
                     desc.AssemblyLinearVelocity = Vector3.new(0,0,0)
                 end
@@ -463,39 +522,42 @@ local function immediateClampUnderNPC()
     local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
     if not (myChar and myHum and myHRP and controlledNPC and npcRoot) then return end
 
-    -- compute NPC lowest part first (this handles thin parts correctly)
-    local npcLowest = math.huge
-    for _,p in ipairs(controlledNPC:GetDescendants()) do
-        if p:IsA("BasePart") then
-            local partBottom = p.Position.Y - (p.Size.Y * 0.5)
-            if partBottom < npcLowest then npcLowest = partBottom end
+    local bottomY, surfacePart = findSupportingSurface()
+
+    if not bottomY then
+        local npcLowest = math.huge
+        for _,p in ipairs(controlledNPC:GetDescendants()) do
+            if p:IsA("BasePart") then
+                local partBottom = p.Position.Y - (p.Size.Y * 0.5)
+                if partBottom < npcLowest then npcLowest = partBottom end
+            end
+        end
+        if npcLowest < math.huge then
+            bottomY = npcLowest
+        else
+            bottomY = npcRoot.Position.Y
         end
     end
 
-    -- prefer raycast under NPC but only accept a hit if it's at or below the NPC's lowest part
-    local npcGroundY, npcGroundPart = getGroundYAtPosition(Vector3.new(npcRoot.Position.X, 0, npcRoot.Position.Z), npcLowest + 0.01)
-
-    local bottomY
-    if npcGroundY then bottomY = npcGroundY
-    elseif npcLowest < math.huge then bottomY = npcLowest
-    else bottomY = npcRoot.Position.Y end
-
     local playerH = modelHeight(myChar)
-    -- finalY chosen so player's head will be at bottomY - heightBelow exactly (ensures player stays under even for thin parts)
     local desiredHRPY = bottomY - heightBelow - (playerH * 0.5)
     local finalY = desiredHRPY
 
-    -- update npc attachment target
     if npcAttachment then
         local targetPos = Vector3.new(npcRoot.Position.X, finalY, npcRoot.Position.Z)
         pcall(function() npcAttachment.WorldPosition = targetPos end)
     end
 
-    -- snap HRP to target and zero velocities
-    pcall(function()
-        myHRP.CFrame = CFrame.new(Vector3.new(npcRoot.Position.X, finalY, npcRoot.Position.Z)) * CFrame.Angles(0, FIXED_YAW_RAD, 0)
-        zeroCharacterVelocities(myChar)
-    end)
+    -- strong immediate snap: temporarily PlatformStand + repeated HRP set to ensure initial lock
+    pcall(function() myHum.PlatformStand = true end)
+    for i=1,6 do
+        pcall(function()
+            myHRP.CFrame = CFrame.new(npcRoot.Position.X, finalY, npcRoot.Position.Z) * CFrame.Angles(0, FIXED_YAW_RAD, 0)
+            zeroCharacterVelocities(myChar)
+        end)
+        task.wait(0.01)
+    end
+    -- keep PlatformStand true (we want the player to remain frozen). We'll restore on cleanup.
 end
 
 -- Jump handler
@@ -523,16 +585,8 @@ local function clampCharacterPartsBelow(character, clampY)
     end
 end
 
-local function recordJump()
-    jumpCount = jumpCount + 1
-    pcall(function() jumpCountLabel.Text = "Jumps: " .. tostring(jumpCount) end)
-end
-local function recordFall()
-    fallCount = fallCount + 1
-    pcall(function() fallCountLabel.Text = "Falls: " .. tostring(fallCount) end)
-end
-
 -- Heartbeat: main loop
+local accumulatorZeroVel = 0
 local function heartbeat(dt)
     if not active then return end
     if not controlledNPC or not controlledNPC.Parent then cleanup(); return end
@@ -555,72 +609,69 @@ local function heartbeat(dt)
         pcall(function() camera.CameraSubject = npcHumanoid end)
     end
 
-    -- determine bottomY under NPC surface (compute npcLowest first and pass to raycast)
-    local extY = modelHeight(controlledNPC)
+    -- determine bottomY under NPC
+    local bottomY, surfacePart = findSupportingSurface()
 
-    local npcLowest = math.huge
-    for _,p in ipairs(controlledNPC:GetDescendants()) do
-        if p:IsA("BasePart") then
-            local partBottom = p.Position.Y - (p.Size.Y * 0.5)
-            if partBottom < npcLowest then npcLowest = partBottom end
+    if not bottomY then
+        local npcLowest = math.huge
+        for _,p in ipairs(controlledNPC:GetDescendants()) do
+            if p:IsA("BasePart") then
+                local partBottom = p.Position.Y - (p.Size.Y * 0.5)
+                if partBottom < npcLowest then npcLowest = partBottom end
+            end
         end
+        local extY = modelHeight(controlledNPC)
+        bottomY = npcLowest < math.huge and npcLowest or (npcRoot.Position.Y - extY/2)
     end
-
-    local npcGroundY = nil
-    npcGroundY = (function()
-        local y,_ = getGroundYAtPosition(Vector3.new(npcRoot.Position.X,0,npcRoot.Position.Z), npcLowest + 0.01)
-        return y
-    end)()
-
-    local bottomY = npcGroundY or (npcLowest < math.huge and npcLowest) or (npcRoot.Position.Y - extY/2)
 
     -- compute desired HRP Y
     local playerH = modelHeight(myChar)
     local desiredHRPY = bottomY - heightBelow - (playerH * 0.5)
     local finalY = desiredHRPY
 
-    -- update npcAttachment target
+    -- update npcAttachment target each frame (align will keep player locked)
     if npcAttachment then
         local targetPos = Vector3.new(npcRoot.Position.X, finalY, npcRoot.Position.Z)
         pcall(function() npcAttachment.WorldPosition = targetPos end)
     end
 
-    -- Move npcSupportPlatform under NPC (keeps existing behaviour)
+    -- Move npcSupportPlatform under NPC (conservative placement)
     if npcSupportPlatform then
         pcall(function()
-            local platformY = finalY - (playerH * 0.5) - PLATFORM_Y_OFFSET
-            npcSupportPlatform.CFrame = CFrame.new(npcRoot.Position.X, platformY, npcRoot.Position.Z)
+            -- if we have surfacePart (the top of the supporting part) use it to position platform slightly below support top,
+            -- otherwise fallback to under NPC root.
+            if surfacePart and surfacePart:IsA("BasePart") then
+                local belowY = surfacePart.Position.Y - (surfacePart.Size.Y * 0.5) - (npcSupportPlatform.Size.Y * 0.5) - PLATFORM_Y_OFFSET
+                npcSupportPlatform.CFrame = CFrame.new(surfacePart.Position.X, belowY, surfacePart.Position.Z)
+            else
+                local platformY = finalY - (playerH * 0.5) - PLATFORM_Y_OFFSET
+                npcSupportPlatform.CFrame = CFrame.new(npcRoot.Position.X, platformY, npcRoot.Position.Z)
+            end
+            npcSupportPlatform.Size = NPC_PLATFORM_SIZE
         end)
     end
 
-    -- Create/update playerSupportPlatform and move it to PLAYER_PLATFORM_DEPTH studs under player's feet
+    -- ensure player platform exists and is moved under player
     if playerSupportPlatform then
         pcall(function()
             local platformY = myHRP.Position.Y - (playerH * 0.5) - PLAYER_PLATFORM_DEPTH
             playerSupportPlatform.CFrame = CFrame.new(myHRP.Position.X, platformY, myHRP.Position.Z)
+            playerSupportPlatform.Size = PLAYER_PLATFORM_SIZE
         end)
+    else
+        createPlayerSupportPlatform()
     end
 
-    -- clamp other parts below finalY (ensures head/parts never poke above NPC surface even if NPC is very thin)
+    -- Clamp other parts below the surface
     clampCharacterPartsBelow(myChar, bottomY - heightBelow)
 
-    -- keep movement enabled
-    pcall(function() myHum.PlatformStand = false end)
-
-    -- extra stability: snap HRP if too far (and zero velocities)
-    local targetPos = Vector3.new(npcRoot.Position.X, finalY, npcRoot.Position.Z)
-    local dist = (myHRP.Position - targetPos).Magnitude
-    local linVelMag = 0
-    pcall(function() linVelMag = myHRP.AssemblyLinearVelocity.Magnitude end)
-
-    if dist > 0.6 or linVelMag > 0.1 then
-        pcall(function()
-            myHRP.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, FIXED_YAW_RAD, 0)
-        end)
+    -- Keep the humanoid in PlatformStand and zero velocities occasionally (not every frame) to avoid jitter
+    pcall(function() myHum.PlatformStand = true end)
+    accumulatorZeroVel = accumulatorZeroVel + dt
+    if accumulatorZeroVel >= 0.12 then
+        accumulatorZeroVel = 0
+        zeroCharacterVelocities(myChar)
     end
-
-    -- *** KEY: reset velocities every heartbeat so player never falls ***
-    zeroCharacterVelocities(myChar)
 
     -- WalkTo & speed logic for NPC following player's movement input
     if npcHumanoid and npcRoot and npcHumanoid.Health > 0 then
@@ -654,20 +705,6 @@ local function heartbeat(dt)
         local jp = tonumber(jumpBox.Text)
         if jp and jp > 0 then pcall(function() npcHumanoid.JumpPower = jp end) end
     end
-
-    -- Jump/Fall detection using vertical velocity + cooldown to avoid spam
-    do
-        local now = tick()
-        local vy = 0
-        pcall(function() vy = myHRP.AssemblyLinearVelocity.Y end)
-        if vy >= JUMP_VY_THRESHOLD and prevVy < JUMP_VY_THRESHOLD and (now - lastEventTime) > EVENT_COOLDOWN then
-            recordJump(); lastEventTime = now
-        end
-        if vy <= FALL_VY_THRESHOLD and prevVy > FALL_VY_THRESHOLD and (now - lastEventTime) > EVENT_COOLDOWN then
-            recordFall(); lastEventTime = now
-        end
-        prevVy = vy
-    end
 end
 
 local function teleportPlayerAbove(pos, height)
@@ -684,7 +721,6 @@ end
 
 local function createAlignConstraintsForCharacter(hrp)
     if not hrp then return end
-    -- ensure any old ones removed
     pcall(function() if alignPos then alignPos:Destroy() end end)
     pcall(function() if alignOri then alignOri:Destroy() end end)
     pcall(function() if playerAttachment then playerAttachment:Destroy() end end)
@@ -699,7 +735,7 @@ local function createAlignConstraintsForCharacter(hrp)
     alignPos.Attachment0 = playerAttachment
     alignPos.MaxForce = ALIGN_MAX_FORCE
     alignPos.Responsiveness = ALIGN_RESPONSIVENESS
-    alignPos.MaxVelocity = 1e4
+    alignPos.MaxVelocity = ALIGN_MAX_VELOCITY
     alignPos.RigidityEnabled = true
     alignPos.ApplyAtCenterOfMass = false
     alignPos.Parent = hrp
@@ -766,13 +802,16 @@ local function enableControl()
         if myHum then
             pcall(function()
                 myOriginalJumpPower = myHum.JumpPower
-                myHum.JumpPower = 50
+                myOriginalWalkSpeed = myHum.WalkSpeed
+                myHum.JumpPower = 0
+                myHum.WalkSpeed = 0
                 pcall(function() myOriginalAutoRotate = myHum.AutoRotate; myHum.AutoRotate = false end)
             end)
         end
 
         local myHRP = myChar:FindFirstChild("HumanoidRootPart")
         if myHRP then
+            -- create align and npc attachment
             createAlignConstraintsForCharacter(myHRP)
 
             npcAttachment = Instance.new("Attachment")
@@ -782,12 +821,16 @@ local function enableControl()
             if alignPos then alignPos.Attachment1 = npcAttachment end
             if alignOri then alignOri.Attachment1 = npcAttachment end
 
-            -- create platforms
+            -- create platforms immediately to avoid a single-frame fall
             createNpcSupportPlatform()
             createPlayerSupportPlatform()
 
-            -- initial clamp
+            -- Strong immediate clamp, and keep PlatformStand true to fix player in place
+            if myHum then
+                pcall(function() myHum.PlatformStand = true end)
+            end
             immediateClampUnderNPC()
+            -- keep PlatformStand true (player intended to remain completely still)
         end
     end
 
@@ -805,23 +848,20 @@ local function enableControl()
     end
     attachPlayerSignals()
 
-    -- ensure we respond to respawns: recreate attachments, reassign collision groups, recreate platforms
+    -- respawn handling
     if not charAddedConn then
         charAddedConn = player.CharacterAdded:Connect(function(char)
-            -- small delay to allow character parts to finish replicating
-            task.wait(0.1)
-            -- reassign collision groups for new character parts
+            task.wait(0.08)
             pcall(function()
                 if pcall(function() PhysicsService:GetCollisionGroups() end) then
                     assignPlayerPartsToPlayersGroup()
                 end
             end)
 
-            -- recreate align & attachment and platforms if control is still active and NPC exists
             if active and controlledNPC and controlledNPC.Parent and npcRoot and npcRoot.Parent then
                 local hrp = char:WaitForChild("HumanoidRootPart", 2)
+                local myHum = char:FindFirstChildWhichIsA("Humanoid")
                 if hrp then
-                    -- re-create align objects
                     createAlignConstraintsForCharacter(hrp)
                     npcAttachment = Instance.new("Attachment")
                     npcAttachment.Name = "ControlNPC_NPCAttachment"
@@ -829,27 +869,27 @@ local function enableControl()
                     if alignPos then alignPos.Attachment1 = npcAttachment end
                     if alignOri then alignOri.Attachment1 = npcAttachment end
 
-                    -- recreate platforms
                     createNpcSupportPlatform()
                     createPlayerSupportPlatform()
 
-                    -- reset movement properties
-                    local myHum = char:FindFirstChildWhichIsA("Humanoid")
-                    if myHum then
-                        pcall(function()
-                            myHum.JumpPower = myOriginalJumpPower or 50
-                            myHum.AutoRotate = false
-                            myHum.PlatformStand = false
-                        end)
-                    end
-
-                    -- initial clamp
+                    if myHum then pcall(function() myHum.PlatformStand = true end) end
                     immediateClampUnderNPC()
                 end
             end
 
-            -- reattach death/connect signals
             attachPlayerSignals()
+        end)
+    end
+
+    -- npc platformstand watcher
+    if npcHumanoid then
+        if npcPlatformStandConn then npcPlatformStandConn:Disconnect() npcPlatformStandConn = nil end
+        npcPlatformStandConn = npcHumanoid:GetPropertyChangedSignal("PlatformStand"):Connect(function()
+            if npcHumanoid.PlatformStand then
+                if npcNoclipToggle then setNpcNoClip(false) end
+            else
+                if npcNoclipToggle then setNpcNoClip(true) end
+            end
         end)
     end
 
@@ -889,6 +929,7 @@ function cleanup()
     if charAddedConn then charAddedConn:Disconnect() charAddedConn = nil end
     if playerDiedConn then playerDiedConn:Disconnect() playerDiedConn = nil end
     if npcDiedConn then npcDiedConn:Disconnect() npcDiedConn = nil end
+    if npcPlatformStandConn then npcPlatformStandConn:Disconnect() npcPlatformStandConn = nil end
 
     destroyAlignConstraints()
     pcall(function() if npcAttachment then npcAttachment:Destroy() end end)
@@ -900,6 +941,7 @@ function cleanup()
         if myHum then
             pcall(function()
                 if myOriginalJumpPower then myHum.JumpPower = myOriginalJumpPower end
+                if myOriginalWalkSpeed then myHum.WalkSpeed = myOriginalWalkSpeed end
                 myHum.PlatformStand = false
                 if myOriginalAutoRotate ~= nil then
                     pcall(function() myHum.AutoRotate = myOriginalAutoRotate end); myOriginalAutoRotate = nil
@@ -916,6 +958,8 @@ function cleanup()
     destroyNpcSupportPlatform()
     destroyPlayerSupportPlatform()
 
+    if npcNoclipToggle then setNpcNoClip(false) end
+
     controlledNPC = nil
     npcHumanoid = nil
     npcRoot = nil
@@ -923,6 +967,8 @@ function cleanup()
 
     toggleBtn.Text = "Toggle Control: OFF"
     walkToggle.Text = "WalkTo: Off"
+    noclipBtn.Text = "NPC Noclip: Off"
+    npcNoclipToggle = false
 end
 
 local function killControlledNPC()
@@ -939,6 +985,16 @@ walkToggle.MouseButton1Click:Connect(function()
     walkToggle.Text = "WalkTo: " .. (walkEnabled and "On" or "Off")
     if not walkEnabled and npcHumanoid and npcRoot then
         pcall(function() npcHumanoid:MoveTo(npcRoot.Position); npcHumanoid.WalkSpeed = 0 end)
+    end
+end)
+
+noclipBtn.MouseButton1Click:Connect(function()
+    npcNoclipToggle = not npcNoclipToggle
+    noclipBtn.Text = "NPC Noclip: " .. (npcNoclipToggle and "On" or "Off")
+    if npcNoclipToggle then
+        if npcHumanoid and not npcHumanoid.PlatformStand then setNpcNoClip(true) end
+    else
+        setNpcNoClip(false)
     end
 end)
 
@@ -993,4 +1049,4 @@ script.AncestryChanged:Connect(function(_, parent)
     if not parent then cleanup() end
 end)
 
-StarterGui:SetCore("ChatMakeSystemMessage", {Text = "[ControlNPC] Ready. Local player velocities are zeroed every heartbeat; transparent player platform follows PLAYER_PLATFORM_DEPTH studs beneath player and is recreated after respawn when enabled."})
+StarterGui:SetCore("ChatMakeSystemMessage", {Text = "[ControlNPC] Ready. Player locks under the actual support top surface (thin parts handled correctly)."})
