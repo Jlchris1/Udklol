@@ -703,7 +703,7 @@ local function heartbeat(dt)
     -- NPC JumpPower
     if npcHumanoid then
         local jp = tonumber(jumpBox.Text)
-        if jp and jp > 0 then pcall(function() npcHumanoid.JumpPower = jp end) end
+        if jp and jp > 1 then pcall(function() npcHumanoid.JumpPower = jp end) end
     end
 end
 
