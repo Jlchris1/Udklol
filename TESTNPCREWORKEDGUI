@@ -1,0 +1,1043 @@
+-- Unified NPC GUI v2 (single LocalScript)
+-- Put this LocalScript in StarterGui
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local player = Players.LocalPlayer
+local PlayerGui = player:WaitForChild("PlayerGui")
+
+-- CONFIG
+local SCAN_INTERVAL = 0.45
+local LOOP_DELAY = 0.12
+local GUI_WIDTH = 300
+local GUI_HEIGHT = 360
+local SMALL_TOGGLE_W = 30
+local SMALL_TOGGLE_H = 15
+local CENTER_TOP_Y = 8
+
+-- STATE
+local NPCs = {}               -- [model] = true
+local trackedNPCs = {}        -- [model] = { gui, label, adornee, highlight }
+local trackedTypes = {}       -- [typeName] = true (auto-track)
+local loops = {}              -- named loops
+local loopRunners = {}
+local excluded = {}           -- excluded[typeName] = { effectName = true }
+local selectedType = nil
+local cancelChaseEnabled = false
+
+-- tracker scanning flag
+local trackerScanRunning = false
+
+-- EFFECT LIST (for whitelist UI)
+local EFFECTS = {
+    "Kill","Fling","PlatformStand","Sit","Anchor","CancelChase","GetRid","Erase","Void","Spasm",
+    "Jump","Void3","Speed","JumpPower","HipHeight","Heal","Tracker"
+}
+
+-- HELPERS
+local function isNPC(model)
+    if not model or not model:IsA("Model") then return false end
+    if Players:GetPlayerFromCharacter(model) then return false end
+    if not model:FindFirstChildOfClass("Humanoid") then return false end
+    local anyPart = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
+    return anyPart ~= nil
+end
+
+local function scanAddNPCs()
+    for _,desc in ipairs(Workspace:GetDescendants()) do
+        if desc:IsA("Humanoid") and desc.Parent and desc.Parent:IsA("Model") then
+            local model = desc.Parent
+            if isNPC(model) then NPCs[model] = true end
+        end
+    end
+end
+
+local function cleanNPCs()
+    for model,_ in pairs(NPCs) do
+        if not model or not model.Parent or not isNPC(model) then NPCs[model] = nil end
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(obj)
+    if obj:IsA("Humanoid") and obj.Parent and obj.Parent:IsA("Model") then
+        local model = obj.Parent
+        if isNPC(model) then NPCs[model] = true end
+    end
+end)
+Workspace.DescendantRemoving:Connect(function(obj)
+    if obj:IsA("Humanoid") and obj.Parent and obj.Parent:IsA("Model") then
+        NPCs[obj.Parent] = nil
+    end
+end)
+
+local function iterateParts(npc, fn)
+    if not npc then return end
+    for _,p in ipairs(npc:GetDescendants()) do
+        if p:IsA("BasePart") then pcall(function() fn(p) end) end
+    end
+end
+
+local function getNPCsArray()
+    local arr = {}
+    for model,_ in pairs(NPCs) do
+        if model and model.Parent and isNPC(model) then table.insert(arr, model) end
+    end
+    return arr
+end
+
+local function getNPCsByName(name)
+    local arr = {}
+    for model,_ in pairs(NPCs) do
+        if model and model.Parent and model.Name == name and isNPC(model) then table.insert(arr, model) end
+    end
+    return arr
+end
+
+local function getBestPartForModel(model)
+    if not model then return nil end
+    return model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function isAllowed(model, effectName)
+    if not model or not effectName then return true end
+    local t = model.Name
+    return not (excluded[t] and excluded[t][effectName])
+end
+
+-- ACTIONS
+local function killAllSimultaneousForList(models)
+    local humanoids = {}
+    for _,model in ipairs(models) do
+        if isAllowed(model, "Kill") then
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            if hum then table.insert(humanoids, hum) end
+        end
+    end
+    if #humanoids == 0 then return end
+    for _,hum in ipairs(humanoids) do pcall(function() hum.Health = 100 end) end
+    task.wait(0.04)
+    for _,hum in ipairs(humanoids) do
+        pcall(function()
+            local ok = pcall(function() hum:TakeDamage(math.huge) end)
+            if not ok then pcall(function() hum.Health = -math.huge end) else pcall(function() hum.Health = 0 end) end
+        end)
+    end
+end
+
+local function flingModel(model, power)
+    if not isAllowed(model, "Fling") then return end
+    power = tonumber(power) or 200
+    local localHRP = player.Character and (player.Character:FindFirstChild("HumanoidRootPart") or player.Character.PrimaryPart)
+    if not localHRP then return end
+    local targetPos
+    local hrp = model:FindFirstChild("HumanoidRootPart")
+    if hrp and hrp:IsA("BasePart") then targetPos = hrp.Position end
+    if not targetPos and model.PrimaryPart and model.PrimaryPart:IsA("BasePart") then targetPos = model.PrimaryPart.Position end
+    if not targetPos then
+        local anyPart = model:FindFirstChildWhichIsA("BasePart", true)
+        if anyPart then targetPos = anyPart.Position end
+    end
+    if not targetPos then return end
+    local dir = targetPos - localHRP.Position
+    local dirUnit = (dir.Magnitude <= 0.001) and Vector3.new(0,1,0) or dir.Unit
+    local velocity = dirUnit * power + Vector3.new(0, power * 0.45, 0)
+    iterateParts(model, function(p)
+        if p and not p.Anchored then
+            pcall(function()
+                if p.AssemblyLinearVelocity ~= nil then p.AssemblyLinearVelocity = velocity else p.Velocity = velocity end
+            end)
+        end
+    end)
+end
+
+local anchored = {}
+local function toggleAnchor(model)
+    if not isAllowed(model, "Anchor") then return end
+    if not model then return end
+    if anchored[model] then
+        iterateParts(model, function(p) p.Anchored = false end)
+        anchored[model] = nil
+    else
+        iterateParts(model, function(p) p.Anchored = true end)
+        anchored[model] = true
+    end
+end
+
+local function platformStand(model)
+    if not isAllowed(model, "PlatformStand") then return end
+    local hum = model and model:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum.PlatformStand = true end) end
+end
+local function makeSit(model)
+    if not isAllowed(model, "Sit") then return end
+    local hum = model and model:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum.Sit = true end) end
+end
+
+local function voidAway(model)
+    if not isAllowed(model, "Void") then return end
+    local p = getBestPartForModel(model)
+    if p then pcall(function() p.CFrame = CFrame.new(1e6,0,1e6) end) end
+end
+
+local function eraseModel(model)
+    if not isAllowed(model, "Erase") then return end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum.Health = 0 end) end
+    pcall(function() model:Destroy() end)
+end
+
+local function spasmModel(model)
+    if not isAllowed(model, "Spasm") then return end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum.PlatformStand = true end) end
+    iterateParts(model, function(p)
+        pcall(function()
+            local rx,ry,rz = math.rad(math.random(-180,180)), math.rad(math.random(-180,180)), math.rad(math.random(-180,180))
+            p.CFrame = p.CFrame * CFrame.Angles(rx,ry,rz)
+        end)
+    end)
+end
+
+local function jumpModel(model)
+    if not isAllowed(model, "Jump") then return end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum.Jump = true end) end
+end
+
+local function setHipHeight(model, value)
+    if not isAllowed(model, "HipHeight") then return end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum.HipHeight = value end) end
+end
+
+local function healTickModel(model, amt)
+    if not isAllowed(model, "Heal") then return end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum.Health = math.min(hum.MaxHealth or hum.Health, hum.Health + amt) end) end
+end
+
+local function setSpeed(model,val)
+    if not isAllowed(model, "Speed") then return end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum.WalkSpeed = val end) end
+end
+
+local function setJumpPower(model,val)
+    if not isAllowed(model, "JumpPower") then return end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() if hum.JumpPower ~= nil then hum.JumpPower = val else hum.JumpHeight = val end end) end
+end
+
+local function void3Spam(model, intensity)
+    if not isAllowed(model, "Void3") then return end
+    local hrp = getBestPartForModel(model)
+    if not hrp then return end
+    intensity = tonumber(intensity) or 1
+    coroutine.wrap(function()
+        for i=1, 12 * math.max(1, intensity) do
+            pcall(function() hrp.Velocity = Vector3.new(0,-1e7,0) end)
+            task.wait(0.02)
+        end
+    end)()
+end
+
+local function cancelChaseForModel(model)
+    if not isAllowed(model, "CancelChase") then return end
+    local hum = model and model:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    local hrp = getBestPartForModel(model)
+    if not hrp then return end
+    local pos = hrp.Position
+    pcall(function()
+        if typeof(hum.MoveTo) == "function" then hum:MoveTo(pos) else pcall(function() hum:MoveTo(pos) end) end
+    end)
+end
+
+-- TRACKER: Billboard + Highlight (outline through walls)
+local function addTrackerToModel(model)
+    if not model then return end
+    if not isAllowed(model, "Tracker") then return end
+    if trackedNPCs[model] then return end
+    local part = getBestPartForModel(model)
+    if not part then return end
+
+    -- Billboard (local, Adornee)
+    local gui = Instance.new("BillboardGui")
+    gui.Name = "NPCTracker"
+    gui.Size = UDim2.new(0,180,0,36)
+    gui.StudsOffset = Vector3.new(0,2,0)
+    gui.AlwaysOnTop = true
+    gui.Adornee = part
+    gui.Parent = PlayerGui
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1,-4,1,-4)
+    label.Position = UDim2.new(0,2,0,2)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1,1,1)
+    label.Font = Enum.Font.Code
+    label.TextScaled = true
+    label.Parent = gui
+
+    -- Highlight (outline through walls): Adornee = model
+    local successHighlight, highlight = pcall(function()
+        local h = Instance.new("Highlight")
+        h.Name = "NPCHighlight"
+        h.Adornee = model
+        h.FillTransparency = 1
+        h.OutlineTransparency = 0
+        h.OutlineColor = Color3.fromRGB(0, 200, 255)
+        h.Parent = PlayerGui -- local-only
+        return h
+    end)
+    if not successHighlight then
+        -- fallback: SelectionBox on primary part
+        local sel = nil
+        local ok, _ = pcall(function()
+            local s = Instance.new("SelectionBox")
+            s.Name = "NPCSelOutline"
+            s.Adornee = part
+            s.SurfaceTransparency = 1
+            s.LineThickness = 0.02
+            s.Color3 = Color3.fromRGB(0,200,255)
+            s.Parent = PlayerGui
+            sel = s
+        end)
+        trackedNPCs[model] = { gui = gui, label = label, adornee = part, highlight = sel }
+    else
+        trackedNPCs[model] = { gui = gui, label = label, adornee = part, highlight = highlight }
+    end
+end
+
+local function removeTrackerFromModel(model)
+    local data = trackedNPCs[model]
+    if data then
+        if data.gui then pcall(function() data.gui:Destroy() end) end
+        if data.highlight then pcall(function() data.highlight:Destroy() end) end
+    end
+    trackedNPCs[model] = nil
+end
+
+local function updateAllTrackers()
+    local playerPos = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position
+    for model,data in pairs(trackedNPCs) do
+        local part = getBestPartForModel(model)
+        if not model.Parent or not part then removeTrackerFromModel(model) end
+        if data and data.label and model.Parent then
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            local hrp = part
+            local dist = 0
+            if playerPos and hrp then dist = (hrp.Position - playerPos).Magnitude end
+            if hum then
+                local jp = hum.JumpPower or hum.JumpHeight or 0
+                data.label.Text = string.format("%s | HP: %.1f | Speed: %.1f | JP: %.1f | Dist: %.1f",
+                    model.Name, hum.Health or 0, hum.WalkSpeed or 0, jp, dist)
+            end
+        end
+    end
+end
+
+-- LOOP helpers
+local function startLoop(key, fn)
+    if loopRunners[key] then return end
+    loops[key] = true
+    local co = coroutine.create(function()
+        while loops[key] do
+            pcall(fn)
+            task.wait(LOOP_DELAY)
+        end
+        loopRunners[key] = nil
+    end)
+    loopRunners[key] = co
+    coroutine.resume(co)
+end
+local function stopLoop(key) loops[key] = false end
+
+-- UI BUILD
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "UnifiedNPCGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = PlayerGui
+
+-- small center-top toggle
+local SmallToggle = Instance.new("TextButton")
+SmallToggle.Name = "SmallToggle"
+SmallToggle.Size = UDim2.new(0, SMALL_TOGGLE_W, 0, SMALL_TOGGLE_H)
+SmallToggle.AnchorPoint = Vector2.new(0.5, 0)
+SmallToggle.Position = UDim2.new(0.5, 0, 0, CENTER_TOP_Y)
+SmallToggle.BackgroundColor3 = Color3.fromRGB(44,44,44)
+SmallToggle.BorderSizePixel = 0
+SmallToggle.Font = Enum.Font.GothamBold
+SmallToggle.TextSize = 11
+SmallToggle.TextColor3 = Color3.new(1,1,1)
+SmallToggle.Text = "NPC"
+SmallToggle.Parent = ScreenGui
+SmallToggle.ZIndex = 10
+
+-- main frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+MainFrame.Size = UDim2.new(0, 120, 0, 24)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Visible = false
+MainFrame.Parent = ScreenGui
+
+local TopBar = Instance.new("Frame"); TopBar.Size = UDim2.new(1,0,0,34); TopBar.BackgroundColor3 = Color3.fromRGB(44,44,44); TopBar.Parent = MainFrame
+local Title = Instance.new("TextLabel"); Title.Size = UDim2.new(0.6,0,1,0); Title.BackgroundTransparency = 1; Title.TextColor3 = Color3.new(1,1,1); Title.Font = Enum.Font.GothamBold; Title.TextSize = 16; Title.Text = "Unified NPC Control"; Title.Position = UDim2.new(0.04,0,0,0); Title.Parent = TopBar
+
+local TabsBar = Instance.new("Frame"); TabsBar.Size = UDim2.new(1,0,0,30); TabsBar.Position = UDim2.new(0,0,0,34); TabsBar.BackgroundTransparency = 1; TabsBar.Parent = MainFrame
+local function tabButton(x, text)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0.25, -6, 1, 0)
+    b.Position = UDim2.new(x, 4, 0, 0)
+    b.BackgroundColor3 = Color3.fromRGB(58,58,58)
+    b.BorderSizePixel = 0
+    b.Font = Enum.Font.Gotham
+    b.TextSize = 13
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Text = text
+    b.Parent = TabsBar
+    return b
+end
+local tabControlsBtn = tabButton(0, "Controls")
+local tabUtilitiesBtn = tabButton(0.25, "Utilities")
+local tabAdvancedBtn = tabButton(0.5, "Advanced")
+local tabWhitelistBtn = tabButton(0.75, "Whitelist")
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1,0,1, - (34 + 30))
+Content.Position = UDim2.new(0,0,0, 34 + 30)
+Content.BackgroundColor3 = Color3.fromRGB(32,32,32)
+Content.Parent = MainFrame
+Content.Visible = false
+
+local CounterLabel = Instance.new("TextLabel")
+CounterLabel.Size = UDim2.new(1, -8, 0, 24)
+CounterLabel.Position = UDim2.new(0,4,0,6)
+CounterLabel.BackgroundTransparency = 0.6
+CounterLabel.BackgroundColor3 = Color3.fromRGB(26,26,26)
+CounterLabel.BorderSizePixel = 0
+CounterLabel.Font = Enum.Font.Gotham
+CounterLabel.TextSize = 13
+CounterLabel.TextColor3 = Color3.new(1,1,1)
+CounterLabel.Text = "NPCs detected: 0"
+CounterLabel.Parent = Content
+
+-- helper to create scrolling frames inside panels
+local function makeScroll(parent, yOffset, height)
+    local s = Instance.new("ScrollingFrame")
+    s.Size = UDim2.new(1, -12, 0, height or 220)
+    s.Position = UDim2.new(0, 6, 0, yOffset)
+    s.BackgroundTransparency = 1
+    s.ScrollBarThickness = 8
+    s.Parent = parent
+    local layout = Instance.new("UIListLayout")
+    layout.Parent = s
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0,6)
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        s.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 8)
+    end)
+    return s, layout
+end
+
+-- Controls/other tabs
+local ctrlScroll,_ = makeScroll(Content, 36, 220)
+
+-- Whitelist tab: group list + leftPanel (small)
+local whitelistFrame = Instance.new("Frame"); whitelistFrame.Size = UDim2.new(1,0,1,0); whitelistFrame.BackgroundTransparency = 1; whitelistFrame.Parent = Content; whitelistFrame.Visible = false
+local groupScroll = Instance.new("ScrollingFrame")
+groupScroll.Size = UDim2.new(1, - (150 + 24), 1, - 72)
+groupScroll.Position = UDim2.new(0, 156, 0, 36)
+groupScroll.BackgroundTransparency = 1
+groupScroll.ScrollBarThickness = 8
+groupScroll.Parent = whitelistFrame
+local groupList = Instance.new("UIListLayout"); groupList.Parent = groupScroll; groupList.SortOrder = Enum.SortOrder.LayoutOrder; groupList.Padding = UDim.new(0,6)
+groupList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() groupScroll.CanvasSize = UDim2.new(0,0,0, groupList.AbsoluteContentSize.Y + 8) end)
+
+local leftPanel = Instance.new("Frame")
+leftPanel.Size = UDim2.new(0,150,1,-12)
+leftPanel.Position = UDim2.new(0,6,0,36)
+leftPanel.BackgroundColor3 = Color3.fromRGB(28,28,28)
+leftPanel.BorderSizePixel = 0
+leftPanel.Parent = whitelistFrame
+leftPanel.Visible = false
+
+local leftTitle = Instance.new("TextLabel")
+leftTitle.Size = UDim2.new(1, -8, 0, 24)
+leftTitle.Position = UDim2.new(0, 4, 0, 6)
+leftTitle.BackgroundTransparency = 1
+leftTitle.Font = Enum.Font.GothamBold
+leftTitle.TextSize = 13
+leftTitle.TextColor3 = Color3.new(1,1,1)
+leftTitle.Text = "Type: (none)"
+leftTitle.Parent = leftPanel
+
+local function makeLeftBtn(order, text)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -8, 0, 28)
+    b.Position = UDim2.new(0, 4, 0, 36 + (order * 34))
+    b.BackgroundColor3 = Color3.fromRGB(58,58,58)
+    b.BorderSizePixel = 0
+    b.Font = Enum.Font.Gotham
+    b.TextSize = 13
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Text = text
+    b.Parent = leftPanel
+    return b
+end
+
+local leftTrackBtn = makeLeftBtn(0, "Track/Untrack This Type")
+local leftKillBtn = makeLeftBtn(1, "Kill This Type")
+local leftFlingBtn = makeLeftBtn(2, "Fling This Type")
+local leftEraseBtn = makeLeftBtn(3, "Erase This Type")
+local leftVoidBtn = makeLeftBtn(4, "Void This Type")
+local leftAnchorBtn = makeLeftBtn(5, "Toggle Anchor This Type")
+local leftWhitelistBtn = makeLeftBtn(6, "Whitelist (exclusions)")
+
+-- Features Panel (per-type) - RIGHT of main, and is scannable (scrolling frame for features)
+local FeaturesPanel = Instance.new("Frame")
+FeaturesPanel.Name = "FeaturesPanel"
+FeaturesPanel.Size = UDim2.new(0, 260, 0, GUI_HEIGHT)
+FeaturesPanel.AnchorPoint = Vector2.new(0, 0.5)
+FeaturesPanel.Position = UDim2.new(0.5, GUI_WIDTH/2 + 12, 0.5, 0) -- right of main
+FeaturesPanel.BackgroundColor3 = Color3.fromRGB(30,30,30)
+FeaturesPanel.BorderSizePixel = 0
+FeaturesPanel.Visible = false
+FeaturesPanel.Parent = ScreenGui
+
+local featTitle = Instance.new("TextLabel")
+featTitle.Size = UDim2.new(1, -8, 0, 24)
+featTitle.Position = UDim2.new(0,4,0,6)
+featTitle.BackgroundTransparency = 1
+featTitle.Font = Enum.Font.GothamBold
+featTitle.TextSize = 14
+featTitle.TextColor3 = Color3.new(1,1,1)
+featTitle.Text = "Type Features"
+featTitle.Parent = FeaturesPanel
+
+local featScroll, featList = makeScroll(FeaturesPanel, 36, GUI_HEIGHT - 120)
+
+-- Per-type small controls (Speed, JumpPower, HipHeight, Fling power, Heal, Void3 intensity)
+local function makeFeatureRowWithInput(parent, labelText, default)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1,0,0,36)
+    frame.BackgroundTransparency = 1
+    frame.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0.52, -6, 1, 0)
+    lbl.Position = UDim2.new(0,4,0,0)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 13
+    lbl.TextColor3 = Color3.new(1,1,1)
+    lbl.Text = labelText
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = frame
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0.28, 0, 0, 24)
+    box.Position = UDim2.new(0.52, 4, 0.06, 0)
+    box.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    box.TextColor3 = Color3.new(1,1,1)
+    box.Text = tostring(default or "")
+    box.PlaceholderText = tostring(default or "")
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 12
+    box.ClearTextOnFocus = false
+    box.Parent = frame
+
+    local loopBtn = Instance.new("TextButton")
+    loopBtn.Size = UDim2.new(0.16, 0, 0, 24)
+    loopBtn.Position = UDim2.new(0.82, 4, 0.06, 0)
+    loopBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    loopBtn.Font = Enum.Font.Gotham
+    loopBtn.TextSize = 12
+    loopBtn.TextColor3 = Color3.new(1,1,1)
+    loopBtn.Text = "Loop: Off"
+    loopBtn.Parent = frame
+
+    return frame, box, loopBtn
+end
+
+local function makeFeatureButton(parent, text)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1,0,0,34)
+    btn.BackgroundColor3 = Color3.fromRGB(58,58,58)
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 14
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Text = text
+    btn.Parent = parent
+    return btn
+end
+
+-- create feature controls (per-type)
+local flingRow, flingInput, flingLoopBtn = makeFeatureRowWithInput(featScroll, "Fling Power", 200)
+local speedRow, speedInput_feat, speedLoop_feat = makeFeatureRowWithInput(featScroll, "Speed Value", 16)
+local jpRow, jpInput_feat, jpLoop_feat = makeFeatureRowWithInput(featScroll, "JumpPower Value", 50)
+local hipRow, hipInput_feat, hipLoop_feat = makeFeatureRowWithInput(featScroll, "HipHeight Value", 2)
+local healRow, healInput_feat, healLoop_feat = makeFeatureRowWithInput(featScroll, "Heal per tick", 5)
+local void3Row, void3Input_feat, void3Loop_feat = makeFeatureRowWithInput(featScroll, "Void3 Intensity", 1)
+
+-- simple buttons (affect whole type)
+local btnKillType = makeFeatureButton(featScroll, "Kill This Type (Simultaneous)")
+local btnEraseType = makeFeatureButton(featScroll, "Erase / Destroy This Type")
+local btnVoidType = makeFeatureButton(featScroll, "Void This Type")
+local btnAnchorType = makeFeatureButton(featScroll, "Toggle Anchor This Type")
+local btnPlatformType = makeFeatureButton(featScroll, "PlatformStand This Type")
+local btnSitType = makeFeatureButton(featScroll, "Sit This Type")
+local btnSpasmType = makeFeatureButton(featScroll, "Spasm This Type")
+local btnJumpType = makeFeatureButton(featScroll, "Jump This Type")
+local btnCancelChaseType = makeFeatureButton(featScroll, "Cancel-Chase (MoveTo) This Type")
+local btnGetRidType = makeFeatureButton(featScroll, "Get Rid (Teleport Closest) This Type")
+local btnTrackerType = makeFeatureButton(featScroll, "Toggle Tracking For This Type")
+
+-- UI building helper for grouped list (whitelist tab)
+local function rebuildGroupedList()
+    for _, child in ipairs(groupScroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
+    local counts = {}
+    for model,_ in pairs(NPCs) do
+        if model and model.Parent and isNPC(model) then
+            counts[model.Name] = (counts[model.Name] or 0) + 1
+        end
+    end
+    for name, count in pairs(counts) do
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1,0,0,34)
+        frame.BackgroundTransparency = 1
+        frame.Parent = groupScroll
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0.7,0,1,0)
+        btn.Position = UDim2.new(0,0,0,0)
+        btn.BackgroundColor3 = Color3.fromRGB(58,58,58)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 14
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.Text = string.format("%s(s) [%d]", name, count)
+        btn.Parent = frame
+        local info = Instance.new("TextLabel")
+        info.Size = UDim2.new(0.28, 0, 1, 0)
+        info.Position = UDim2.new(0.72, 6, 0, 0)
+        info.BackgroundTransparency = 1
+        info.Font = Enum.Font.Gotham
+        info.TextSize = 12
+        info.TextColor3 = Color3.new(1,1,1)
+        info.Text = "Select"
+        info.Parent = frame
+
+        btn.MouseButton1Click:Connect(function()
+            selectedType = name
+            leftPanel.Visible = true
+            leftTitle.Text = "Type: " .. name .. " [" .. tostring(count) .. "]"
+            if not excluded[selectedType] then excluded[selectedType] = {} end
+
+            -- populate FeaturesPanel for this type (sync inputs & loop buttons)
+            featTitle.Text = "Features: " .. selectedType
+            FeaturesPanel.Visible = true
+
+            flingInput.Text = tostring(flingInput.Text or "200")
+            speedInput_feat.Text = tostring(speedInput_feat.Text or "16")
+            jpInput_feat.Text = tostring(jpInput_feat.Text or "50")
+            hipInput_feat.Text = tostring(hipInput_feat.Text or "2")
+            healInput_feat.Text = tostring(healInput_feat.Text or "5")
+            void3Input_feat.Text = tostring(void3Input_feat.Text or "1")
+
+            flingLoopBtn.Text = "Loop: "..(loops["fling_"..selectedType] and "On" or "Off")
+            speedLoop_feat.Text = "Loop: "..(loops["speed_"..selectedType] and "On" or "Off")
+            jpLoop_feat.Text = "Loop: "..(loops["jp_"..selectedType] and "On" or "Off")
+            hipLoop_feat.Text = "Loop: "..(loops["hip_"..selectedType] and "On" or "Off")
+            healLoop_feat.Text = "Loop: "..(loops["heal_"..selectedType] and "On" or "Off")
+            void3Loop_feat.Text = "Loop: "..(loops["void3_"..selectedType] and "On" or "Off")
+        end)
+    end
+end
+
+-- update counter
+local function updateCounterAndGroups()
+    local total = 0
+    for model,_ in pairs(NPCs) do if model and model.Parent and isNPC(model) then total = total + 1 end end
+    CounterLabel.Text = "NPCs detected: " .. tostring(total)
+    rebuildGroupedList()
+end
+
+-- basic control actions
+killBtn.MouseButton1Click:Connect(function() killAllSimultaneousForList(getNPCsArray()) end)
+
+-- TRACKER scanning / toggling (disable breaks loop and clears highlights)
+local function startTrackerScan()
+    if trackerScanRunning then return end
+    trackerScanRunning = true
+    startLoop("trackerScan", function()
+        for _,m in ipairs(getNPCsArray()) do
+            if not trackedNPCs[m] then
+                -- only auto-add trackers for types that are tracked or when global tracker is on
+                -- here we treat global as "if trackerScanRunning" then add trackers for all
+                if not excluded[m.Name] or not excluded[m.Name]["Tracker"] then
+                    addTrackerToModel(m)
+                end
+            end
+        end
+    end)
+end
+
+local function stopTrackerScan()
+    if not trackerScanRunning then return end
+    trackerScanRunning = false
+    stopLoop("trackerScan")
+end
+
+-- Short helper: apply function to every NPC of selected type (with isAllowed check per model)
+local function applyToType(fn)
+    if not selectedType then return end
+    local list = getNPCsByName(selectedType)
+    for _,m in ipairs(list) do
+        if m and m.Parent and isNPC(m) then
+            pcall(function() fn(m) end)
+        end
+    end
+end
+
+-- Features panel buttons wiring
+btnKillType.MouseButton1Click:Connect(function() applyToType(function(list) killAllSimultaneousForList({list})) end) -- placeholder safe-call
+-- NOTE: above intentionally uses applyToType wrapper; below we implement real behaviours:
+
+btnKillType.MouseButton1Click:Connect(function()
+    applyToType(function(m) end) -- no-op to ensure we have selectedType
+    killAllSimultaneousForList(getNPCsByName(selectedType))
+end)
+btnEraseType.MouseButton1Click:Connect(function() for _,m in ipairs(getNPCsByName(selectedType)) do eraseModel(m) end end)
+btnVoidType.MouseButton1Click:Connect(function() for _,m in ipairs(getNPCsByName(selectedType)) do voidAway(m) end end)
+btnAnchorType.MouseButton1Click:Connect(function() for _,m in ipairs(getNPCsByName(selectedType)) do toggleAnchor(m) end end)
+btnPlatformType.MouseButton1Click:Connect(function() for _,m in ipairs(getNPCsByName(selectedType)) do platformStand(m) end end)
+btnSitType.MouseButton1Click:Connect(function() for _,m in ipairs(getNPCsByName(selectedType)) do makeSit(m) end end)
+btnSpasmType.MouseButton1Click:Connect(function() for _,m in ipairs(getNPCsByName(selectedType)) do spasmModel(m) end end)
+btnJumpType.MouseButton1Click:Connect(function() for _,m in ipairs(getNPCsByName(selectedType)) do jumpModel(m) end end)
+btnCancelChaseType.MouseButton1Click:Connect(function() for _,m in ipairs(getNPCsByName(selectedType)) do cancelChaseForModel(m) end end)
+btnGetRidType.MouseButton1Click:Connect(function() for _,m in ipairs(getNPCsByName(selectedType)) do
+    if isAllowed(m,"GetRid") then
+        local hrp = getBestPartForModel(m)
+        if hrp and player.Character and player.Character.PrimaryPart then
+            local playerPos = player.Character.PrimaryPart.Position
+            local dist = (hrp.Position - playerPos).Magnitude
+            local closer = true
+            for _,plr in ipairs(Players:GetPlayers()) do
+                if plr ~= player and plr.Character and plr.Character.PrimaryPart then
+                    local d = (hrp.Position - plr.Character.PrimaryPart.Position).Magnitude
+                    if d < dist then closer = false break end
+                end
+            end
+            if closer then pcall(function() hrp.CFrame = CFrame.new(9e37,9e37,9e37) end) end
+        end
+    end
+end end)
+
+-- Tracker toggle for the specific type: start/stop tracking models of this type
+btnTrackerType.MouseButton1Click:Connect(function()
+    if not selectedType then return end
+    trackedTypes[selectedType] = not trackedTypes[selectedType]
+    if trackedTypes[selectedType] then
+        -- add trackers for all models of that type (unless excluded)
+        for _,m in ipairs(getNPCsByName(selectedType)) do if not trackedNPCs[m] and (not excluded[selectedType] or not excluded[selectedType]["Tracker"]) then addTrackerToModel(m) end end
+        btnTrackerType.Text = "Untrack This Type"
+    else
+        for _,m in ipairs(getNPCsByName(selectedType)) do removeTrackerFromModel(m) end
+        btnTrackerType.Text = "Toggle Tracking For This Type"
+    end
+end)
+
+-- Per-feature input loops & single-apply handlers for features that need values
+-- Fling (single)
+flingLoopBtn.MouseButton1Click:Connect(function()
+    if not selectedType then return end
+    loops["fling_"..selectedType] = not loops["fling_"..selectedType]
+    flingLoopBtn.Text = "Loop: "..(loops["fling_"..selectedType] and "On" or "Off")
+    if loops["fling_"..selectedType] then
+        startLoop("fling_"..selectedType, function()
+            if excluded[selectedType] and excluded[selectedType]["Fling"] then return end
+            local p = tonumber(flingInput.Text) or 200
+            for _,m in ipairs(getNPCsByName(selectedType)) do pcall(function() flingModel(m, p) end) end
+        end)
+    else
+        stopLoop("fling_"..selectedType)
+    end
+end)
+flingInput.FocusLost:Connect(function() if not selectedType then return end local p = tonumber(flingInput.Text) if p and not (excluded[selectedType] and excluded[selectedType]["Fling"]) then for _,m in ipairs(getNPCsByName(selectedType)) do pcall(function() flingModel(m, p) end) end end end)
+
+-- Speed
+speedLoop_feat.MouseButton1Click:Connect(function()
+    if not selectedType then return end
+    loops["speed_"..selectedType] = not loops["speed_"..selectedType]
+    speedLoop_feat.Text = "Loop: "..(loops["speed_"..selectedType] and "On" or "Off")
+    if loops["speed_"..selectedType] then
+        startLoop("speed_"..selectedType, function()
+            if excluded[selectedType] and excluded[selectedType]["Speed"] then return end
+            local v = tonumber(speedInput_feat.Text) or 16
+            for _,m in ipairs(getNPCsByName(selectedType)) do setSpeed(m, v) end
+        end)
+    else
+        stopLoop("speed_"..selectedType)
+    end
+end)
+speedInput_feat.FocusLost:Connect(function() if not selectedType then return end local v = tonumber(speedInput_feat.Text) if v and not (excluded[selectedType] and excluded[selectedType]["Speed"]) then for _,m in ipairs(getNPCsByName(selectedType)) do setSpeed(m, v) end end end)
+
+-- JumpPower
+jpLoop_feat.MouseButton1Click:Connect(function()
+    if not selectedType then return end
+    loops["jp_"..selectedType] = not loops["jp_"..selectedType]
+    jpLoop_feat.Text = "Loop: "..(loops["jp_"..selectedType] and "On" or "Off")
+    if loops["jp_"..selectedType] then
+        startLoop("jp_"..selectedType, function()
+            if excluded[selectedType] and excluded[selectedType]["JumpPower"] then return end
+            local v = tonumber(jpInput_feat.Text) or 50
+            for _,m in ipairs(getNPCsByName(selectedType)) do setJumpPower(m, v) end
+        end)
+    else
+        stopLoop("jp_"..selectedType)
+    end
+end)
+jpInput_feat.FocusLost:Connect(function() if not selectedType then return end local v = tonumber(jpInput_feat.Text) if v and not (excluded[selectedType] and excluded[selectedType]["JumpPower"]) then for _,m in ipairs(getNPCsByName(selectedType)) do setJumpPower(m, v) end end end)
+
+-- HipHeight
+hipLoop_feat.MouseButton1Click:Connect(function()
+    if not selectedType then return end
+    loops["hip_"..selectedType] = not loops["hip_"..selectedType]
+    hipLoop_feat.Text = "Loop: "..(loops["hip_"..selectedType] and "On" or "Off")
+    if loops["hip_"..selectedType] then
+        startLoop("hip_"..selectedType, function()
+            if excluded[selectedType] and excluded[selectedType]["HipHeight"] then return end
+            local v = tonumber(hipInput_feat.Text) or 2
+            for _,m in ipairs(getNPCsByName(selectedType)) do setHipHeight(m, v) end
+        end)
+    else
+        stopLoop("hip_"..selectedType)
+    end
+end)
+hipInput_feat.FocusLost:Connect(function() if not selectedType then return end local v = tonumber(hipInput_feat.Text) if v and not (excluded[selectedType] and excluded[selectedType]["HipHeight"]) then for _,m in ipairs(getNPCsByName(selectedType)) do setHipHeight(m, v) end end end)
+
+-- Heal per tick (single-apply or loop)
+healLoop_feat.MouseButton1Click:Connect(function()
+    if not selectedType then return end
+    loops["heal_"..selectedType] = not loops["heal_"..selectedType]
+    healLoop_feat.Text = "Loop: "..(loops["heal_"..selectedType] and "On" or "Off")
+    if loops["heal_"..selectedType] then
+        startLoop("heal_"..selectedType, function()
+            if excluded[selectedType] and excluded[selectedType]["Heal"] then return end
+            local v = tonumber(healInput_feat.Text) or 5
+            for _,m in ipairs(getNPCsByName(selectedType)) do healTickModel(m, v) end
+        end)
+    else
+        stopLoop("heal_"..selectedType)
+    end
+end)
+healInput_feat.FocusLost:Connect(function() if not selectedType then return end local v = tonumber(healInput_feat.Text) if v and not (excluded[selectedType] and excluded[selectedType]["Heal"]) then for _,m in ipairs(getNPCsByName(selectedType)) do healTickModel(m, v) end end end)
+
+-- Void3 intensity
+void3Loop_feat.MouseButton1Click:Connect(function()
+    if not selectedType then return end
+    loops["void3_"..selectedType] = not loops["void3_"..selectedType]
+    void3Loop_feat.Text = "Loop: "..(loops["void3_"..selectedType] and "On" or "Off")
+    if loops["void3_"..selectedType] then
+        startLoop("void3_"..selectedType, function()
+            if excluded[selectedType] and excluded[selectedType]["Void3"] then return end
+            local v = tonumber(void3Input_feat.Text) or 1
+            for _,m in ipairs(getNPCsByName(selectedType)) do void3Spam(m, v) end
+        end)
+    else
+        stopLoop("void3_"..selectedType)
+    end
+end)
+void3Input_feat.FocusLost:Connect(function() if not selectedType then return end local v = tonumber(void3Input_feat.Text) if v and not (excluded[selectedType] and excluded[selectedType]["Void3"]) then for _,m in ipairs(getNPCsByName(selectedType)) do void3Spam(m, v) end end end)
+
+-- Fling loop
+flingLoopBtn.MouseButton1Click:Connect(function()
+    if not selectedType then return end
+    loops["fling_"..selectedType] = not loops["fling_"..selectedType]
+    flingLoopBtn.Text = "Loop: "..(loops["fling_"..selectedType] and "On" or "Off")
+    if loops["fling_"..selectedType] then
+        startLoop("fling_"..selectedType, function()
+            if excluded[selectedType] and excluded[selectedType]["Fling"] then return end
+            local p = tonumber(flingInput.Text) or 200
+            for _,m in ipairs(getNPCsByName(selectedType)) do pcall(function() flingModel(m, p) end) end
+        end)
+    else
+        stopLoop("fling_"..selectedType)
+    end
+end)
+flingInput.FocusLost:Connect(function() if not selectedType then return end local p = tonumber(flingInput.Text) if p and not (excluded[selectedType] and excluded[selectedType]["Fling"]) then for _,m in ipairs(getNPCsByName(selectedType)) do pcall(function() flingModel(m, p) end) end end end)
+
+-- LEFT PANEL behaviour (per-selected-type actions)
+leftTrackBtn.MouseButton1Click:Connect(function()
+    if not selectedType then return end
+    trackedTypes[selectedType] = not trackedTypes[selectedType]
+    leftTrackBtn.Text = trackedTypes[selectedType] and "Untrack This Type" or "Track/Untrack This Type"
+    if trackedTypes[selectedType] then
+        for _,m in ipairs(getNPCsByName(selectedType)) do
+            if not trackedNPCs[m] and (not excluded[selectedType] or not excluded[selectedType]["Tracker"]) then addTrackerToModel(m) end
+        end
+    else
+        for _,m in ipairs(getNPCsByName(selectedType)) do removeTrackerFromModel(m) end
+    end
+end)
+
+leftKillBtn.MouseButton1Click:Connect(function() if not selectedType then return end if excluded[selectedType] and excluded[selectedType]["Kill"] then return end killAllSimultaneousForList(getNPCsByName(selectedType)) end)
+leftFlingBtn.MouseButton1Click:Connect(function() if not selectedType then return end if excluded[selectedType] and excluded[selectedType]["Fling"] then return end local p = tonumber(flingInput.Text) or 200 for _,m in ipairs(getNPCsByName(selectedType)) do pcall(function() flingModel(m,p) end) end end)
+leftEraseBtn.MouseButton1Click:Connect(function() if not selectedType then return end if excluded[selectedType] and excluded[selectedType]["Erase"] then return end for _,m in ipairs(getNPCsByName(selectedType)) do pcall(function() eraseModel(m) end) end end)
+leftVoidBtn.MouseButton1Click:Connect(function() if not selectedType then return end if excluded[selectedType] and excluded[selectedType]["Void"] then return end for _,m in ipairs(getNPCsByName(selectedType)) do pcall(function() voidAway(m) end) end end)
+leftAnchorBtn.MouseButton1Click:Connect(function() if not selectedType then return end if excluded[selectedType] and excluded[selectedType]["Anchor"] then return end for _,m in ipairs(getNPCsByName(selectedType)) do pcall(function() toggleAnchor(m) end) end end)
+
+-- Exclusion panel (rightmost) population
+local ExclusionPanel = Instance.new("Frame")
+ExclusionPanel.Name = "ExclusionPanel"
+ExclusionPanel.Size = UDim2.new(0, 220, 0, GUI_HEIGHT)
+ExclusionPanel.AnchorPoint = Vector2.new(0, 0.5)
+ExclusionPanel.Position = UDim2.new(0.5, GUI_WIDTH/2 + 12 + 260 + 12, 0.5, 0)
+ExclusionPanel.BackgroundColor3 = Color3.fromRGB(30,30,30)
+ExclusionPanel.BorderSizePixel = 0
+ExclusionPanel.Visible = false
+ExclusionPanel.Parent = ScreenGui
+
+local exclTitle = Instance.new("TextLabel")
+exclTitle.Size = UDim2.new(1, -8, 0, 24)
+exclTitle.Position = UDim2.new(0,4,0,6)
+exclTitle.BackgroundTransparency = 1
+exclTitle.Font = Enum.Font.GothamBold
+exclTitle.TextSize = 14
+exclTitle.TextColor3 = Color3.new(1,1,1)
+exclTitle.Text = "Exclusions (select a type)"
+exclTitle.Parent = ExclusionPanel
+
+local exclScroll = Instance.new("ScrollingFrame")
+exclScroll.Size = UDim2.new(1, -12, 1, - 40)
+exclScroll.Position = UDim2.new(0,6,0,36)
+exclScroll.BackgroundTransparency = 1
+exclScroll.ScrollBarThickness = 8
+exclScroll.Parent = ExclusionPanel
+local exclList = Instance.new("UIListLayout"); exclList.Parent = exclScroll; exclList.SortOrder = Enum.SortOrder.LayoutOrder; exclList.Padding = UDim.new(0,6)
+exclList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    exclScroll.CanvasSize = UDim2.new(0,0,0, exclList.AbsoluteContentSize.Y + 8)
+end)
+
+leftWhitelistBtn.MouseButton1Click:Connect(function()
+    if not selectedType then return end
+    ExclusionPanel.Visible = not ExclusionPanel.Visible
+    exclTitle.Text = "Exclusions for: " .. selectedType
+    if not excluded[selectedType] then excluded[selectedType] = {} end
+
+    for _,child in ipairs(exclScroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
+    for _,eff in ipairs(EFFECTS) do
+        local frame = Instance.new("Frame"); frame.Size = UDim2.new(1,0,0,34); frame.BackgroundTransparency = 1; frame.Parent = exclScroll
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1,0,1,0)
+        btn.Position = UDim2.new(0,0,0,0)
+        btn.BackgroundColor3 = (excluded[selectedType][eff] and Color3.fromRGB(60,180,75) or Color3.fromRGB(58,58,58))
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 14
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.Text = eff .. (excluded[selectedType][eff] and " (excluded)" or "")
+        btn.Parent = frame
+
+        btn.MouseButton1Click:Connect(function()
+            excluded[selectedType][eff] = not excluded[selectedType][eff]
+            btn.BackgroundColor3 = (excluded[selectedType][eff] and Color3.fromRGB(60,180,75) or Color3.fromRGB(58,58,58))
+            btn.Text = eff .. (excluded[selectedType][eff] and " (excluded)" or "")
+            if eff == "Tracker" and excluded[selectedType][eff] then
+                for _,m in ipairs(getNPCsByName(selectedType)) do removeTrackerFromModel(m) end
+            end
+            if eff == "Speed" and excluded[selectedType][eff] then stopLoop("speed_"..selectedType) end
+            if eff == "JumpPower" and excluded[selectedType][eff] then stopLoop("jp_"..selectedType) end
+            if eff == "HipHeight" and excluded[selectedType][eff] then stopLoop("hip_"..selectedType) end
+            if eff == "Heal" and excluded[selectedType][eff] then stopLoop("heal_"..selectedType) end
+            if eff == "Void3" and excluded[selectedType][eff] then stopLoop("void3_"..selectedType) end
+            if eff == "Fling" and excluded[selectedType][eff] then stopLoop("fling_"..selectedType) end
+        end)
+    end
+end)
+
+-- Tabs show/hide
+local function showTab(name)
+    Content.Visible = true
+    whitelistFrame.Visible = false
+    FeaturesPanel.Visible = false
+    ExclusionPanel.Visible = false
+    if name == "Controls" then
+        whitelistFrame.Visible = false
+    elseif name == "Utilities" then
+        whitelistFrame.Visible = false
+    elseif name == "Advanced" then
+        whitelistFrame.Visible = false
+    elseif name == "Whitelist" then
+        whitelistFrame.Visible = true
+        rebuildGroupedList()
+    end
+end
+tabControlsBtn.MouseButton1Click:Connect(function() showTab("Controls") end)
+tabUtilitiesBtn.MouseButton1Click:Connect(function() showTab("Utilities") end)
+tabAdvancedBtn.MouseButton1Click:Connect(function() showTab("Advanced") end)
+tabWhitelistBtn.MouseButton1Click:Connect(function() showTab("Whitelist") end)
+
+-- SMALL TOGGLE open/close
+local isOpen = false
+SmallToggle.MouseButton1Click:Connect(function()
+    isOpen = not isOpen
+    if isOpen then
+        SmallToggle.Text = "X"
+        MainFrame.Visible = true
+        Content.Visible = true
+        MainFrame.Size = UDim2.new(0, 120, 0, 24)
+        local targetSize = UDim2.new(0, GUI_WIDTH, 0, GUI_HEIGHT)
+        TweenService:Create(MainFrame, TweenInfo.new(0.22, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { Size = targetSize }):Play()
+        showTab("Controls")
+    else
+        SmallToggle.Text = "NPC"
+        local tween = TweenService:Create(MainFrame, TweenInfo.new(0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { Size = UDim2.new(0, 120, 0, 24) })
+        tween:Play()
+        tween.Completed:Connect(function()
+            MainFrame.Visible = false
+            Content.Visible = false
+            ExclusionPanel.Visible = false
+            FeaturesPanel.Visible = false
+        end)
+    end
+end)
+
+-- HEARTBEAT: scanning, cancel-chase, tracker updates
+do
+    local acc = 0
+    RunService.Heartbeat:Connect(function(dt)
+        acc = acc + dt
+        if acc >= SCAN_INTERVAL then
+            acc = 0
+            scanAddNPCs()
+            cleanNPCs()
+            updateCounterAndGroups()
+            -- auto-add trackers for types tracked via left-panel
+            for t,_ in pairs(trackedTypes) do
+                for _,m in ipairs(getNPCsByName(t)) do
+                    if not trackedNPCs[m] and (not excluded[t] or not excluded[t]["Tracker"]) then addTrackerToModel(m) end
+                end
+            end
+        end
+        if cancelChaseEnabled then
+            for model,_ in pairs(NPCs) do
+                if model and model.Parent and isNPC(model) then pcall(function() cancelChaseForModel(model) end) end
+            end
+        end
+        updateAllTrackers()
+    end)
+end
+
+-- Keep UI brief: print loaded
+print("[UnifiedNPCGUI v2] Loaded. Features panel scannable, HipHeight restored, HP=NaN removed, tracker highlights added.")
