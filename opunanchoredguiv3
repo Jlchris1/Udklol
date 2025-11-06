@@ -1,0 +1,893 @@
+-- Full updated script (client)
+-- Changes: switchDelay = 0.13, exact equal-count distribution, instant placement of BHs on targets,
+-- improved player detection (BHs wait for HRP), PAA = strict one-to-one mapping, multi-BH allowed outside PAA.
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+local localPlayer = Players.LocalPlayer
+
+-- Core state
+local blackHoleActive = false
+local toggleState = false
+local targetPlayer = nil
+local switchDelay = 0.13 -- set per your request
+local processedParts = {} -- set: part -> true
+local initiallyAnchoredParts = {}
+local anchoredOnce = false
+local unanchorTimerRunning = false
+local unanchorCoroutine
+
+local noclipConnection
+
+-- Primary single attachment (legacy behavior / main toggle)
+local Attachment1 = nil
+
+-- Manager for extra black holes created by commands (table of {Part, Attachment, AssignedParts, TargetPlayer, LastTarget, _running})
+local extraBlackHoles = {}
+
+-- PAA mode state
+local PAAEnabled = false
+local PAA_isUsingSelected = false -- when true, PAA uses selected players
+local paaConnections = {}
+
+-- Rebalancer state
+local rebalancerRunning = false
+local rebalancerFreq = 0.10 -- seconds between rebalances; lower = faster redistribution (tweakable)
+local alignResponsiveness = 1500 -- high = snappy; tweak if physics break
+
+-- Setup initial Attachment placed under a workspace folder (not parented to player)
+local function setupPlayer()
+    local Folder = Workspace:FindFirstChild("ÆS_BlackHole_Folder")
+    if not Folder then
+        Folder = Instance.new("Folder", Workspace)
+        Folder.Name = "ÆS_BlackHole_Folder"
+    end
+    -- keep a single invisible part for the default attachment
+    local Part = Instance.new("Part", Folder)
+    Part.Name = "BH_Center_Part"
+    Part.Anchored = true
+    Part.CanCollide = false
+    Part.Transparency = 1
+    Part.Size = Vector3.new(1,1,1)
+    local Attachment = Instance.new("Attachment", Part)
+    return Attachment
+end
+
+Attachment1 = setupPlayer()
+
+-- Detect if a character is an NPC (has Humanoid but not a player character)
+local function isNPC(character)
+    if not character or not character:IsA("Model") then return false end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid and not Players:GetPlayerFromCharacter(character) then
+        return true
+    end
+    return false
+end
+
+-- Ensure we don't affect any player's character parts (local or remote players)
+local function isPartPlayerCharacter(part)
+    if not part then return false end
+    for _, pl in ipairs(Players:GetPlayers()) do
+        local char = pl.Character
+        if char and part:IsDescendantOf(char) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Enable or disable collisions on a character's parts
+local function setCharacterCollision(character, canCollide)
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = canCollide
+        end
+    end
+end
+
+-- Enable noclip for local player but keep collisions with their own parts ON
+local function enableLocalPlayerNoclip(enable)
+    if enable then
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+
+        noclipConnection = RunService.Stepped:Connect(function()
+            local character = localPlayer.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                for _, part in ipairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        if part.Name == "HumanoidRootPart" then
+                            part.CanCollide = false
+                        else
+                            part.CanCollide = true
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+        local character = localPlayer.Character
+        if character then
+            setCharacterCollision(character, true)
+        end
+    end
+end
+
+-- helper to remove any existing physics bodyobjects from a part
+local function stripBodyForces(part)
+    for _, x in next, part:GetChildren() do
+        if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro")
+        or x:IsA("BodyPosition") or x:IsA("BodyThrust") or x:IsA("BodyVelocity")
+        or x:IsA("RocketPropulsion") then
+            x:Destroy()
+        end
+    end
+    if part:FindFirstChild("Attachment") then part:FindFirstChild("Attachment"):Destroy() end
+    if part:FindFirstChild("AlignPosition") then part:FindFirstChild("AlignPosition"):Destroy() end
+    if part:FindFirstChild("Torque") then part:FindFirstChild("Torque"):Destroy() end
+end
+
+-- Utility: shuffle table in place
+local function shuffle(t)
+    for i = #t, 2, -1 do
+        local j = math.random(1, i)
+        t[i], t[j] = t[j], t[i]
+    end
+end
+
+-- Choose the extra black hole with fewest assigned parts (for immediate balanced assignment)
+local function getLeastLoadedBlackHole()
+    if #extraBlackHoles == 0 then return nil end
+    table.sort(extraBlackHoles, function(a,b) return (#a.AssignedParts) < (#b.AssignedParts) end)
+    return extraBlackHoles[1]
+end
+
+-- Return array of players excluding local player. Always returns current players even without characters.
+local function getAllNonLocalPlayers()
+    local res = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= localPlayer then
+            table.insert(res, p)
+        end
+    end
+    return res
+end
+
+-- ForcePart now assigns to extra black holes (if any). Also prevents affecting player characters.
+local function ForcePart(v)
+    if not v or not v:IsA("BasePart") then return end
+    -- safety checks: skip player's own character parts
+    if isPartPlayerCharacter(v) then return end
+
+    if v:IsA("BasePart")
+        and not v.Anchored
+        and v.Name ~= "Handle"
+        and not v:IsDescendantOf(localPlayer.Character)
+        and (
+            (v.Parent:FindFirstChildOfClass("Humanoid") and isNPC(v.Parent))
+            or (not v.Parent:FindFirstChildOfClass("Humanoid") and not v.Parent:FindFirstChild("Head"))
+        ) then
+
+        if processedParts[v] then return end
+        processedParts[v] = true
+
+        stripBodyForces(v)
+
+        -- ensure picked up parts have collisions off
+        v.CanCollide = false
+
+        -- torque + alignposition
+        local Torque = Instance.new("Torque", v)
+        Torque.Torque = Vector3.new(1e6, 1e6, 1e6)
+        local AlignPosition = Instance.new("AlignPosition", v)
+        local Attachment2 = Instance.new("Attachment", v)
+        Torque.Attachment0 = Attachment2
+
+        -- make align fast & snappy for rapid switching
+        AlignPosition.MaxForce = 1e9
+        AlignPosition.MaxVelocity = math.huge
+        AlignPosition.Responsiveness = alignResponsiveness
+        AlignPosition.Attachment0 = Attachment2
+
+        -- assign immediate target: least loaded BH if exists else primary Attachment1
+        local bh = getLeastLoadedBlackHole()
+        if bh and bh.Attachment and (not bh.Attachment:IsDescendantOf(localPlayer.Character)) then
+            AlignPosition.Attachment1 = bh.Attachment
+            table.insert(bh.AssignedParts, v)
+        else
+            AlignPosition.Attachment1 = Attachment1
+        end
+    end
+end
+
+local function clearProcessedParts()
+    for part, _ in pairs(processedParts) do
+        if part and part.Parent then
+            stripBodyForces(part)
+            part.CanCollide = true
+            if not initiallyAnchoredParts[part] then
+                part.Anchored = false
+            else
+                part.Anchored = true
+            end
+        end
+    end
+    processedParts = {}
+    initiallyAnchoredParts = {}
+    anchoredOnce = false
+end
+
+local function disableCollisionsForCharacterButNotWorldCollision(character)
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = true
+        end
+    end
+end
+
+-- Unfreeze cooldown changed to 1 second
+local function anchorAndDelayedUnanchorParts()
+    unanchorTimerRunning = true
+
+    local candidateParts = {}
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart")
+            and not v.Anchored
+            and v.Name ~= "Handle"
+            and not v:IsDescendantOf(localPlayer.Character)
+            and (
+                (v.Parent:FindFirstChildOfClass("Humanoid") and isNPC(v.Parent))
+                or (not v.Parent:FindFirstChildOfClass("Humanoid") and not v.Parent:FindFirstChild("Head"))
+            ) then
+            table.insert(candidateParts, v)
+        end
+    end
+
+    initiallyAnchoredParts = {}
+    for _, part in ipairs(candidateParts) do
+        initiallyAnchoredParts[part] = false
+        part.Anchored = true
+        part.CanCollide = false
+    end
+
+    -- Enable collisions for NPC characters
+    for _, npcCandidate in ipairs(Workspace:GetChildren()) do
+        if isNPC(npcCandidate) then
+            disableCollisionsForCharacterButNotWorldCollision(npcCandidate)
+        end
+    end
+
+    -- Ensure local player's character parts keep collisions
+    local character = localPlayer.Character
+    if character then
+        setCharacterCollision(character, true)
+    end
+
+    -- Enable noclip for local player (so they don't collide with world)
+    enableLocalPlayerNoclip(true)
+
+    local startTime = tick()
+    while blackHoleActive and tick() - startTime < 1 do
+        wait(0.05)
+    end
+
+    -- After cooldown unanchor candidate parts and apply ForcePart
+    for _, part in ipairs(candidateParts) do
+        if part and part.Parent and initiallyAnchoredParts[part] == false then
+            part.Anchored = false
+            ForcePart(part)
+        end
+    end
+
+    unanchorTimerRunning = false
+    anchoredOnce = true
+end
+
+local descendantAddedConn
+
+local function processWorkspaceParts()
+    if descendantAddedConn then
+        descendantAddedConn:Disconnect()
+        descendantAddedConn = nil
+    end
+
+    if blackHoleActive then
+        if not unanchorTimerRunning and not anchoredOnce then
+            unanchorCoroutine = coroutine.create(anchorAndDelayedUnanchorParts)
+            coroutine.resume(unanchorCoroutine)
+        end
+
+        descendantAddedConn = Workspace.DescendantAdded:Connect(function(v)
+            if blackHoleActive then
+                if v:IsA("BasePart") and not v.Anchored and not processedParts[v] then
+                    ForcePart(v)
+                end
+            end
+        end)
+    end
+end
+
+local function getRandomPlayer()
+    local players = getAllNonLocalPlayers()
+    if #players == 0 then return nil end
+    return players[math.random(1, #players)]
+end
+
+local function getSelectedPlayers()
+    local res = {}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= localPlayer and player:FindFirstChild("Selected") and player.Selected.Value then
+            table.insert(res, player)
+        end
+    end
+    return res
+end
+
+-- Helper: create an extra black hole (part + attachment) and start its loop
+local function createExtraBlackHole(initialTarget)
+    -- ensure initialTarget is never the local player
+    if initialTarget == localPlayer then initialTarget = nil end
+
+    local folder = Workspace:FindFirstChild("ÆS_BlackHole_Folder") or Instance.new("Folder", Workspace)
+    folder.Name = "ÆS_BlackHole_Folder"
+    local part = Instance.new("Part", folder)
+    part.Anchored = true
+    part.CanCollide = false
+    part.Transparency = 1
+    part.Size = Vector3.new(1,1,1)
+    part.Name = "ExtraBH_Center"
+
+    local att = Instance.new("Attachment", part)
+
+    local bh = {
+        Part = part,
+        Attachment = att,
+        AssignedParts = {},
+        TargetPlayer = initialTarget,
+        LastTarget = nil,
+        _running = true
+    }
+
+    -- spawn loop: update position to target's HRP if exists
+    bh._thread = spawn(function()
+        while bh._running do
+            -- If TargetPlayer is set, try to follow their HRP. If HRP not present, wait until available (fixes detection bug).
+            if bh.TargetPlayer and bh.TargetPlayer ~= localPlayer then
+                local char = bh.TargetPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    local hrp = char.HumanoidRootPart
+                    if att then
+                        att.WorldCFrame = hrp.CFrame -- instant placement on target
+                    end
+                end
+            else
+                -- roam near local player when no target assigned
+                if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local hrp = localPlayer.Character.HumanoidRootPart
+                    if att then
+                        att.WorldCFrame = hrp.CFrame * CFrame.new(math.random(-8,8), math.random(-2,2), math.random(-8,8))
+                    end
+                end
+            end
+            wait(switchDelay)
+        end
+    end)
+
+    table.insert(extraBlackHoles, bh)
+    return bh
+end
+
+local function destroyExtraBlackHole(bh)
+    if not bh then return end
+    bh._running = false
+    if bh.Part and bh.Part.Parent then bh.Part:Destroy() end
+    for _, p in ipairs(bh.AssignedParts) do
+        if p and p.Parent then
+            local ap = p:FindFirstChildOfClass("AlignPosition")
+            if ap then
+                ap.Attachment1 = Attachment1
+            end
+            p.CanCollide = false
+        end
+    end
+end
+
+-- Assign unique targets to BHs for PAA: enforces one BH per player and avoids assigning the same target the BH had previously when possible.
+local function assignUniqueTargetsToBHs()
+    if #extraBlackHoles == 0 then return end
+
+    -- candidate players (exclude local)
+    local players = {}
+    if PAA_isUsingSelected then
+        players = getSelectedPlayers()
+    else
+        players = getAllNonLocalPlayers()
+    end
+
+    -- shuffle players for fairness
+    shuffle(players)
+
+    -- mapping player -> assigned
+    local assignedPlayers = {}
+
+    -- first pass: try to assign each BH a player not equal to its LastTarget and not yet assigned
+    for _, bh in ipairs(extraBlackHoles) do
+        bh.LastTarget = bh.TargetPlayer -- store previous
+        bh.TargetPlayer = nil
+    end
+
+    for _, bh in ipairs(extraBlackHoles) do
+        local pick = nil
+        for _, pl in ipairs(players) do
+            if not assignedPlayers[pl] and pl ~= bh.LastTarget then
+                pick = pl
+                assignedPlayers[pl] = true
+                break
+            end
+        end
+        if not pick then
+            -- fallback: assign any unassigned player
+            for _, pl in ipairs(players) do
+                if not assignedPlayers[pl] then
+                    pick = pl
+                    assignedPlayers[pl] = true
+                    break
+                end
+            end
+        end
+        bh.TargetPlayer = pick -- may be nil if players < BHs
+        -- place BH instantly if HRP exists
+        if pick and pick.Character and pick.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
+            bh.Attachment.WorldCFrame = pick.Character.HumanoidRootPart.CFrame
+        end
+    end
+    -- now each player has at most one BH; BHs beyond players are left targetless (roam)
+end
+
+-- Create N extra black holes, attempt to assign different initial targets
+local function createNBlackHoles(n)
+    if n <= 0 then return end
+
+    -- Create BHs
+    for i = 1, n do
+        createExtraBlackHole(nil)
+    end
+
+    -- Assignment behavior:
+    if PAAEnabled then
+        -- enforce one-to-one mapping
+        assignUniqueTargetsToBHs()
+    else
+        -- non-PAA multi-BH: allow players to have multiple BHs.
+        -- Try to spread initial targets across players but allow duplicates if BHs > players.
+        local players = getAllNonLocalPlayers()
+        if #players > 0 then
+            for i, bh in ipairs(extraBlackHoles) do
+                bh.TargetPlayer = players[((i-1) % #players) + 1]
+                bh.LastTarget = nil
+                if bh.TargetPlayer and bh.TargetPlayer.Character and bh.TargetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    bh.Attachment.WorldCFrame = bh.TargetPlayer.Character.HumanoidRootPart.CFrame
+                end
+            end
+        end
+    end
+
+    if #extraBlackHoles > 0 then
+        startRebalancer()
+    end
+end
+
+-- Delete extra black holes and reset back to single Attachment1
+local function deleteExtraBlackHoles()
+    for _, bh in ipairs(extraBlackHoles) do
+        destroyExtraBlackHole(bh)
+    end
+    extraBlackHoles = {}
+    if not Attachment1 or not Attachment1.Parent then
+        Attachment1 = setupPlayer()
+    end
+    stopRebalancer()
+end
+
+-- PAA management: create one black hole per player (or selected players)
+local function refreshPAA()
+    deleteExtraBlackHoles()
+
+    local targets = {}
+    if PAA_isUsingSelected then
+        targets = getSelectedPlayers()
+    else
+        targets = getAllNonLocalPlayers()
+    end
+
+    for _, tgt in ipairs(targets) do
+        local bh = createExtraBlackHole(tgt)
+        bh.TargetPlayer = tgt
+        bh.LastTarget = nil
+        if tgt.Character and tgt.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
+            bh.Attachment.WorldCFrame = tgt.Character.HumanoidRootPart.CFrame
+        end
+    end
+
+    -- ensure uniqueness & avoid immediate re-targeting
+    assignUniqueTargetsToBHs()
+
+    if #extraBlackHoles > 0 then
+        startRebalancer()
+    end
+end
+
+-- Player join/leave handlers for PAA live updates
+local function onPlayerAddedForPAA(pl)
+    if PAAEnabled and not PAA_isUsingSelected and pl ~= localPlayer then
+        local bh = createExtraBlackHole(pl)
+        bh.TargetPlayer = pl
+        bh.LastTarget = nil
+        assignUniqueTargetsToBHs()
+    end
+end
+
+local function onPlayerRemovingForPAA(pl)
+    if PAAEnabled then
+        for i = #extraBlackHoles, 1, -1 do
+            local bh = extraBlackHoles[i]
+            if bh and bh.TargetPlayer == pl then
+                destroyExtraBlackHole(bh)
+                table.remove(extraBlackHoles, i)
+                break
+            end
+        end
+        assignUniqueTargetsToBHs()
+    end
+end
+
+-- Toggle main black hole (legacy single Attachment1 behavior)
+local function toggleBlackHole()
+    blackHoleActive = toggleState
+    if blackHoleActive then
+        if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local newAttachment = Instance.new("Attachment", localPlayer.Character.HumanoidRootPart)
+            if Attachment1 then Attachment1:Destroy() end
+            Attachment1 = newAttachment
+        else
+            Attachment1 = setupPlayer()
+        end
+
+        anchoredOnce = false
+        processWorkspaceParts()
+        spawn(function()
+            while blackHoleActive do
+                targetPlayer = getRandomPlayer()
+                if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    Attachment1.WorldCFrame = CFrame.new(targetPlayer.Character.HumanoidRootPart.Position)
+                end
+                wait(switchDelay)
+            end
+        end)
+    else
+        blackHoleActive = false
+        enableLocalPlayerNoclip(false)
+        if unanchorTimerRunning and unanchorCoroutine then
+            unanchorTimerRunning = false
+            for part, anchored in pairs(initiallyAnchoredParts) do
+                if part and part.Parent and anchored == false then
+                    part.Anchored = false
+                    ForcePart(part)
+                end
+            end
+        end
+        clearProcessedParts()
+    end
+end
+
+-- Toggle target selected behavior (legacy)
+local function toggleTargetSelected()
+    blackHoleActive = toggleState
+    if blackHoleActive then
+        if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local newAttachment = Instance.new("Attachment", localPlayer.Character.HumanoidRootPart)
+            if Attachment1 then Attachment1:Destroy() end
+            Attachment1 = newAttachment
+        else
+            Attachment1 = setupPlayer()
+        end
+
+        anchoredOnce = false
+        processWorkspaceParts()
+        spawn(function()
+            while blackHoleActive do
+                local selectedPlayers = getSelectedPlayers()
+                if #selectedPlayers > 0 then
+                    targetPlayer = selectedPlayers[math.random(1, #selectedPlayers)]
+                else
+                    targetPlayer = nil
+                end
+                if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    Attachment1.WorldCFrame = CFrame.new(targetPlayer.Character.HumanoidRootPart.Position)
+                end
+                wait(switchDelay)
+            end
+        end)
+    else
+        blackHoleActive = false
+        enableLocalPlayerNoclip(false)
+        if unanchorTimerRunning and unanchorCoroutine then
+            unanchorTimerRunning = false
+            for part, anchored in pairs(initiallyAnchoredParts) do
+                if part and part.Parent and anchored == false then
+                    part.Anchored = false
+                    ForcePart(part)
+                end
+            end
+        end
+        clearProcessedParts()
+    end
+end
+
+-- Keep primary behavior consistent on respawn
+local function onCharacterAdded(character)
+    if blackHoleActive then
+        local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        local newAttachment = Instance.new("Attachment", humanoidRootPart)
+        if Attachment1 then Attachment1:Destroy() end
+        Attachment1 = newAttachment
+        processedParts = {}
+        processWorkspaceParts()
+    end
+end
+
+localPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+-- ---- Rebalancer: exact equal-count distribution of processed parts across extraBlackHoles ----
+function startRebalancer()
+    if rebalancerRunning then return end
+    rebalancerRunning = true
+    spawn(function()
+        while rebalancerRunning do
+            local bhCount = #extraBlackHoles
+            local parts = {}
+            for p, _ in pairs(processedParts) do
+                if p and p.Parent then
+                    local ap = p:FindFirstChildOfClass("AlignPosition")
+                    if ap then
+                        table.insert(parts, p)
+                    else
+                        ForcePart(p)
+                        local ap2 = p:FindFirstChildOfClass("AlignPosition")
+                        if ap2 then table.insert(parts, p) end
+                    end
+                end
+            end
+
+            if bhCount > 0 and #parts > 0 then
+                -- exact equal-count calculation
+                local total = #parts
+                local base = math.floor(total / bhCount)
+                local rem = total - (base * bhCount) -- remainder to distribute (0..bhCount-1)
+                -- prepare counts per BH: first rem BHs get base+1, others get base
+                local counts = {}
+                for i = 1, bhCount do
+                    counts[i] = base + (i <= rem and 1 or 0)
+                end
+
+                -- assign parts in deterministic order (so distribution is stable)
+                local idx = 1
+                local partIndex = 1
+                for i = 1, bhCount do
+                    local bh = extraBlackHoles[i]
+                    local need = counts[i]
+                    local assignedThisRound = {}
+                    for c = 1, need do
+                        local p = parts[partIndex]
+                        if not p then break end
+                        local ap = p:FindFirstChildOfClass("AlignPosition")
+                        if ap then
+                            -- ensure the BH attachment is safe (not under local character)
+                            if bh and bh.Attachment and (not bh.Attachment:IsDescendantOf(localPlayer.Character)) then
+                                ap.Attachment1 = bh.Attachment
+                                p.CanCollide = false
+                                table.insert(bh.AssignedParts, p)
+                            else
+                                ap.Attachment1 = Attachment1
+                                p.CanCollide = false
+                            end
+                        end
+                        partIndex = partIndex + 1
+                    end
+                end
+            else
+                -- no extra BHs: ensure all parts point to Attachment1 (primary)
+                for _, p in ipairs(parts) do
+                    local ap = p:FindFirstChildOfClass("AlignPosition")
+                    if ap then
+                        ap.Attachment1 = Attachment1
+                        p.CanCollide = false
+                    end
+                end
+            end
+
+            -- If PAA is active, enforce one-to-one target uniqueness again in case players joined/left
+            if PAAEnabled then
+                assignUniqueTargetsToBHs()
+            end
+
+            wait(rebalancerFreq)
+        end
+    end)
+end
+
+function stopRebalancer()
+    rebalancerRunning = false
+end
+
+-- ---- Command system (chat) and GUI toggles ----
+local enableCommands = false
+
+-- Chat command parser (client-side; only listens to local player's chat)
+local function onLocalPlayerChatted(msg)
+    if not enableCommands then return end
+    if not msg then return end
+    local raw = msg
+    msg = msg:lower()
+    -- /e blackholes N
+    local bhArg = string.match(msg, "^/e%s+blackholes%s+(%d+)")
+    if bhArg then
+        local n = tonumber(bhArg)
+        if n and n > 0 then
+            createNBlackHoles(n)
+        end
+        return
+    end
+
+    -- /e dbh
+    if string.match(msg, "^/e%s+dbh") then
+        deleteExtraBlackHoles()
+        return
+    end
+
+    -- /e paa -> toggle PAA on
+    if string.match(msg, "^/e%s+paa") then
+        PAAEnabled = true
+        PAA_isUsingSelected = false
+        refreshPAA()
+        paaConnections[#paaConnections+1] = Players.PlayerAdded:Connect(onPlayerAddedForPAA)
+        paaConnections[#paaConnections+1] = Players.PlayerRemoving:Connect(onPlayerRemovingForPAA)
+        return
+    end
+
+    -- /e unpaa -> disable PAA
+    if string.match(msg, "^/e%s+unpaa") then
+        PAAEnabled = false
+        for _, c in ipairs(paaConnections) do
+            if c and c.Disconnect then pcall(function() c:Disconnect() end) end
+        end
+        paaConnections = {}
+        deleteExtraBlackHoles()
+        return
+    end
+
+    -- /e psel -> PAA using selected players
+    if string.match(msg, "^/e%s+psel") then
+        PAAEnabled = true
+        PAA_isUsingSelected = true
+        refreshPAA()
+        return
+    end
+end
+
+localPlayer.Chatted:Connect(onLocalPlayerChatted)
+
+-- ---- GUI (TurtleLib) ----
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/miroeramaa/TurtleLib/main/TurtleUiLib.lua"))()
+local window = library:Window("made by ÆS productions")
+
+window:Toggle("Unanchored Target All", false, function(Value)
+    toggleState = Value
+    blackHoleActive = Value
+    toggleBlackHole()
+end)
+
+window:Toggle("Target Selected Players", false, function(Value)
+    toggleState = Value
+    blackHoleActive = Value
+    toggleTargetSelected()
+end)
+
+window:Button("Load Player List Script", function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Playerlistv6"))()
+end)
+
+window:Button("telekinesis/fix target", function()
+    loadstring(game:HttpGet(('https://raw.githubusercontent.com/SAZXHUB/Control-update/main/README.md'), true))()
+end)
+
+local loopCheckActive = false
+
+window:Toggle("Continuous Loop Check", false, function(Value)
+    loopCheckActive = Value
+    if loopCheckActive then
+        spawn(function()
+            while loopCheckActive do
+                if blackHoleActive then
+                    for _, v in ipairs(Workspace:GetDescendants()) do
+                        if v:IsA("BasePart") and not v.Anchored and not processedParts[v] then
+                            ForcePart(v)
+                        end
+                    end
+                end
+                wait(0.5)
+            end
+        end)
+    end
+end)
+
+-- NEW: Enable commands toggle (enables chat-based commands like /e blackholes N and /e DBH)
+window:Toggle("Enable commands", false, function(Value)
+    enableCommands = Value
+    if enableCommands then
+        print("[ÆS] Commands enabled: use '/e blackholes <N>', '/e DBH', '/e PAA', '/e unPAA', '/e psel'.")
+    else
+        print("[ÆS] Commands disabled.")
+    end
+end)
+
+-- NEW: PAA/unPAA toggle (player-amount black holes/attachments)
+window:Toggle("PAA/unPAA (player amount BHs)", false, function(Value)
+    PAAEnabled = Value
+    if PAAEnabled then
+        PAA_isUsingSelected = false
+        refreshPAA()
+        paaConnections[#paaConnections+1] = Players.PlayerAdded:Connect(onPlayerAddedForPAA)
+        paaConnections[#paaConnections+1] = Players.PlayerRemoving:Connect(onPlayerRemovingForPAA)
+    else
+        for _, c in ipairs(paaConnections) do
+            if c and c.Disconnect then pcall(function() c:Disconnect() end) end
+        end
+        paaConnections = {}
+        deleteExtraBlackHoles()
+    end
+end)
+
+-- convenience buttons
+window:Button("Create 3 Blackholes (quick)", function()
+    createNBlackHoles(3)
+end)
+
+window:Button("Delete Extra Blackholes (DBH)", function()
+    deleteExtraBlackHoles()
+end)
+
+-- Continuous refresh for selection-based PAA if selected mode is enabled
+spawn(function()
+    while true do
+        if PAAEnabled and PAA_isUsingSelected then
+            refreshPAA()
+        end
+        wait(2)
+    end
+end)
+
+-- Start/stop rebalancer based on presence of extra black holes
+spawn(function()
+    while true do
+        if #extraBlackHoles > 0 and not rebalancerRunning then
+            startRebalancer()
+        elseif #extraBlackHoles == 0 and rebalancerRunning then
+            stopRebalancer()
+        end
+        wait(0.5)
+    end
+end)
+
+-- End of script
