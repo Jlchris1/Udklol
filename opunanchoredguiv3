@@ -1,6 +1,6 @@
 -- Full updated script (client) - Updated per request
 -- Changes summary:
---  * switchDelay = 2.0 (set)
+--  * switchDelay = 1.0 (set)
 --  * BH movement: oscillation along target path (forward/back) and up/down + lateral,
 --    with direction swap interval = 0.05s (i.e. full cycle 0.1s -> frequency 10Hz)
 --  * instant placement when HRP appears
@@ -26,7 +26,7 @@ end
 local blackHoleActive = false
 local toggleState = false
 local targetPlayer = nil
-local switchDelay = 2.0 -- changed per your request (2 seconds)
+local switchDelay = 1 -- changed per your request (1 seconds)
 local processedParts = {} -- set: part -> true
 local initiallyAnchoredParts = {}
 local anchoredOnce = false
