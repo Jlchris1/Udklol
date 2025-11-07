@@ -26,7 +26,7 @@ end
 local blackHoleActive = false
 local toggleState = false
 local targetPlayer = nil
-local switchDelay = 1 -- changed per your request (1 seconds)
+local switchDelay = 0.5 -- changed per your request (1 seconds)
 local processedParts = {} -- set: part -> true
 local initiallyAnchoredParts = {}
 local anchoredOnce = false
@@ -52,7 +52,7 @@ local rebalancerFreq = 0.10 -- seconds between rebalances; lower = faster redist
 local alignResponsiveness = 1500 -- high = snappy; tweak if physics break
 
 -- BH motion tuning (tweakable)
-local BH_SWAP_INTERVAL = 0.05         -- seconds per swap (each direction flip)
+local BH_SWAP_INTERVAL = 0.01         -- seconds per swap (each direction flip)
 local BH_OSC_FREQUENCY = 1 / (BH_SWAP_INTERVAL * 2) -- 10 Hz if swap=0.05 (full cycle=0.1s)
 local BH_AMPLITUDE_FACTOR = 0.22     -- amplitude multiplier applied to speed to compute displacement
 local BH_MIN_AMPLITUDE = 0.6        -- small jitter even when standing still
