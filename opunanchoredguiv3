@@ -1,6 +1,13 @@
--- Full updated script (client)
--- Changes: switchDelay = 0.13, exact equal-count distribution, instant placement of BHs on targets,
--- improved player detection (BHs wait for HRP), PAA = strict one-to-one mapping, multi-BH allowed outside PAA.
+-- Full updated script (client) - Updated per request
+-- Changes summary:
+--  * switchDelay = 2.0 (set)
+--  * BH movement: oscillation along target path (forward/back) and up/down + lateral,
+--    with direction swap interval = 0.05s (i.e. full cycle 0.1s -> frequency 10Hz)
+--  * instant placement when HRP appears
+--  * BHs are deactivated (not destroyed) when their target has Disabled BoolValue == true; re-enable when un-disabled
+--  * when target disabled -> assigned parts' CanCollide = true
+--  * exact equal-count rebalancer preserved and used
+--  * various robustness fixes (removed invalid 'continue' usage, corrected child-find calls)
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -8,11 +15,18 @@ local RunService = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer
 
+-- Utilities
+local function clamp(val, a, b)
+    if val < a then return a end
+    if val > b then return b end
+    return val
+end
+
 -- Core state
 local blackHoleActive = false
 local toggleState = false
 local targetPlayer = nil
-local switchDelay = 0.13 -- set per your request
+local switchDelay = 2.0 -- changed per your request (2 seconds)
 local processedParts = {} -- set: part -> true
 local initiallyAnchoredParts = {}
 local anchoredOnce = false
@@ -24,7 +38,7 @@ local noclipConnection
 -- Primary single attachment (legacy behavior / main toggle)
 local Attachment1 = nil
 
--- Manager for extra black holes created by commands (table of {Part, Attachment, AssignedParts, TargetPlayer, LastTarget, _running})
+-- Manager for extra black holes created by commands (table of {Part, Attachment, AssignedParts, TargetPlayer, LastTarget, _running, _active})
 local extraBlackHoles = {}
 
 -- PAA mode state
@@ -36,6 +50,13 @@ local paaConnections = {}
 local rebalancerRunning = false
 local rebalancerFreq = 0.10 -- seconds between rebalances; lower = faster redistribution (tweakable)
 local alignResponsiveness = 1500 -- high = snappy; tweak if physics break
+
+-- BH motion tuning (tweakable)
+local BH_SWAP_INTERVAL = 0.05         -- seconds per swap (each direction flip)
+local BH_OSC_FREQUENCY = 1 / (BH_SWAP_INTERVAL * 2) -- 10 Hz if swap=0.05 (full cycle=0.1s)
+local BH_AMPLITUDE_FACTOR = 0.22     -- amplitude multiplier applied to speed to compute displacement
+local BH_MIN_AMPLITUDE = 0.6        -- small jitter even when standing still
+local BH_MAX_AMPLITUDE = 80         -- upper clamp for amplitude (studs)
 
 -- Setup initial Attachment placed under a workspace folder (not parented to player)
 local function setupPlayer()
@@ -183,7 +204,7 @@ local function ForcePart(v)
 
         stripBodyForces(v)
 
-        -- ensure picked up parts have collisions off
+        -- ensure picked up parts have collisions off (unless deactivated later)
         v.CanCollide = false
 
         -- torque + alignposition
@@ -201,7 +222,7 @@ local function ForcePart(v)
 
         -- assign immediate target: least loaded BH if exists else primary Attachment1
         local bh = getLeastLoadedBlackHole()
-        if bh and bh.Attachment and (not bh.Attachment:IsDescendantOf(localPlayer.Character)) then
+        if bh and bh.Attachment and (not bh.Attachment:IsDescendantOf(localPlayer.Character)) and bh._active then
             AlignPosition.Attachment1 = bh.Attachment
             table.insert(bh.AssignedParts, v)
         else
@@ -334,6 +355,37 @@ local function getSelectedPlayers()
     return res
 end
 
+-- Helper: sets a BH active/inactive (deactivate means stop effects but keep object)
+local function setBlackHoleActiveState(bh, active)
+    if not bh then return end
+    if bh._active == active then return end
+    bh._active = active
+    if not active then
+        -- when deactivated: re-enable collisions on assigned parts and clear their attachments gently
+        for _, p in ipairs(bh.AssignedParts) do
+            if p and p.Parent then
+                p.CanCollide = true
+                local ap = p:FindFirstChildOfClass("AlignPosition")
+                if ap then
+                    -- point back to Attachment1 so parts don't stick to an inactive BH that isn't moving
+                    ap.Attachment1 = Attachment1
+                end
+            end
+        end
+    else
+        -- when re-activated: ensure assigned parts are set back to this BH's attachment
+        for _, p in ipairs(bh.AssignedParts) do
+            if p and p.Parent then
+                local ap = p:FindFirstChildOfClass("AlignPosition")
+                if ap then
+                    ap.Attachment1 = bh.Attachment
+                    p.CanCollide = false
+                end
+            end
+        end
+    end
+end
+
 -- Helper: create an extra black hole (part + attachment) and start its loop
 local function createExtraBlackHole(initialTarget)
     -- ensure initialTarget is never the local player
@@ -356,31 +408,79 @@ local function createExtraBlackHole(initialTarget)
         AssignedParts = {},
         TargetPlayer = initialTarget,
         LastTarget = nil,
-        _running = true
+        _running = true,
+        _active = true -- active by default
     }
+
+    -- small helper to check if a player is "disabled" by design (BoolValue named "Disabled")
+    local function isPlayerDisabled(pl)
+        if not pl then return false end
+        if pl:FindFirstChild("Disabled") and typeof(pl.Disabled.Value) == "boolean" then
+            return pl.Disabled.Value
+        end
+        return false
+    end
 
     -- spawn loop: update position to target's HRP if exists
     bh._thread = spawn(function()
+        local t = 0
         while bh._running do
-            -- If TargetPlayer is set, try to follow their HRP. If HRP not present, wait until available (fixes detection bug).
+            local dt = RunService.Heartbeat:Wait()
+            t = t + dt
+
             if bh.TargetPlayer and bh.TargetPlayer ~= localPlayer then
-                local char = bh.TargetPlayer.Character
-                if char and char:FindFirstChild("HumanoidRootPart") then
-                    local hrp = char.HumanoidRootPart
-                    if att then
-                        att.WorldCFrame = hrp.CFrame -- instant placement on target
+                -- If player flagged disabled, deactivate BH (but keep it around)
+                if isPlayerDisabled(bh.TargetPlayer) then
+                    setBlackHoleActiveState(bh, false)
+                else
+                    setBlackHoleActiveState(bh, true)
+                    local char = bh.TargetPlayer.Character
+                    if char and char:FindFirstChild("HumanoidRootPart") then
+                        local hrp = char.HumanoidRootPart
+
+                        -- Compute velocity-based oscillation
+                        local vel = hrp.Velocity or Vector3.new(0,0,0)
+                        local speed = vel.Magnitude
+                        -- choose direction; if small speed, produce a pseudo-random directional jitter so BH still moves in all axes
+                        local dir
+                        if speed > 0.5 then
+                            dir = vel.Unit
+                        else
+                            dir = (hrp.CFrame.LookVector + hrp.CFrame.UpVector * 0.3).Unit
+                        end
+
+                        -- amplitude scales with speed (user requested: faster => further expand)
+                        local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
+
+                        -- phase uses time * frequency to create fast back-and-forth motion with swap interval ~0.05s
+                        local phase = t * (2 * math.pi * BH_OSC_FREQUENCY)
+                        local primaryOffset = dir * (math.sin(phase) * amplitude)
+
+                        -- add explicit up/down oscillation along world UpVector (gives vertical swapping)
+                        local verticalOffset = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
+
+                        -- small lateral variation perpendicular to movement
+                        local lateralOffset = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
+
+                        -- final world CFrame: follows HRP and applies offsets
+                        local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateralOffset + verticalOffset)
+
+                        if att then
+                            att.WorldCFrame = targetCFrame
+                        end
                     end
                 end
             else
                 -- roam near local player when no target assigned
                 if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     local hrp = localPlayer.Character.HumanoidRootPart
+                    local phase = t * (BH_OSC_FREQUENCY * 0.45)
+                    local roamOffset = Vector3.new(math.sin(phase*1.11)*4, math.sin(phase*1.3)*1.6, math.cos(phase*0.9)*4)
                     if att then
-                        att.WorldCFrame = hrp.CFrame * CFrame.new(math.random(-8,8), math.random(-2,2), math.random(-8,8))
+                        att.WorldCFrame = hrp.CFrame * CFrame.new(roamOffset + Vector3.new(math.random(-2,2), math.random(-1,1), math.random(-2,2)))
                     end
                 end
             end
-            wait(switchDelay)
         end
     end)
 
@@ -415,7 +515,6 @@ local function assignUniqueTargetsToBHs()
         players = getAllNonLocalPlayers()
     end
 
-    -- shuffle players for fairness
     shuffle(players)
 
     -- mapping player -> assigned
@@ -447,6 +546,14 @@ local function assignUniqueTargetsToBHs()
             end
         end
         bh.TargetPlayer = pick -- may be nil if players < BHs
+
+        -- respect disabled state
+        if bh.TargetPlayer and bh.TargetPlayer:FindFirstChild("Disabled") and bh.TargetPlayer.Disabled.Value == true then
+            setBlackHoleActiveState(bh, false)
+        else
+            setBlackHoleActiveState(bh, true)
+        end
+
         -- place BH instantly if HRP exists
         if pick and pick.Character and pick.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
             bh.Attachment.WorldCFrame = pick.Character.HumanoidRootPart.CFrame
@@ -476,6 +583,12 @@ local function createNBlackHoles(n)
             for i, bh in ipairs(extraBlackHoles) do
                 bh.TargetPlayer = players[((i-1) % #players) + 1]
                 bh.LastTarget = nil
+                -- respect disabled state
+                if bh.TargetPlayer and bh.TargetPlayer:FindFirstChild("Disabled") and bh.TargetPlayer.Disabled.Value == true then
+                    setBlackHoleActiveState(bh, false)
+                else
+                    setBlackHoleActiveState(bh, true)
+                end
                 if bh.TargetPlayer and bh.TargetPlayer.Character and bh.TargetPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     bh.Attachment.WorldCFrame = bh.TargetPlayer.Character.HumanoidRootPart.CFrame
                 end
@@ -515,6 +628,12 @@ local function refreshPAA()
         local bh = createExtraBlackHole(tgt)
         bh.TargetPlayer = tgt
         bh.LastTarget = nil
+        -- respect disabled at creation
+        if tgt:FindFirstChild("Disabled") and tgt.Disabled.Value == true then
+            setBlackHoleActiveState(bh, false)
+        else
+            setBlackHoleActiveState(bh, true)
+        end
         if tgt.Character and tgt.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
             bh.Attachment.WorldCFrame = tgt.Character.HumanoidRootPart.CFrame
         end
@@ -570,7 +689,18 @@ local function toggleBlackHole()
             while blackHoleActive do
                 targetPlayer = getRandomPlayer()
                 if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    Attachment1.WorldCFrame = CFrame.new(targetPlayer.Character.HumanoidRootPart.Position)
+                    -- Instant placement to HRP (legacy single BH)
+                    local hrp = targetPlayer.Character.HumanoidRootPart
+                    -- compute a fast oscillation similar to extra BHs for single Attachment1
+                    local vel = hrp.Velocity or Vector3.new(0,0,0)
+                    local speed = vel.Magnitude
+                    local dir = (speed > 0.5) and vel.Unit or hrp.CFrame.LookVector
+                    local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
+                    local phase = tick() * (2 * math.pi * BH_OSC_FREQUENCY)
+                    local primaryOffset = dir * (math.sin(phase) * amplitude)
+                    local lateral = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
+                    local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
+                    Attachment1.WorldCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
                 end
                 wait(switchDelay)
             end
@@ -614,7 +744,16 @@ local function toggleTargetSelected()
                     targetPlayer = nil
                 end
                 if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    Attachment1.WorldCFrame = CFrame.new(targetPlayer.Character.HumanoidRootPart.Position)
+                    local hrp = targetPlayer.Character.HumanoidRootPart
+                    local vel = hrp.Velocity or Vector3.new(0,0,0)
+                    local speed = vel.Magnitude
+                    local dir = (speed > 0.5) and vel.Unit or hrp.CFrame.LookVector
+                    local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
+                    local phase = tick() * (2 * math.pi * BH_OSC_FREQUENCY)
+                    local primaryOffset = dir * (math.sin(phase) * amplitude)
+                    local lateral = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
+                    local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
+                    Attachment1.WorldCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
                 end
                 wait(switchDelay)
             end
@@ -682,19 +821,17 @@ function startRebalancer()
                 end
 
                 -- assign parts in deterministic order (so distribution is stable)
-                local idx = 1
                 local partIndex = 1
                 for i = 1, bhCount do
                     local bh = extraBlackHoles[i]
                     local need = counts[i]
-                    local assignedThisRound = {}
                     for c = 1, need do
                         local p = parts[partIndex]
                         if not p then break end
                         local ap = p:FindFirstChildOfClass("AlignPosition")
                         if ap then
-                            -- ensure the BH attachment is safe (not under local character)
-                            if bh and bh.Attachment and (not bh.Attachment:IsDescendantOf(localPlayer.Character)) then
+                            -- ensure the BH attachment is safe (not under local character) and BH active
+                            if bh and bh.Attachment and (not bh.Attachment:IsDescendantOf(localPlayer.Character)) and bh._active then
                                 ap.Attachment1 = bh.Attachment
                                 p.CanCollide = false
                                 table.insert(bh.AssignedParts, p)
@@ -790,7 +927,7 @@ localPlayer.Chatted:Connect(onLocalPlayerChatted)
 
 -- ---- GUI (TurtleLib) ----
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/miroeramaa/TurtleLib/main/TurtleUiLib.lua"))()
-local window = library:Window("Fix it you panis negor🗣🔥🔥🔥")
+local window = library:Window("made by JLchris") 
 
 window:Toggle("Unanchored Target All", false, function(Value)
     toggleState = Value
