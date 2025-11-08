@@ -1,9 +1,10 @@
--- Full updated script (client) - Updated: count black holes in folders (not attachments)
--- switchDelay = 0.01 (solid)
--- BH movement: lerp (tween) towards target, retains oscillation offsets
--- Commands enabled by default
--- Loop Fix Parts implemented
--- PAA bugfixes preserved
+-- Full updated script (client)
+-- Changes:
+--  * Local player is never modified (no attachments parented to character, no noclip changes affecting player)
+--  * switchDelay = 0.13 (target selection delay)
+--  * BH_SWAP_INTERVAL = 0.01 (swap spam interval, unchanged)
+--  * Smoother targeting via exponential smoothing (TARGET_SMOOTHNESS)
+--  * ForcePart still uses part center attachments and ignores any player character parts
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -22,16 +23,14 @@ end
 local blackHoleActive = false
 local toggleState = false
 local targetPlayer = nil
-local switchDelay = 0.01 -- solid 0.01s swap delay per request
+local switchDelay = 0.13 -- seconds between target selection / refresh (user requested)
 local processedParts = {} -- set: part -> true
 local initiallyAnchoredParts = {}
 local anchoredOnce = false
 local unanchorTimerRunning = false
 local unanchorCoroutine
 
-local noclipConnection
-
--- Primary single attachment (legacy behavior / main toggle)
+-- Primary single attachment (kept in workspace folder, NOT parented to local player)
 local Attachment1 = nil
 
 -- Manager for extra black holes created by commands (table of {Part, Attachment, AssignedParts, TargetPlayer, LastTarget, _running, _active})
@@ -48,11 +47,14 @@ local rebalancerFreq = 0.10 -- seconds between rebalances; lower = faster redist
 local alignResponsiveness = 1500 -- high = snappy; tweak if physics break
 
 -- BH motion tuning (tweakable)
-local BH_SWAP_INTERVAL = 0.01         -- seconds per swap (lerp interval)
+local BH_SWAP_INTERVAL = 0.01         -- seconds per swap (fast back-and-forth spam)
 local BH_OSC_FREQUENCY = 1 / (BH_SWAP_INTERVAL * 2) -- frequency derived from swap interval
 local BH_AMPLITUDE_FACTOR = 0.22     -- amplitude multiplier applied to speed to compute displacement
 local BH_MIN_AMPLITUDE = 0.6        -- small jitter even when standing still
 local BH_MAX_AMPLITUDE = 80         -- upper clamp for amplitude (studs)
+
+-- Target smoothing (higher => smoother, lower => more immediate)
+local TARGET_SMOOTHNESS = 6.0
 
 -- Setup initial Attachment placed under a workspace folder (not parented to player)
 local function setupPlayer()
@@ -62,6 +64,13 @@ local function setupPlayer()
         Folder.Name = "ÆS_BlackHole_Folder"
     end
     -- keep a single invisible part for the default attachment
+    local existing = Folder:FindFirstChild("BH_Center_Part")
+    if existing and existing:IsA("BasePart") then
+        local att = existing:FindFirstChildOfClass("Attachment")
+        if att then return att end
+        local newAtt = Instance.new("Attachment", existing)
+        return newAtt
+    end
     local Part = Instance.new("Part", Folder)
     Part.Name = "BH_Center_Part"
     Part.Anchored = true
@@ -96,48 +105,10 @@ local function isPartPlayerCharacter(part)
     return false
 end
 
--- Enable or disable collisions on a character's parts
-local function setCharacterCollision(character, canCollide)
-    if not character then return end
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = canCollide
-        end
-    end
-end
-
--- Enable noclip for local player but keep collisions with their own parts ON
+-- ===== NOTE: We deliberately make noclip a no-op so local player's movement is never modified =====
 local function enableLocalPlayerNoclip(enable)
-    if enable then
-        if noclipConnection then
-            noclipConnection:Disconnect()
-            noclipConnection = nil
-        end
-
-        noclipConnection = RunService.Stepped:Connect(function()
-            local character = localPlayer.Character
-            if character and character:FindFirstChild("HumanoidRootPart") then
-                for _, part in ipairs(character:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        if part.Name == "HumanoidRootPart" then
-                            part.CanCollide = false
-                        else
-                            part.CanCollide = true
-                        end
-                    end
-                end
-            end
-        end)
-    else
-        if noclipConnection then
-            noclipConnection:Disconnect()
-            noclipConnection = nil
-        end
-        local character = localPlayer.Character
-        if character then
-            setCharacterCollision(character, true)
-        end
-    end
+    -- no-op: do not alter local player's parts or collisions; avoids breaking walking
+    return
 end
 
 -- helper to remove any existing physics bodyobjects from a part
@@ -180,16 +151,26 @@ local function getAllNonLocalPlayers()
     return res
 end
 
+-- Exponential smoothing for CFrame lerp (smoother targeting)
+local function smoothLerpCFrame(curCF, targetCF, dt)
+    -- alpha = 1 - exp(-k * dt). k = TARGET_SMOOTHNESS
+    local alpha = 1 - math.exp(-TARGET_SMOOTHNESS * dt)
+    if alpha < 0.001 then alpha = 0.001 end
+    if alpha > 1 then alpha = 1 end
+    return curCF:Lerp(targetCF, alpha)
+end
+
 -- ForcePart now assigns to extra black holes (if any). Also prevents affecting player characters.
 local function ForcePart(v)
     if not v or not v:IsA("BasePart") then return end
-    -- safety checks: skip player's own character parts
+    -- safety checks: skip ANY player's character parts (local or remote)
     if isPartPlayerCharacter(v) then return end
+    -- also skip anything parented to local player's character explicitly
+    if localPlayer.Character and v:IsDescendantOf(localPlayer.Character) then return end
 
     if v:IsA("BasePart")
         and not v.Anchored
         and v.Name ~= "Handle"
-        and not v:IsDescendantOf(localPlayer.Character)
         and (
             (v.Parent:FindFirstChildOfClass("Humanoid") and isNPC(v.Parent))
             or (not v.Parent:FindFirstChildOfClass("Humanoid") and not v.Parent:FindFirstChild("Head"))
@@ -209,11 +190,9 @@ local function ForcePart(v)
         local AlignPosition = Instance.new("AlignPosition", v)
         local Attachment2 = Instance.new("Attachment", v)
         -- place attachment at the part's world center to avoid grabbing edges (mesh offsets)
-        if v and v:IsA("BasePart") then
-            pcall(function()
-                Attachment2.WorldCFrame = v.CFrame
-            end)
-        end
+        pcall(function()
+            Attachment2.WorldCFrame = v.CFrame
+        end)
         Torque.Attachment0 = Attachment2
 
         -- make align fast & snappy for rapid switching
@@ -224,7 +203,7 @@ local function ForcePart(v)
 
         -- assign immediate target: least loaded BH if exists else primary Attachment1
         local bh = getLeastLoadedBlackHole()
-        if bh and bh.Attachment and (not bh.Attachment:IsDescendantOf(localPlayer.Character)) and bh._active then
+        if bh and bh.Attachment and bh._active then
             AlignPosition.Attachment1 = bh.Attachment
             table.insert(bh.AssignedParts, v)
         else
@@ -250,25 +229,18 @@ local function clearProcessedParts()
     anchoredOnce = false
 end
 
-local function disableCollisionsForCharacterButNotWorldCollision(character)
-    if not character then return end
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = true
-        end
-    end
-end
-
 -- Unfreeze cooldown changed to 1 second
 local function anchorAndDelayedUnanchorParts()
     unanchorTimerRunning = true
 
     local candidateParts = {}
     for _, v in ipairs(Workspace:GetDescendants()) do
+        -- IMPORTANT: exclude ANY player's character parts here too
         if v:IsA("BasePart")
             and not v.Anchored
             and v.Name ~= "Handle"
-            and not v:IsDescendantOf(localPlayer.Character)
+            and not isPartPlayerCharacter(v)
+            and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character))
             and (
                 (v.Parent:FindFirstChildOfClass("Humanoid") and isNPC(v.Parent))
                 or (not v.Parent:FindFirstChildOfClass("Humanoid") and not v.Parent:FindFirstChild("Head"))
@@ -284,21 +256,18 @@ local function anchorAndDelayedUnanchorParts()
         part.CanCollide = false
     end
 
-    -- Enable collisions for NPC characters
+    -- Enable collisions for NPC characters (not players)
     for _, npcCandidate in ipairs(Workspace:GetChildren()) do
         if isNPC(npcCandidate) then
-            disableCollisionsForCharacterButNotWorldCollision(npcCandidate)
+            for _, p in ipairs(npcCandidate:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    p.CanCollide = true
+                end
+            end
         end
     end
 
-    -- Ensure local player's character parts keep collisions
-    local character = localPlayer.Character
-    if character then
-        setCharacterCollision(character, true)
-    end
-
-    -- Enable noclip for local player (so they don't collide with world)
-    enableLocalPlayerNoclip(true)
+    -- NOTE: do NOT change local player's collisions or noclip.
 
     local startTime = tick()
     while blackHoleActive and tick() - startTime < 1 do
@@ -333,7 +302,12 @@ local function processWorkspaceParts()
 
         descendantAddedConn = Workspace.DescendantAdded:Connect(function(v)
             if blackHoleActive then
-                if v:IsA("BasePart") and not v.Anchored and not processedParts[v] then
+                -- ensure we don't attach to player character parts that spawn
+                if v:IsA("BasePart")
+                    and not v.Anchored
+                    and not processedParts[v]
+                    and not isPartPlayerCharacter(v)
+                    and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character)) then
                     ForcePart(v)
                 end
             end
@@ -369,7 +343,6 @@ local function setBlackHoleActiveState(bh, active)
                 p.CanCollide = true
                 local ap = p:FindFirstChildOfClass("AlignPosition")
                 if ap then
-                    -- point back to Attachment1 so parts don't stick to an inactive BH that isn't moving
                     ap.Attachment1 = Attachment1
                 end
             end
@@ -440,10 +413,9 @@ local function createExtraBlackHole(initialTarget)
                     if char and char:FindFirstChild("HumanoidRootPart") then
                         local hrp = char.HumanoidRootPart
 
-                        -- Compute velocity-based oscillation
+                        -- Compute velocity-based oscillation (swap spam + offsets)
                         local vel = hrp.Velocity or Vector3.new(0,0,0)
                         local speed = vel.Magnitude
-                        -- choose direction; if small speed, produce a pseudo-random directional jitter so BH still moves in all axes
                         local dir
                         if speed > 0.5 then
                             dir = vel.Unit
@@ -451,33 +423,25 @@ local function createExtraBlackHole(initialTarget)
                             dir = (hrp.CFrame.LookVector + hrp.CFrame.UpVector * 0.3).Unit
                         end
 
-                        -- amplitude scales with speed (user requested: faster => further expand)
                         local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
-
-                        -- phase uses time * frequency to create fast back-and-forth motion with swap interval = BH_SWAP_INTERVAL
                         local phase = t * (2 * math.pi * BH_OSC_FREQUENCY)
+
                         local primaryOffset = dir * (math.sin(phase) * amplitude)
-
-                        -- add explicit up/down oscillation along world UpVector (gives vertical swapping)
                         local verticalOffset = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
-
-                        -- small lateral variation perpendicular to movement
                         local lateralOffset = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
 
-                        -- final world CFrame: follows HRP and applies offsets
                         local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateralOffset + verticalOffset)
 
-                        -- Smoothly (lerp) move the BH attachment towards computed CFrame
+                        -- Smoothly move BH attachment towards computed CFrame (smoother targeting)
                         if att then
                             local success, cur = pcall(function() return att.WorldCFrame end)
                             local curCF = success and cur or att.WorldCFrame or part.CFrame
-                            local alpha = clamp(dt / BH_SWAP_INTERVAL, 0.01, 1)
-                            att.WorldCFrame = curCF:Lerp(targetCFrame, alpha)
+                            att.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
                         end
                     end
                 end
             else
-                -- roam near local player when no target assigned
+                -- roam near local player when no target assigned (pure roam, does not modify local player)
                 if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     local hrp = localPlayer.Character.HumanoidRootPart
                     local phase = t * (BH_OSC_FREQUENCY * 0.45)
@@ -486,8 +450,7 @@ local function createExtraBlackHole(initialTarget)
                         local success, cur = pcall(function() return att.WorldCFrame end)
                         local curCF = success and cur or att.WorldCFrame or part.CFrame
                         local targetCF = hrp.CFrame * CFrame.new(roamOffset + Vector3.new(math.random(-2,2), math.random(-1,1), math.random(-2,2)))
-                        local alpha = clamp(dt / BH_SWAP_INTERVAL, 0.01, 1)
-                        att.WorldCFrame = curCF:Lerp(targetCF, alpha)
+                        att.WorldCFrame = smoothLerpCFrame(curCF, targetCF, dt)
                     end
                 end
             end
@@ -588,7 +551,6 @@ local function createNBlackHoles(n)
         assignUniqueTargetsToBHs()
     else
         -- non-PAA multi-BH: allow players to have multiple BHs.
-        -- Try to spread initial targets across players but allow duplicates if BHs > players.
         local players = getAllNonLocalPlayers()
         if #players > 0 then
             for i, bh in ipairs(extraBlackHoles) do
@@ -686,11 +648,8 @@ end
 local function toggleBlackHole()
     blackHoleActive = toggleState
     if blackHoleActive then
-        if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local newAttachment = Instance.new("Attachment", localPlayer.Character.HumanoidRootPart)
-            if Attachment1 then Attachment1:Destroy() end
-            Attachment1 = newAttachment
-        else
+        -- Keep Attachment1 in the global folder (do NOT parent to local player)
+        if not Attachment1 or not Attachment1.Parent then
             Attachment1 = setupPlayer()
         end
 
@@ -718,14 +677,11 @@ local function toggleBlackHole()
                     local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
                     local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
 
-                    -- lerp Attachment1 toward the target
+                    -- smoothly lerp Attachment1 toward the target (smoother targeting)
                     if Attachment1 then
                         local success, cur = pcall(function() return Attachment1.WorldCFrame end)
                         local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
-                        local alpha = clamp(dt / BH_SWAP_INTERVAL, 0.01, 1)
-                        pcall(function()
-                            Attachment1.WorldCFrame = curCF:Lerp(targetCFrame, alpha)
-                        end)
+                        Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
                     end
                 end
                 wait(switchDelay)
@@ -733,7 +689,7 @@ local function toggleBlackHole()
         end)
     else
         blackHoleActive = false
-        enableLocalPlayerNoclip(false)
+        -- do not change local player's collisions/noclip
         if unanchorTimerRunning and unanchorCoroutine then
             unanchorTimerRunning = false
             for part, anchored in pairs(initiallyAnchoredParts) do
@@ -756,11 +712,7 @@ end
 local function toggleTargetSelected()
     blackHoleActive = toggleState
     if blackHoleActive then
-        if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local newAttachment = Instance.new("Attachment", localPlayer.Character.HumanoidRootPart)
-            if Attachment1 then Attachment1:Destroy() end
-            Attachment1 = newAttachment
-        else
+        if not Attachment1 or not Attachment1.Parent then
             Attachment1 = setupPlayer()
         end
 
@@ -796,10 +748,7 @@ local function toggleTargetSelected()
                     if Attachment1 then
                         local success, cur = pcall(function() return Attachment1.WorldCFrame end)
                         local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
-                        local alpha = clamp(dt / BH_SWAP_INTERVAL, 0.01, 1)
-                        pcall(function()
-                            Attachment1.WorldCFrame = curCF:Lerp(targetCFrame, alpha)
-                        end)
+                        Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
                     end
                 end
                 wait(switchDelay)
@@ -807,7 +756,6 @@ local function toggleTargetSelected()
         end)
     else
         blackHoleActive = false
-        enableLocalPlayerNoclip(false)
         if unanchorTimerRunning and unanchorCoroutine then
             unanchorTimerRunning = false
             for part, anchored in pairs(initiallyAnchoredParts) do
@@ -819,20 +767,16 @@ local function toggleTargetSelected()
         end
         clearProcessedParts()
 
-        -- If PAA is enabled and we toggled off the selection-target mode, destroy existing extra BHs (so enabling will re-create correctly)
         if PAAEnabled then
             deleteExtraBlackHoles()
         end
     end
 end
 
--- Keep primary behavior consistent on respawn
+-- Keep primary behavior consistent on respawn but do NOT reparent Attachment1 to local player
 local function onCharacterAdded(character)
     if blackHoleActive then
-        local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-        local newAttachment = Instance.new("Attachment", humanoidRootPart)
-        if Attachment1 then Attachment1:Destroy() end
-        Attachment1 = newAttachment
+        -- do not attach Attachment1 to character; keep it in folder
         processedParts = {}
         processWorkspaceParts()
     end
@@ -866,13 +810,11 @@ function startRebalancer()
                 local total = #parts
                 local base = math.floor(total / bhCount)
                 local rem = total - (base * bhCount) -- remainder to distribute (0..bhCount-1)
-                -- prepare counts per BH: first rem BHs get base+1, others get base
                 local counts = {}
                 for i = 1, bhCount do
                     counts[i] = base + (i <= rem and 1 or 0)
                 end
 
-                -- assign parts in deterministic order (so distribution is stable)
                 local partIndex = 1
                 for i = 1, bhCount do
                     local bh = extraBlackHoles[i]
@@ -882,8 +824,8 @@ function startRebalancer()
                         if not p then break end
                         local ap = p:FindFirstChildOfClass("AlignPosition")
                         if ap then
-                            -- ensure the BH attachment is safe (not under local character) and BH active
-                            if bh and bh.Attachment and (not bh.Attachment:IsDescendantOf(localPlayer.Character)) and bh._active then
+                            -- ensure the BH attachment is safe and BH active
+                            if bh and bh.Attachment and bh._active then
                                 ap.Attachment1 = bh.Attachment
                                 p.CanCollide = false
                                 table.insert(bh.AssignedParts, p)
@@ -906,7 +848,6 @@ function startRebalancer()
                 end
             end
 
-            -- If PAA is active, enforce one-to-one target uniqueness again in case players joined/left
             if PAAEnabled then
                 assignUniqueTargetsToBHs()
             end
@@ -921,7 +862,7 @@ function stopRebalancer()
 end
 
 -- ---- Command system (chat) and GUI toggles ----
-local enableCommands = true -- commands enabled by default now
+local enableCommands = true -- commands enabled by default
 
 -- Chat command parser (client-side; only listens to local player's chat)
 local function onLocalPlayerChatted(msg)
@@ -986,13 +927,10 @@ window:Toggle("Unanchored Target All", false, function(Value)
     blackHoleActive = Value
     toggleBlackHole()
 
-    -- If PAA is enabled, toggling the main targeting mode should re-create or destroy PAA BHs appropriately:
     if PAAEnabled then
         if Value then
-            -- enabling main target mode while PAA is on -> refresh to re-create BHs for players
             refreshPAA()
         else
-            -- disabling -> destroy BHs (but keep PAA flag on)
             deleteExtraBlackHoles()
         end
     end
@@ -1003,7 +941,6 @@ window:Toggle("Target Selected Players", false, function(Value)
     blackHoleActive = Value
     toggleTargetSelected()
 
-    -- Same PAA-aware behavior
     if PAAEnabled then
         if Value then
             refreshPAA()
@@ -1030,7 +967,7 @@ window:Toggle("Continuous Loop Check", false, function(Value)
             while loopCheckActive do
                 if blackHoleActive then
                     for _, v in ipairs(Workspace:GetDescendants()) do
-                        if v:IsA("BasePart") and not v.Anchored and not processedParts[v] then
+                        if v:IsA("BasePart") and not v.Anchored and not processedParts[v] and not isPartPlayerCharacter(v) and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character)) then
                             ForcePart(v)
                         end
                     end
@@ -1077,22 +1014,14 @@ window:Toggle("Loop Fix Parts", false, function(Value)
             while loopFixActive do
                 wait(0.8)
                 if not loopFixActive then break end
-                -- place BHs 10 studs above local player
                 if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     local hrp = localPlayer.Character.HumanoidRootPart
                     local topCF = hrp.CFrame * CFrame.new(0,10,0)
-                    -- primary attachment
-                    if Attachment1 then
-                        pcall(function() Attachment1.WorldCFrame = topCF end)
-                    end
-                    -- extra BHs
+                    if Attachment1 then pcall(function() Attachment1.WorldCFrame = topCF end) end
                     for _, bh in ipairs(extraBlackHoles) do
-                        if bh and bh.Attachment then
-                            pcall(function() bh.Attachment.WorldCFrame = topCF end)
-                        end
+                        if bh and bh.Attachment then pcall(function() bh.Attachment.WorldCFrame = topCF end) end
                     end
                 end
-                -- 0.1s later restore to targets
                 wait(0.1)
                 if not loopFixActive then break end
                 for _, bh in ipairs(extraBlackHoles) do
@@ -1103,7 +1032,6 @@ window:Toggle("Loop Fix Parts", false, function(Value)
                         end
                     end
                 end
-                -- restore Attachment1 to current target if any
                 if Attachment1 and targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     pcall(function() Attachment1.WorldCFrame = targetPlayer.Character.HumanoidRootPart.CFrame end)
                 end
@@ -1164,7 +1092,6 @@ do
                 if string.find(lname, "blackhole") or string.find(lname, "bh") or string.find(lname, "aes_blackhole") or string.find(lname, "æs_blackhole") then
                     for _, child in ipairs(obj:GetDescendants()) do
                         if child:IsA("BasePart") then
-                            -- detect by naming conventions used by this script
                             local cname = child.Name:lower()
                             if string.find(cname, "extrabh_center") or string.find(cname, "bh_center") or string.find(cname, "bh_center_part") or string.find(cname, "extra") then
                                 count = count + 1
@@ -1180,7 +1107,6 @@ do
     spawn(function()
         while true do
             local count = 0
-            -- count black hole parts in folders across the workspace
             pcall(function()
                 count = countBlackHolePartsInFolders()
             end)
