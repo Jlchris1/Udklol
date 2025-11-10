@@ -1,14 +1,14 @@
 -- Full updated script (client)
--- Changes:
+-- Changes from provided script:
 --  * Local player is never modified (no attachments parented to character, no noclip changes affecting player)
---  * switchDelay = 0.13 (target selection delay)
---  * BH_SWAP_INTERVAL = 0.01 (swap spam interval, unchanged)
---  * Smoother targeting via exponential smoothing (TARGET_SMOOTHNESS)
---  * ForcePart still uses part center attachments and ignores any player character parts
---  * FRONT offset based on speed (studs -> distance ahead)
---  * Rapid skid (fast lateral / vertical oscillation)
---  * When BHs > players: BHs are distributed across remote players evenly (no BH on local player)
---  * Removed Loop Fix Parts toggle
+--  * switchDelay = 0.35 (target selection delay requested)
+--  * Loop Fix Parts toggle removed
+--  * Skid toggle added: when enabled, all black holes (primary + extras) perform a 360-degree skid around their target
+--    - Skid completes a full cycle every 0.03 seconds (one side every 0.015s -> half-cycle)
+--    - Skid radius scales with target HumanoidRootPart speed
+--  * Distribution logic changed: when there are more black holes than players, BHs (and attachments) are divided across players
+--    in a round-robin fashion (local player is never assigned). This applies for PAA / target-all / target-selected modes.
+--  * Other improvements kept: smoothing, safety checks, rebalancer, no local-character parenting
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -27,7 +27,7 @@ end
 local blackHoleActive = false
 local toggleState = false
 local targetPlayer = nil
-local switchDelay = 0.13 -- seconds between target selection / refresh (user requested)
+local switchDelay = 0.35 -- seconds between target selection / refresh (user requested 0.35)
 local processedParts = {} -- set: part -> true
 local initiallyAnchoredParts = {}
 local anchoredOnce = false
@@ -51,21 +51,15 @@ local rebalancerFreq = 0.10 -- seconds between rebalances; lower = faster redist
 local alignResponsiveness = 1500 -- high = snappy; tweak if physics break
 
 -- BH motion tuning (tweakable)
-local BH_SWAP_INTERVAL = 0.01         -- seconds per swap (fast back-and-forth spam)
-local BH_OSC_FREQUENCY = 1 / (BH_SWAP_INTERVAL * 2) -- frequency derived from swap interval
+local BH_SWAP_INTERVAL = 0.01         -- seconds per swap (kept, not used directly for skid)
 local BH_AMPLITUDE_FACTOR = 0.22     -- amplitude multiplier applied to speed to compute displacement
 local BH_MIN_AMPLITUDE = 0.6        -- small jitter even when standing still
 local BH_MAX_AMPLITUDE = 80         -- upper clamp for amplitude (studs)
 
--- Front-distance (how many studs ahead based on speed)
-local FRONT_MULTIPLIER = 0.54 -- 24 * 0.54 ≈ 13.0 studs (example you gave)
-local FRONT_MIN = 0.6
-local FRONT_MAX = 80
-
--- Skid tuning (rapid lateral/vertical wobble)
-local SKID_FACTOR = 6.0 -- multiply base frequency for fast skid oscillation
-local SKID_LATERAL_SCALE = 0.35
-local SKID_VERTICAL_SCALE = 0.5
+-- SKID tuning
+local SKID_ENABLED = false
+local SKID_FULL_CYCLE = 0.03 -- seconds per full circular skid (user requested full cycle 0.03s)
+local SKID_FREQ = 1 / SKID_FULL_CYCLE -- Hz (~33.333)
 
 -- Target smoothing (higher => smoother, lower => more immediate)
 local TARGET_SMOOTHNESS = 6.0
@@ -427,41 +421,56 @@ local function createExtraBlackHole(initialTarget)
                     if char and char:FindFirstChild("HumanoidRootPart") then
                         local hrp = char.HumanoidRootPart
 
-                        -- Compute velocity-based offsets
+                        -- SKID logic: when enabled, perform a fast circular skid whose radius depends on HRP speed
                         local vel = hrp.Velocity or Vector3.new(0,0,0)
                         local speed = vel.Magnitude
-                        local dir
-                        if speed > 0.5 then
-                            dir = vel.Unit
-                        else
-                            dir = (hrp.CFrame.LookVector + hrp.CFrame.UpVector * 0.3).Unit
-                        end
 
-                        -- front distance based on speed (example: 24 * FRONT_MULTIPLIER ≈ 13)
-                        local frontDist = clamp(speed * FRONT_MULTIPLIER, FRONT_MIN, FRONT_MAX)
-
-                        -- amplitude-based oscillation for skid/wobble
+                        -- base amplitude scales with speed
                         local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
-                        local phase = t * (2 * math.pi * BH_OSC_FREQUENCY)
 
-                        -- fast skid phase for rapid lateral/up-down jitter
-                        local skidPhase = t * (2 * math.pi * BH_OSC_FREQUENCY * SKID_FACTOR)
+                        if SKID_ENABLED then
+                            -- determine orientation phase offset based on movement direction relative to HRP forward
+                            local moveDir = (speed > 0.1) and vel.Unit or hrp.CFrame.LookVector
+                            local dotF = moveDir:Dot(hrp.CFrame.LookVector)
+                            local dotR = moveDir:Dot(hrp.CFrame.RightVector)
+                            local baseAngle = math.atan2(dotR, dotF) -- radians
 
-                        -- primary is now base forward distance plus sinusoidal forward/back jitter
-                        local forwardJitter = math.sin(phase) * amplitude
-                        local primaryOffset = dir * (frontDist + forwardJitter)
+                            local phase = t * (2 * math.pi * SKID_FREQ)
+                            -- circular offset in HRP local space
+                            local x = math.cos(phase + baseAngle) * amplitude
+                            local z = math.sin(phase + baseAngle) * amplitude
+                            local y = math.sin(phase * 0.7) * (amplitude * 0.25)
 
-                        -- vertical & lateral skid using faster frequency
-                        local verticalOffset = hrp.CFrame.UpVector * (math.sin(skidPhase * 1.0) * amplitude * SKID_VERTICAL_SCALE)
-                        local lateralOffset = hrp.CFrame.RightVector * (math.sin(skidPhase * 1.27) * amplitude * SKID_LATERAL_SCALE)
+                            local targetCFrame = hrp.CFrame * CFrame.new(hrp.CFrame.RightVector * x + hrp.CFrame.LookVector * z + hrp.CFrame.UpVector * y)
 
-                        local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateralOffset + verticalOffset)
+                            if att then
+                                local success, cur = pcall(function() return att.WorldCFrame end)
+                                local curCF = success and cur or att.WorldCFrame or part.CFrame
+                                att.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                            end
 
-                        -- Smoothly move BH attachment towards computed CFrame (smoother targeting)
-                        if att then
-                            local success, cur = pcall(function() return att.WorldCFrame end)
-                            local curCF = success and cur or att.WorldCFrame or part.CFrame
-                            att.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                        else
+                            -- default (previous) oscillation behaviour
+                            local dir
+                            if speed > 0.5 then
+                                dir = vel.Unit
+                            else
+                                dir = (hrp.CFrame.LookVector + hrp.CFrame.UpVector * 0.3).Unit
+                            end
+
+                            local phase = t * (2 * math.pi * (1 / (BH_SWAP_INTERVAL * 2)))
+
+                            local primaryOffset = dir * (math.sin(phase) * amplitude)
+                            local verticalOffset = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
+                            local lateralOffset = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
+
+                            local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateralOffset + verticalOffset)
+
+                            if att then
+                                local success, cur = pcall(function() return att.WorldCFrame end)
+                                local curCF = success and cur or att.WorldCFrame or part.CFrame
+                                att.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                            end
                         end
                     end
                 end
@@ -469,7 +478,7 @@ local function createExtraBlackHole(initialTarget)
                 -- roam near local player when no target assigned (pure roam, does not modify local player)
                 if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     local hrp = localPlayer.Character.HumanoidRootPart
-                    local phase = t * (BH_OSC_FREQUENCY * 0.45)
+                    local phase = t * (SKID_FREQ * 0.45)
                     local roamOffset = Vector3.new(math.sin(phase*1.11)*4, math.sin(phase*1.3)*1.6, math.cos(phase*0.9)*4)
                     if att then
                         local success, cur = pcall(function() return att.WorldCFrame end)
@@ -501,11 +510,10 @@ local function destroyExtraBlackHole(bh)
     end
 end
 
--- Assign unique targets to BHs for PAA but if BHs > players distribute BHs evenly across players.
-local function assignUniqueTargetsToBHs()
+-- Distribute BHs across players (round-robin), never assigning to local player. If no players, leave BHs roaming.
+local function distributeBHsOverPlayers()
     if #extraBlackHoles == 0 then return end
 
-    -- gather candidate players (exclude local)
     local players = {}
     if PAA_isUsingSelected then
         players = getSelectedPlayers()
@@ -513,10 +521,9 @@ local function assignUniqueTargetsToBHs()
         players = getAllNonLocalPlayers()
     end
 
-    -- if no remote players, leave BHs targetless (they roam)
     if #players == 0 then
+        -- no players to attach to: leave BHs targetless (they will roam)
         for _, bh in ipairs(extraBlackHoles) do
-            bh.LastTarget = bh.TargetPlayer
             bh.TargetPlayer = nil
             bh.AssignedParts = {}
             setBlackHoleActiveState(bh, true)
@@ -524,63 +531,27 @@ local function assignUniqueTargetsToBHs()
         return
     end
 
-    local bhCount = #extraBlackHoles
-    local playerCount = #players
-
-    -- compute even distribution counts (difference <= 1)
-    local base = math.floor(bhCount / playerCount)
-    local rem = bhCount - (base * playerCount) -- remainder (0..playerCount-1)
-
-    -- build playerPool list where each player appears base (+1 for first rem players) times
-    local playerPool = {}
-    for i = 1, playerCount do
-        local count = base + (i <= rem and 1 or 0)
-        for j = 1, count do
-            table.insert(playerPool, players[i])
-        end
-    end
-
-    -- shuffle pool so distribution doesn't always start with same player
-    shuffle(playerPool)
-
-    -- attempt to avoid giving a BH the same LastTarget when possible:
-    -- We will assign pool entries to BHs; if pool[i] == bh.LastTarget and there's another pool entry not equal, swap.
-    for idx, bh in ipairs(extraBlackHoles) do
-        bh.LastTarget = bh.TargetPlayer
-    end
-
+    -- Round-robin distribute BHs over players
     for i, bh in ipairs(extraBlackHoles) do
-        local candidate = playerPool[i]
-        if candidate == bh.LastTarget then
-            -- try to find alternative in remainder of pool
-            local swapped = false
-            for j = i+1, #playerPool do
-                if playerPool[j] ~= bh.LastTarget then
-                    playerPool[i], playerPool[j] = playerPool[j], playerPool[i]
-                    swapped = true
-                    break
-                end
-            end
-            -- if couldn't swap, keep as-is (no perfect solution)
-        end
-    end
-
-    -- assign from pool
-    for i, bh in ipairs(extraBlackHoles) do
-        local p = playerPool[i]
-        bh.TargetPlayer = p
+        local pl = players[((i-1) % #players) + 1]
+        bh.TargetPlayer = pl
         bh.AssignedParts = {}
+        bh.LastTarget = nil
         -- respect disabled state
-        if bh.TargetPlayer and bh.TargetPlayer:FindFirstChild("Disabled") and bh.TargetPlayer.Disabled.Value == true then
+        if pl and pl:FindFirstChild("Disabled") and pl.Disabled.Value == true then
             setBlackHoleActiveState(bh, false)
         else
             setBlackHoleActiveState(bh, true)
         end
-        -- place BH instantly if HRP exists
-        if p and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
-            bh.Attachment.WorldCFrame = p.Character.HumanoidRootPart.CFrame
+        if pl and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
+            bh.Attachment.WorldCFrame = pl.Character.HumanoidRootPart.CFrame
         end
     end
+end
+
+-- Assign unique targets to BHs for older PAA semantics is replaced by distributeBHsOverPlayers to ensure no BH goes to local player
+local function assignUniqueTargetsToBHs()
+    distributeBHsOverPlayers()
 end
 
 -- Create N extra black holes, attempt to assign different initial targets
@@ -592,42 +563,8 @@ local function createNBlackHoles(n)
         createExtraBlackHole(nil)
     end
 
-    -- Assignment behavior:
-    if PAAEnabled then
-        -- allow multiple BHs per player when BHs > players (even distribution)
-        assignUniqueTargetsToBHs()
-    else
-        -- non-PAA multi-BH: allow players to have multiple BHs evenly distributed across players (no local player)
-        local players = getAllNonLocalPlayers()
-        if #players > 0 then
-            -- distribute bhCount across players evenly
-            local bhCount = #extraBlackHoles
-            local playerCount = #players
-            local base = math.floor(bhCount / playerCount)
-            local rem = bhCount - base * playerCount
-            local pool = {}
-            for i = 1, playerCount do
-                local cnt = base + (i <= rem and 1 or 0)
-                for j = 1, cnt do
-                    table.insert(pool, players[i])
-                end
-            end
-            -- assign
-            for i, bh in ipairs(extraBlackHoles) do
-                local pl = pool[i]
-                bh.TargetPlayer = pl
-                bh.LastTarget = nil
-                if bh.TargetPlayer and bh.TargetPlayer:FindFirstChild("Disabled") and bh.TargetPlayer.Disabled.Value == true then
-                    setBlackHoleActiveState(bh, false)
-                else
-                    setBlackHoleActiveState(bh, true)
-                end
-                if bh.TargetPlayer and bh.TargetPlayer.Character and bh.TargetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    bh.Attachment.WorldCFrame = bh.TargetPlayer.Character.HumanoidRootPart.CFrame
-                end
-            end
-        end
-    end
+    -- Always distribute BHs over players (round-robin). This guarantees BHs are not assigned to local player
+    distributeBHsOverPlayers()
 
     if #extraBlackHoles > 0 then
         startRebalancer()
@@ -646,7 +583,7 @@ local function deleteExtraBlackHoles()
     stopRebalancer()
 end
 
--- PAA management: create one black hole per player (or selected players)
+-- PAA management: create one black hole per player (or selected players) -> replaced with round-robin distribution
 local function refreshPAA()
     deleteExtraBlackHoles()
 
@@ -672,8 +609,8 @@ local function refreshPAA()
         end
     end
 
-    -- ensure distribution also handles BHs > players (if you later create extra BHs)
-    assignUniqueTargetsToBHs()
+    -- distribute any remaining BHs (if commands added more) across players
+    distributeBHsOverPlayers()
 
     if #extraBlackHoles > 0 then
         startRebalancer()
@@ -686,7 +623,7 @@ local function onPlayerAddedForPAA(pl)
         local bh = createExtraBlackHole(pl)
         bh.TargetPlayer = pl
         bh.LastTarget = nil
-        assignUniqueTargetsToBHs()
+        distributeBHsOverPlayers()
     end
 end
 
@@ -700,7 +637,7 @@ local function onPlayerRemovingForPAA(pl)
                 break
             end
         end
-        assignUniqueTargetsToBHs()
+        distributeBHsOverPlayers()
     end
 end
 
@@ -730,25 +667,39 @@ local function toggleBlackHole()
                     local vel = hrp.Velocity or Vector3.new(0,0,0)
                     local speed = vel.Magnitude
                     local dir = (speed > 0.5) and vel.Unit or hrp.CFrame.LookVector
-
-                    -- front distance based on speed
-                    local frontDist = clamp(speed * FRONT_MULTIPLIER, FRONT_MIN, FRONT_MAX)
-
                     local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
-                    local phase = phaseT * (2 * math.pi * BH_OSC_FREQUENCY)
-                    local skidPhase = phaseT * (2 * math.pi * BH_OSC_FREQUENCY * SKID_FACTOR)
 
-                    local forwardJitter = math.sin(phase) * amplitude
-                    local primaryOffset = dir * (frontDist + forwardJitter)
-                    local lateral = hrp.CFrame.RightVector * (math.sin(skidPhase * 1.27) * amplitude * SKID_LATERAL_SCALE)
-                    local vertical = hrp.CFrame.UpVector * (math.sin(skidPhase * 1.0) * amplitude * SKID_VERTICAL_SCALE)
-                    local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
+                    if SKID_ENABLED then
+                        local moveDir = (speed > 0.1) and vel.Unit or hrp.CFrame.LookVector
+                        local dotF = moveDir:Dot(hrp.CFrame.LookVector)
+                        local dotR = moveDir:Dot(hrp.CFrame.RightVector)
+                        local baseAngle = math.atan2(dotR, dotF)
 
-                    -- smoothly lerp Attachment1 toward the target (smoother targeting)
-                    if Attachment1 then
-                        local success, cur = pcall(function() return Attachment1.WorldCFrame end)
-                        local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
-                        Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                        local phase = phaseT * (2 * math.pi * SKID_FREQ)
+                        local x = math.cos(phase + baseAngle) * amplitude
+                        local z = math.sin(phase + baseAngle) * amplitude
+                        local y = math.sin(phase * 0.7) * (amplitude * 0.25)
+
+                        local targetCFrame = hrp.CFrame * CFrame.new(hrp.CFrame.RightVector * x + hrp.CFrame.LookVector * z + hrp.CFrame.UpVector * y)
+
+                        if Attachment1 then
+                            local success, cur = pcall(function() return Attachment1.WorldCFrame end)
+                            local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
+                            Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                        end
+
+                    else
+                        local phase = phaseT * (2 * math.pi * (1 / (BH_SWAP_INTERVAL * 2)))
+                        local primaryOffset = dir * (math.sin(phase) * amplitude)
+                        local lateral = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
+                        local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
+                        local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
+
+                        if Attachment1 then
+                            local success, cur = pcall(function() return Attachment1.WorldCFrame end)
+                            local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
+                            Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                        end
                     end
                 end
                 wait(switchDelay)
@@ -805,22 +756,39 @@ local function toggleTargetSelected()
                     local vel = hrp.Velocity or Vector3.new(0,0,0)
                     local speed = vel.Magnitude
                     local dir = (speed > 0.5) and vel.Unit or hrp.CFrame.LookVector
-
-                    local frontDist = clamp(speed * FRONT_MULTIPLIER, FRONT_MIN, FRONT_MAX)
                     local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
-                    local phase = phaseT * (2 * math.pi * BH_OSC_FREQUENCY)
-                    local skidPhase = phaseT * (2 * math.pi * BH_OSC_FREQUENCY * SKID_FACTOR)
 
-                    local forwardJitter = math.sin(phase) * amplitude
-                    local primaryOffset = dir * (frontDist + forwardJitter)
-                    local lateral = hrp.CFrame.RightVector * (math.sin(skidPhase * 1.27) * amplitude * SKID_LATERAL_SCALE)
-                    local vertical = hrp.CFrame.UpVector * (math.sin(skidPhase * 1.0) * amplitude * SKID_VERTICAL_SCALE)
-                    local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
+                    if SKID_ENABLED then
+                        local moveDir = (speed > 0.1) and vel.Unit or hrp.CFrame.LookVector
+                        local dotF = moveDir:Dot(hrp.CFrame.LookVector)
+                        local dotR = moveDir:Dot(hrp.CFrame.RightVector)
+                        local baseAngle = math.atan2(dotR, dotF)
 
-                    if Attachment1 then
-                        local success, cur = pcall(function() return Attachment1.WorldCFrame end)
-                        local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
-                        Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                        local phase = phaseT * (2 * math.pi * SKID_FREQ)
+                        local x = math.cos(phase + baseAngle) * amplitude
+                        local z = math.sin(phase + baseAngle) * amplitude
+                        local y = math.sin(phase * 0.7) * (amplitude * 0.25)
+
+                        local targetCFrame = hrp.CFrame * CFrame.new(hrp.CFrame.RightVector * x + hrp.CFrame.LookVector * z + hrp.CFrame.UpVector * y)
+
+                        if Attachment1 then
+                            local success, cur = pcall(function() return Attachment1.WorldCFrame end)
+                            local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
+                            Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                        end
+
+                    else
+                        local phase = phaseT * (2 * math.pi * (1 / (BH_SWAP_INTERVAL * 2)))
+                        local primaryOffset = dir * (math.sin(phase) * amplitude)
+                        local lateral = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
+                        local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
+                        local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
+
+                        if Attachment1 then
+                            local success, cur = pcall(function() return Attachment1.WorldCFrame end)
+                            local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
+                            Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                        end
                     end
                 end
                 wait(switchDelay)
@@ -921,7 +889,7 @@ function startRebalancer()
             end
 
             if PAAEnabled then
-                assignUniqueTargetsToBHs()
+                distributeBHsOverPlayers()
             end
 
             wait(rebalancerFreq)
@@ -1022,6 +990,15 @@ window:Toggle("Target Selected Players", false, function(Value)
     end
 end)
 
+window:Toggle("Skid Mode (fast 360°)", false, function(Value)
+    SKID_ENABLED = Value
+end)
+
+window:Toggle("Skid Mode Apply To Extra BHs", false, function(Value)
+    -- convenience toggle that toggles skid for extra BHs as well; kept for clarity though core loop reads SKID_ENABLED
+    SKID_ENABLED = Value
+end)
+
 window:Button("Load Player List Script", function()
     loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Playerlistv6"))()
 end)
@@ -1050,7 +1027,7 @@ window:Toggle("Continuous Loop Check", false, function(Value)
     end
 end)
 
--- PAA/unPAA toggle (player-amount BHs)
+-- PAA/unPAA toggle (player-amount BHs) -- uses round-robin distribution when BHs > players
 window:Toggle("PAA/unPAA (player amount BHs)", false, function(Value)
     PAAEnabled = Value
     if PAAEnabled then
