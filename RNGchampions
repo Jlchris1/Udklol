@@ -1,0 +1,375 @@
+-- LocalScript inside StarterPlayerScripts
+-- Robust remote-firing + teleport + REWARDBUTTON auto-destroy
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+
+-- Prevent automatic respawn/reset
+Players.CharacterAutoLoads = false
+
+--------------------------------------------------------------------
+-- CONFIG: target color for auto-destroy (17,255,0)
+--------------------------------------------------------------------
+local TARGET_R, TARGET_G, TARGET_B = 17, 255, 0
+local COLOR_TOLERANCE = 1 -- allow +/- 1 per channel
+
+local function rgbFromColor3(c)
+	return math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5)
+end
+
+local function colorMatchesTarget(c3)
+	local r, g, b = rgbFromColor3(c3)
+	return math.abs(r - TARGET_R) <= COLOR_TOLERANCE
+	   and math.abs(g - TARGET_G) <= COLOR_TOLERANCE
+	   and math.abs(b - TARGET_B) <= COLOR_TOLERANCE
+end
+
+--------------------------------------------------------------------
+-- REMOTE LOOKUP & SAFE FIRE
+--------------------------------------------------------------------
+-- Cache for discovered remote
+local cachedRemote = nil
+
+local function isRemoteInstance(inst)
+	return inst and (inst:IsA("RemoteEvent") or inst:IsA("RemoteFunction"))
+end
+
+local function findLocalRemote()
+	-- Return cached if valid
+	if isRemoteInstance(cachedRemote) and cachedRemote.Parent then
+		return cachedRemote
+	end
+
+	-- Search common places: ReplicatedStorage descendants, then workspace descendants
+	for _, root in ipairs({ReplicatedStorage, workspace}) do
+		for _, inst in ipairs(root:GetDescendants()) do
+			if inst.Name == "LocalRemote" and isRemoteInstance(inst) then
+				cachedRemote = inst
+				return inst
+			end
+		end
+	end
+
+	-- Try Events folder specifically (sometimes present)
+	local ok, eventsFolder = pcall(function() return ReplicatedStorage:FindFirstChild("Events") end)
+	if ok and eventsFolder then
+		local inst = eventsFolder:FindFirstChild("LocalRemote")
+		if isRemoteInstance(inst) then
+			cachedRemote = inst
+			return inst
+		end
+	end
+
+	-- Not found
+	return nil
+end
+
+local function safeFire(argsTable)
+	-- attempt to use cached or discovered remote
+	local remote = cachedRemote or findLocalRemote()
+	if not remote then
+		-- nothing to call; warn and return false
+		warn("[TPGui] LocalRemote not found (attempted search). Remote call skipped for:", tostring(argsTable and argsTable[2] or "unknown"))
+		return false
+	end
+
+	-- RemoteEvent -> FireServer, RemoteFunction -> InvokeServer
+	if remote:IsA("RemoteEvent") then
+		local ok, err = pcall(function()
+			remote:FireServer(table.unpack(argsTable))
+		end)
+		if not ok then
+			warn("[TPGui] FireServer failed for", tostring(argsTable and argsTable[2] or "unknown"), err)
+			return false
+		end
+		return true
+	elseif remote:IsA("RemoteFunction") then
+		local ok, res = pcall(function()
+			return remote:InvokeServer(table.unpack(argsTable))
+		end)
+		if not ok then
+			warn("[TPGui] InvokeServer failed for", tostring(argsTable and argsTable[2] or "unknown"), res)
+			return false
+		end
+		return true
+	else
+		warn("[TPGui] Found LocalRemote but it's not a RemoteEvent/RemoteFunction:", remote.ClassName)
+		return false
+	end
+end
+
+--------------------------------------------------------------------
+-- GUI SETUP (left side)
+--------------------------------------------------------------------
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- remove old GUI
+local existing = playerGui:FindFirstChild("TPGui")
+if existing then existing:Destroy() end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "TPGui"
+gui.Parent = playerGui
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local toggle = Instance.new("TextButton")
+toggle.Name = "TPToggle"
+toggle.Parent = gui
+toggle.Size = UDim2.new(0, 150, 0, 50)
+toggle.AnchorPoint = Vector2.new(0, 0.5)
+toggle.Position = UDim2.new(0, 20, 0.5, 0)
+toggle.Text = "Teleport: OFF"
+toggle.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+toggle.TextScaled = true
+toggle.ZIndex = 10
+toggle.Visible = true
+
+local toggleState = false
+
+--------------------------------------------------------------------
+-- REWARDBUTTON WATCH & DESTROY
+--------------------------------------------------------------------
+local watched = {} -- obj -> connection
+
+local function tryDestroy(obj)
+	if not obj or not obj.Parent then return end
+	pcall(function() obj:Destroy() end)
+end
+
+local function unwatch(obj)
+	if not obj then return end
+	local conn = watched[obj]
+	if conn then
+		pcall(function() conn:Disconnect() end)
+		watched[obj] = nil
+	end
+end
+
+local function watchRewardButton(obj)
+	if not obj or not obj:IsA("BasePart") then return end
+	if watched[obj] then return end
+
+	-- Immediate color checks (Color and BrickColor)
+	local okc, cc = pcall(function() return obj.Color end)
+	if okc and cc and colorMatchesTarget(cc) then
+		tryDestroy(obj)
+		return
+	end
+	local okb, bcc = pcall(function() return obj.BrickColor end)
+	if okb and bcc and colorMatchesTarget(bcc.Color) then
+		tryDestroy(obj)
+		return
+	end
+
+	-- Connect Changed
+	local conn
+	conn = obj.Changed:Connect(function(prop)
+		if not obj or not obj.Parent then
+			unwatch(obj)
+			return
+		end
+		if prop == "Color" or prop == "BrickColor" then
+			local ok2, col = pcall(function() return obj.Color end)
+			if ok2 and col and colorMatchesTarget(col) then
+				tryDestroy(obj)
+				unwatch(obj)
+				return
+			end
+			local ok3, bcol = pcall(function() return obj.BrickColor end)
+			if ok3 and bcol and colorMatchesTarget(bcol.Color) then
+				tryDestroy(obj)
+				unwatch(obj)
+				return
+			end
+		end
+	end)
+
+	watched[obj] = conn
+end
+
+local function scanAndWatchRewardButtons()
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") and obj.Name == "REWARDBUTTON" then
+			-- if already target color -> destroy immediately
+			local destroyed = false
+			local okc, cc = pcall(function() return obj.Color end)
+			if okc and cc and colorMatchesTarget(cc) then
+				tryDestroy(obj)
+				destroyed = true
+			end
+			if not destroyed then
+				local okb, bcc = pcall(function() return obj.BrickColor end)
+				if okb and bcc and colorMatchesTarget(bcc.Color) then
+					tryDestroy(obj)
+					destroyed = true
+				end
+			end
+			if not destroyed then
+				watchRewardButton(obj)
+			end
+		end
+	end
+end
+
+--------------------------------------------------------------------
+-- TELEPORTING
+--------------------------------------------------------------------
+local function teleportFromFolder(folder)
+	if not folder then return end
+	local char = player.Character
+	if not char then return end
+	local head = char:FindFirstChild("Head")
+	if not head then return end
+
+	for _, obj in ipairs(folder:GetDescendants()) do
+		if obj:IsA("BasePart") then
+			obj.CanCollide = true
+			obj.CanTouch = true
+			obj.CanQuery = true
+			obj.CFrame = head.CFrame
+		end
+	end
+end
+
+local function teleportRewardButtons()
+	local char = player.Character
+	if not char then return end
+	local head = char:FindFirstChild("Head")
+	if not head then return end
+
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") and obj.Name == "REWARDBUTTON" then
+			-- destroy immediately if green, else teleport + watch
+			local destroyed = false
+			local okc, cc = pcall(function() return obj.Color end)
+			if okc and cc and colorMatchesTarget(cc) then
+				tryDestroy(obj)
+				destroyed = true
+			end
+			if not destroyed then
+				local okb, bcc = pcall(function() return obj.BrickColor end)
+				if okb and bcc and colorMatchesTarget(bcc.Color) then
+					tryDestroy(obj)
+					destroyed = true
+				end
+			end
+
+			if not destroyed then
+				obj.CanCollide = true
+				obj.CanTouch = true
+				obj.CanQuery = false
+				obj.CFrame = head.CFrame
+				watchRewardButton(obj)
+			end
+		end
+	end
+end
+
+local function teleportAll()
+	teleportFromFolder(workspace:FindFirstChild("Clovers"))
+	teleportFromFolder(workspace:FindFirstChild("RollingEventItems"))
+	teleportFromFolder(workspace:FindFirstChild("LuckyJarClovert"))
+	teleportFromFolder(workspace:FindFirstChild("LuckyJarClovers"))
+	teleportRewardButtons()
+end
+
+--------------------------------------------------------------------
+-- LOOPS & REMOTE LIST
+--------------------------------------------------------------------
+-- Deduped quest list (every entry fired with 2s wait between)
+local questRemotes = {
+	{"Quests", "RollBonus"},
+	{"Quests", "LuckyJar"},
+	{"Quests", "CrystalObby"},
+	{"Quests", "RollRNG"},
+	{"Quests", "Rolled"},
+	{"Quests", "DiamondObby"},
+	{"Quests", "GoldObby"},
+	{"Quests", "CollectRollingEventItems"},
+	{"Quests", "ParticipeInRollingEvent"},
+	{"Quests", "CloverCollected"},
+	{"Quests", "TimePlayed"},
+	{"Quests", "DoneObby"},
+	{"Quests", "RollMultipliers"}
+}
+
+local function startTeleportLoop()
+	task.spawn(function()
+		while toggleState do
+			-- scan for reward buttons (new ones may appear) and watch/destroy immediately if needed
+			scanAndWatchRewardButtons()
+			pcall(teleportAll)
+			task.wait(1)
+		end
+	end)
+end
+
+local function startBasicRemoveLoop()
+	task.spawn(function()
+		while toggleState do
+			safeFire({"RollingRNG", 1})
+			task.wait(0.2)
+		end
+	end)
+end
+
+local function startQuestRemoteLoop()
+	task.spawn(function()
+		while toggleState do
+			for _, args in ipairs(questRemotes) do
+				if not toggleState then break end
+				-- try to fire; if fails, attempt to rediscover remote once and retry
+				local ok = safeFire(args)
+				if not ok then
+					-- attempt to rediscover
+					cachedRemote = nil
+					localRemote = findLocalRemote and findLocalRemote() or nil
+					ok = safeFire(args)
+					if not ok then
+						warn("[TPGui] Failed to fire quest remote:", args[2])
+					end
+				end
+				task.wait(2)
+			end
+		end
+	end)
+end
+
+--------------------------------------------------------------------
+-- TOGGLE BUTTON
+--------------------------------------------------------------------
+toggle.MouseButton1Click:Connect(function()
+	toggleState = not toggleState
+
+	if toggleState then
+		toggle.Text = "Teleport: ON"
+		toggle.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+
+		-- initial scan & destroy
+		scanAndWatchRewardButtons()
+
+		startTeleportLoop()
+		startBasicRemoveLoop()
+		startQuestRemoteLoop()
+	else
+		toggle.Text = "Teleport: OFF"
+		toggle.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+	end
+end)
+
+--------------------------------------------------------------------
+-- CHARACTER
+--------------------------------------------------------------------
+player.CharacterAdded:Connect(function(char)
+	local hum = char:WaitForChild("Humanoid", 5)
+	if hum then
+		pcall(function()
+			hum.BreakJointsOnDeath = false
+		end)
+	end
+end)
+
+print("TPGui initialized — remote lookup improved, REWARDBUTTON watch active.")
