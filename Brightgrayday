@@ -1,0 +1,134 @@
+-- LocalScript (place in StarterPlayerScripts)
+-- Sets skybox, strong fog, two-layer atmosphere, disables most specular reflections,
+-- and adds a bloom post-effect. Tweak values at the top.
+
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- ========== TUNABLES ==========
+-- Fog
+Lighting.FogColor = Color3.fromRGB(55, 55, 55)
+Lighting.FogStart = 0
+Lighting.FogEnd = 400
+
+-- Disable environment specular to remove most reflections (0 = no environment specular)
+-- This is the primary supported way to remove sky/celestial specular reflections.
+Lighting.EnvironmentSpecularScale = 0
+
+-- (Optional) adjust diffuse if you want to reduce environment diffuse light as well:
+-- Lighting.EnvironmentDiffuseScale = 1
+
+-- Bloom settings (tweak to taste)
+local BLOOM_ENABLED = true
+local BLOOM_INTENSITY = 0.8
+local BLOOM_SIZE = 24
+local BLOOM_THRESHOLD = 0.8
+
+-- Skybox IDs
+local SKY_IDS = {
+	Bk = "rbxassetid://246480323",
+	Dn = "rbxassetid://246480523",
+	Ft = "rbxassetid://246480105",
+	Lf = "rbxassetid://246480549",
+	Rt = "rbxassetid://246480565",
+	Up = "rbxassetid://246480504",
+}
+-- ==============================
+
+-- === SKYBOX SETUP ===
+local sky = Lighting:FindFirstChildOfClass("Sky") or Instance.new("Sky")
+sky.Name = "CustomSkybox"
+
+sky.SkyboxBk  = SKY_IDS.Bk
+sky.SkyboxDn  = SKY_IDS.Dn
+sky.SkyboxFt  = SKY_IDS.Ft
+sky.SkyboxLf  = SKY_IDS.Lf
+sky.SkyboxRt  = SKY_IDS.Rt
+sky.SkyboxUp  = SKY_IDS.Up
+
+if sky.Parent ~= Lighting then
+	sky.Parent = Lighting
+end
+
+-- === BLOOM EFFECT ===
+-- Remove old custom bloom if present
+for _, v in ipairs(Lighting:GetChildren()) do
+	if v:IsA("BloomEffect") and v.Name == "CustomBloom" then
+		v:Destroy()
+	end
+end
+
+if BLOOM_ENABLED then
+	local bloom = Instance.new("BloomEffect")
+	bloom.Name = "CustomBloom"
+	bloom.Parent = Lighting
+	bloom.Enabled = true
+	bloom.Intensity = BLOOM_INTENSITY
+	bloom.Size = BLOOM_SIZE
+	bloom.Threshold = BLOOM_THRESHOLD
+end
+
+-- === TWO ATMOSPHERES ===
+-- clean old custom atmospheres
+for _, a in pairs(Lighting:GetChildren()) do
+	if a:IsA("Atmosphere") and a.Name:match("^CustomAtmosphere") then
+		a:Destroy()
+	end
+end
+
+local nearAtmos = Instance.new("Atmosphere")
+nearAtmos.Name = "CustomAtmosphere_Near"
+nearAtmos.Parent = Lighting
+nearAtmos.Color = Color3.fromRGB(100, 100, 100)  -- brighter gray
+nearAtmos.Density = 0.9
+nearAtmos.Offset = 0
+nearAtmos.Decay = 0
+
+local outerAtmos = Instance.new("Atmosphere")
+outerAtmos.Name = "CustomAtmosphere_Outer"
+outerAtmos.Parent = Lighting
+outerAtmos.Color = Color3.fromRGB(55, 55, 55)   -- darker gray (matches fog)
+outerAtmos.Density = 0.20
+outerAtmos.Offset = 8
+outerAtmos.Decay = 0
+
+-- === DYNAMIC BEHAVIOUR (camera-driven) ===
+local function clamp(x, a, b) return math.max(a, math.min(b, x)) end
+local function lerp(a, b, t) return a + (b - a) * t end
+
+local NEAR_MIN_DENSITY, NEAR_MAX_DENSITY = 0.6, 1.0
+local OUTER_MIN_DENSITY, OUTER_MAX_DENSITY = 0.05, 0.8
+local VIEWDIST_FOR_MAX_OUTER = 500
+local VIEWDIST_FOR_MIN_NEAR = 200
+
+local nearDensitySmoothed = nearAtmos.Density
+local outerDensitySmoothed = outerAtmos.Density
+local smoothingSpeed = 8
+
+RunService:BindToRenderStep("AtmosphereAdjust", Enum.RenderPriority.Camera.Value + 1, function(dt)
+	if not camera or not camera:IsA("Camera") then return end
+
+	local camPos = camera.CFrame.Position
+	local focusCFrame = camera.Focus or camera.CFrame
+	local focusPos = focusCFrame.Position
+	local viewDistance = (focusPos - camPos).Magnitude
+
+	local tOuter = clamp(viewDistance / VIEWDIST_FOR_MAX_OUTER, 0, 1)
+	local tNear = clamp(1 - (viewDistance / VIEWDIST_FOR_MIN_NEAR), 0, 1)
+
+	local desiredNear = lerp(NEAR_MIN_DENSITY, NEAR_MAX_DENSITY, tNear)
+	local desiredOuter = lerp(OUTER_MIN_DENSITY, OUTER_MAX_DENSITY, tOuter)
+
+	nearDensitySmoothed = lerp(nearDensitySmoothed, desiredNear, clamp(dt * smoothingSpeed, 0, 1))
+	outerDensitySmoothed = lerp(outerDensitySmoothed, desiredOuter, clamp(dt * smoothingSpeed, 0, 1))
+
+	nearAtmos.Density = clamp(nearDensitySmoothed, 0, 1)
+	outerAtmos.Density = clamp(outerDensitySmoothed, 0, 1)
+
+	local heightFactor = clamp(camPos.Y / 100, 0, 2)
+	outerAtmos.Offset = 6 + heightFactor * 2
+end)
