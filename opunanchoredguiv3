@@ -5,6 +5,10 @@
 --  * BH_SWAP_INTERVAL = 0.01 (swap spam interval, unchanged)
 --  * Smoother targeting via exponential smoothing (TARGET_SMOOTHNESS)
 --  * ForcePart still uses part center attachments and ignores any player character parts
+--  * Whitelisted players are excluded from ALL targeting
+--  * Target toggles separated (targetAllActive / targetSelectedActive)
+--  * PAA refresh only runs while matching primary targeting mode is on
+--  * When BHs > players, BHs are distributed among players (never local player)
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -19,9 +23,12 @@ local function clamp(val, a, b)
     return val
 end
 
--- Core state
-local blackHoleActive = false
-local toggleState = false
+-- ====== CONFIG / STATE ======
+local blackHoleActive = false -- indicates any primary targeting mode is active
+local targetAllActive = false
+local targetSelectedActive = false
+local primaryLoopRunning = false
+
 local targetPlayer = nil
 local switchDelay = 0.13 -- seconds between target selection / refresh (user requested)
 local processedParts = {} -- set: part -> true
@@ -105,9 +112,8 @@ local function isPartPlayerCharacter(part)
     return false
 end
 
--- ===== NOTE: We deliberately make noclip a no-op so local player's movement is never modified =====
+-- Deliberately make noclip a no-op for local player
 local function enableLocalPlayerNoclip(enable)
-    -- no-op: do not alter local player's parts or collisions; avoids breaking walking
     return
 end
 
@@ -140,11 +146,20 @@ local function getLeastLoadedBlackHole()
     return extraBlackHoles[1]
 end
 
--- Return array of players excluding local player. Always returns current players even without characters.
+-- Helper: is player whitelisted (should be excluded from targeting)
+local function isWhitelisted(player)
+    if not player then return false end
+    if player:FindFirstChild("Whitelisted") and typeof(player.Whitelisted.Value) == "boolean" then
+        return player.Whitelisted.Value
+    end
+    return false
+end
+
+-- Return array of players excluding local player and whitelisted players. Always returns current players even without characters.
 local function getAllNonLocalPlayers()
     local res = {}
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= localPlayer then
+        if p ~= localPlayer and not isWhitelisted(p) then
             table.insert(res, p)
         end
     end
@@ -153,7 +168,6 @@ end
 
 -- Exponential smoothing for CFrame lerp (smoother targeting)
 local function smoothLerpCFrame(curCF, targetCF, dt)
-    -- alpha = 1 - exp(-k * dt). k = TARGET_SMOOTHNESS
     local alpha = 1 - math.exp(-TARGET_SMOOTHNESS * dt)
     if alpha < 0.001 then alpha = 0.001 end
     if alpha > 1 then alpha = 1 end
@@ -189,7 +203,6 @@ local function ForcePart(v)
         Torque.Torque = Vector3.new(1e6, 1e6, 1e6)
         local AlignPosition = Instance.new("AlignPosition", v)
         local Attachment2 = Instance.new("Attachment", v)
-        -- place attachment at the part's world center to avoid grabbing edges (mesh offsets)
         pcall(function()
             Attachment2.WorldCFrame = v.CFrame
         end)
@@ -302,7 +315,6 @@ local function processWorkspaceParts()
 
         descendantAddedConn = Workspace.DescendantAdded:Connect(function(v)
             if blackHoleActive then
-                -- ensure we don't attach to player character parts that spawn
                 if v:IsA("BasePart")
                     and not v.Anchored
                     and not processedParts[v]
@@ -324,7 +336,7 @@ end
 local function getSelectedPlayers()
     local res = {}
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= localPlayer and player:FindFirstChild("Selected") and player.Selected.Value then
+        if player ~= localPlayer and not isWhitelisted(player) and player:FindFirstChild("Selected") and player.Selected.Value then
             table.insert(res, player)
         end
     end
@@ -363,8 +375,9 @@ end
 
 -- Helper: create an extra black hole (part + attachment) and start its loop
 local function createExtraBlackHole(initialTarget)
-    -- ensure initialTarget is never the local player
+    -- ensure initialTarget is never the local player or whitelisted
     if initialTarget == localPlayer then initialTarget = nil end
+    if initialTarget and isWhitelisted(initialTarget) then initialTarget = nil end
 
     local folder = Workspace:FindFirstChild("ÆS_BlackHole_Folder") or Instance.new("Folder", Workspace)
     folder.Name = "ÆS_BlackHole_Folder"
@@ -403,7 +416,7 @@ local function createExtraBlackHole(initialTarget)
             local dt = RunService.Heartbeat:Wait()
             t = t + dt
 
-            if bh.TargetPlayer and bh.TargetPlayer ~= localPlayer then
+            if bh.TargetPlayer and bh.TargetPlayer ~= localPlayer and not isWhitelisted(bh.TargetPlayer) then
                 -- If player flagged disabled, deactivate BH (but keep it around)
                 if isPlayerDisabled(bh.TargetPlayer) then
                     setBlackHoleActiveState(bh, false)
@@ -476,11 +489,12 @@ local function destroyExtraBlackHole(bh)
     end
 end
 
--- Assign unique targets to BHs for PAA: enforces one BH per player and avoids assigning the same target the BH had previously when possible.
+-- Assign unique targets to BHs for PAA or distribute evenly when BHs > players.
+-- Ensures LocalPlayer and Whitelisted players are never targets.
 local function assignUniqueTargetsToBHs()
     if #extraBlackHoles == 0 then return end
 
-    -- candidate players (exclude local)
+    -- candidate players (exclude local and whitelisted)
     local players = {}
     if PAA_isUsingSelected then
         players = getSelectedPlayers()
@@ -490,50 +504,78 @@ local function assignUniqueTargetsToBHs()
 
     shuffle(players)
 
-    -- mapping player -> assigned
-    local assignedPlayers = {}
+    local bhCount = #extraBlackHoles
+    local playerCount = #players
 
-    -- first pass: try to assign each BH a player not equal to its LastTarget and not yet assigned
+    -- prepare BHs
     for _, bh in ipairs(extraBlackHoles) do
         bh.LastTarget = bh.TargetPlayer -- store previous
         bh.TargetPlayer = nil
-        bh.AssignedParts = {} -- clear previously tracked assigned parts (rebalancer will reassign)
+        bh.AssignedParts = {}
     end
 
-    for _, bh in ipairs(extraBlackHoles) do
-        local pick = nil
-        for _, pl in ipairs(players) do
-            if not assignedPlayers[pl] and pl ~= bh.LastTarget then
-                pick = pl
-                assignedPlayers[pl] = true
-                break
-            end
+    if playerCount == 0 then
+        -- no available players -> leave BHs targetless (they will roam)
+        for _, bh in ipairs(extraBlackHoles) do
+            bh.TargetPlayer = nil
+            setBlackHoleActiveState(bh, true)
         end
-        if not pick then
-            -- fallback: assign any unassigned player
+        return
+    end
+
+    if bhCount <= playerCount then
+        -- one-to-one unique assignment (try to avoid LastTarget)
+        local assigned = {}
+        for _, bh in ipairs(extraBlackHoles) do
+            local pick = nil
             for _, pl in ipairs(players) do
-                if not assignedPlayers[pl] then
+                if not assigned[pl] and pl ~= bh.LastTarget then
                     pick = pl
-                    assignedPlayers[pl] = true
+                    assigned[pl] = true
                     break
                 end
             end
+            if not pick then
+                for _, pl in ipairs(players) do
+                    if not assigned[pl] then
+                        pick = pl
+                        assigned[pl] = true
+                        break
+                    end
+                end
+            end
+            bh.TargetPlayer = pick
+            if bh.TargetPlayer and bh.TargetPlayer:FindFirstChild("Disabled") and bh.TargetPlayer.Disabled.Value == true then
+                setBlackHoleActiveState(bh, false)
+            else
+                setBlackHoleActiveState(bh, true)
+            end
+            if pick and pick.Character and pick.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
+                bh.Attachment.WorldCFrame = pick.Character.HumanoidRootPart.CFrame
+            end
         end
-        bh.TargetPlayer = pick -- may be nil if players < BHs
-
-        -- respect disabled state
-        if bh.TargetPlayer and bh.TargetPlayer:FindFirstChild("Disabled") and bh.TargetPlayer.Disabled.Value == true then
-            setBlackHoleActiveState(bh, false)
-        else
-            setBlackHoleActiveState(bh, true)
-        end
-
-        -- place BH instantly if HRP exists
-        if pick and pick.Character and pick.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
-            bh.Attachment.WorldCFrame = pick.Character.HumanoidRootPart.CFrame
+    else
+        -- more BHs than players: distribute BHs across players as evenly as possible (round-robin with random start)
+        local startOffset = math.random(0, playerCount - 1)
+        for i, bh in ipairs(extraBlackHoles) do
+            local idx = ((i - 1 + startOffset) % playerCount) + 1
+            local pick = players[idx]
+            -- try to avoid same LastTarget for this BH if there is alternative nearby
+            if pick == bh.LastTarget and playerCount > 1 then
+                local altIdx = (idx % playerCount) + 1
+                pick = players[altIdx] or pick
+            end
+            bh.TargetPlayer = pick
+            if bh.TargetPlayer and bh.TargetPlayer:FindFirstChild("Disabled") and bh.TargetPlayer.Disabled.Value == true then
+                setBlackHoleActiveState(bh, false)
+            else
+                setBlackHoleActiveState(bh, true)
+            end
+            if pick and pick.Character and pick.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
+                bh.Attachment.WorldCFrame = pick.Character.HumanoidRootPart.CFrame
+            end
         end
     end
-    -- now each player has at most one BH; BHs beyond players are left targetless (roam)
 end
 
 -- Create N extra black holes, attempt to assign different initial targets
@@ -547,16 +589,19 @@ local function createNBlackHoles(n)
 
     -- Assignment behavior:
     if PAAEnabled then
-        -- enforce one-to-one mapping
+        -- enforce distribution based on PAA mode (selected/all)
         assignUniqueTargetsToBHs()
     else
-        -- non-PAA multi-BH: allow players to have multiple BHs.
+        -- non-PAA multi-BH: distribute across available players (never local)
         local players = getAllNonLocalPlayers()
-        if #players > 0 then
+        local playerCount = #players
+        if playerCount > 0 then
+            -- distribute evenly across players
+            local startOffset = math.random(0, playerCount - 1)
             for i, bh in ipairs(extraBlackHoles) do
-                bh.TargetPlayer = players[((i-1) % #players) + 1]
+                local pick = players[((i-1 + startOffset) % playerCount) + 1]
+                bh.TargetPlayer = pick
                 bh.LastTarget = nil
-                -- respect disabled state
                 if bh.TargetPlayer and bh.TargetPlayer:FindFirstChild("Disabled") and bh.TargetPlayer.Disabled.Value == true then
                     setBlackHoleActiveState(bh, false)
                 else
@@ -598,21 +643,23 @@ local function refreshPAA()
     end
 
     for _, tgt in ipairs(targets) do
-        local bh = createExtraBlackHole(tgt)
-        bh.TargetPlayer = tgt
-        bh.LastTarget = nil
-        -- respect disabled at creation
-        if tgt:FindFirstChild("Disabled") and tgt.Disabled.Value == true then
-            setBlackHoleActiveState(bh, false)
-        else
-            setBlackHoleActiveState(bh, true)
-        end
-        if tgt.Character and tgt.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
-            bh.Attachment.WorldCFrame = tgt.Character.HumanoidRootPart.CFrame
+        if tgt and not isWhitelisted(tgt) then
+            local bh = createExtraBlackHole(tgt)
+            bh.TargetPlayer = tgt
+            bh.LastTarget = nil
+            -- respect disabled at creation
+            if tgt:FindFirstChild("Disabled") and tgt.Disabled.Value == true then
+                setBlackHoleActiveState(bh, false)
+            else
+                setBlackHoleActiveState(bh, true)
+            end
+            if tgt.Character and tgt.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
+                bh.Attachment.WorldCFrame = tgt.Character.HumanoidRootPart.CFrame
+            end
         end
     end
 
-    -- ensure uniqueness & avoid immediate re-targeting
+    -- ensure uniqueness or distribution
     assignUniqueTargetsToBHs()
 
     if #extraBlackHoles > 0 then
@@ -622,7 +669,7 @@ end
 
 -- Player join/leave handlers for PAA live updates
 local function onPlayerAddedForPAA(pl)
-    if PAAEnabled and not PAA_isUsingSelected and pl ~= localPlayer then
+    if PAAEnabled and not PAA_isUsingSelected and pl ~= localPlayer and not isWhitelisted(pl) then
         local bh = createExtraBlackHole(pl)
         bh.TargetPlayer = pl
         bh.LastTarget = nil
@@ -644,52 +691,71 @@ local function onPlayerRemovingForPAA(pl)
     end
 end
 
--- Toggle main black hole (legacy single Attachment1 behavior)
-local function toggleBlackHole()
-    blackHoleActive = toggleState
+-- Primary targeting loop (single loop handles both modes, avoids spawn duplicates)
+local function startPrimaryLoop()
+    if primaryLoopRunning then return end
+    primaryLoopRunning = true
+    blackHoleActive = (targetAllActive or targetSelectedActive)
     if blackHoleActive then
-        -- Keep Attachment1 in the global folder (do NOT parent to local player)
         if not Attachment1 or not Attachment1.Parent then
             Attachment1 = setupPlayer()
         end
-
         anchoredOnce = false
         processWorkspaceParts()
-        spawn(function()
-            local phaseT = 0
-            local lastHeartbeat = tick()
-            while blackHoleActive do
-                local now = tick()
-                local dt = now - lastHeartbeat
-                lastHeartbeat = now
-                phaseT = phaseT + dt
+    end
 
-                targetPlayer = getRandomPlayer()
-                if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local hrp = targetPlayer.Character.HumanoidRootPart
-                    local vel = hrp.Velocity or Vector3.new(0,0,0)
-                    local speed = vel.Magnitude
-                    local dir = (speed > 0.5) and vel.Unit or hrp.CFrame.LookVector
-                    local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
-                    local phase = phaseT * (2 * math.pi * BH_OSC_FREQUENCY)
-                    local primaryOffset = dir * (math.sin(phase) * amplitude)
-                    local lateral = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
-                    local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
-                    local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
+    spawn(function()
+        local phaseT = 0
+        local lastHeartbeat = tick()
+        while targetAllActive or targetSelectedActive do
+            local now = tick()
+            local dt = now - lastHeartbeat
+            lastHeartbeat = now
+            phaseT = phaseT + dt
 
-                    -- smoothly lerp Attachment1 toward the target (smoother targeting)
-                    if Attachment1 then
-                        local success, cur = pcall(function() return Attachment1.WorldCFrame end)
-                        local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
-                        Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
-                    end
+            if targetSelectedActive then
+                local selectedPlayers = getSelectedPlayers()
+                if #selectedPlayers > 0 then
+                    -- random chosen selected player
+                    targetPlayer = selectedPlayers[math.random(1, #selectedPlayers)]
+                else
+                    targetPlayer = nil
                 end
-                wait(switchDelay)
+            elseif targetAllActive then
+                -- pick any non-local, non-whitelisted player (random)
+                targetPlayer = getRandomPlayer()
+            else
+                targetPlayer = nil
             end
-        end)
-    else
+
+            if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = targetPlayer.Character.HumanoidRootPart
+                local vel = hrp.Velocity or Vector3.new(0,0,0)
+                local speed = vel.Magnitude
+                local dir = (speed > 0.5) and vel.Unit or hrp.CFrame.LookVector
+                local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
+                local phase = phaseT * (2 * math.pi * BH_OSC_FREQUENCY)
+                local primaryOffset = dir * (math.sin(phase) * amplitude)
+                local lateral = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
+                local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
+                local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
+
+                -- smoothly lerp Attachment1 toward the target (smoother targeting)
+                if Attachment1 then
+                    local success, cur = pcall(function() return Attachment1.WorldCFrame end)
+                    local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
+                    Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                end
+            end
+
+            wait(switchDelay)
+        end
+
+        -- loop ended (both target booleans false)
         blackHoleActive = false
-        -- do not change local player's collisions/noclip
+        primaryLoopRunning = false
+
+        -- when primary targeting stops, stop/clean
         if unanchorTimerRunning and unanchorCoroutine then
             unanchorTimerRunning = false
             for part, anchored in pairs(initiallyAnchoredParts) do
@@ -701,73 +767,63 @@ local function toggleBlackHole()
         end
         clearProcessedParts()
 
-        -- If PAA is enabled and we toggled off the primary targeting mode, destroy existing extra BHs (so enabling will re-create correctly)
+        -- If PAA is enabled and primary targeting off then destroy extra BHs (so enabling will re-create correctly)
         if PAAEnabled then
+            deleteExtraBlackHoles()
+        end
+    end)
+end
+
+-- Toggle target-all
+local function setTargetAll(value)
+    targetAllActive = value
+    targetSelectedActive = targetSelectedActive -- unchanged
+    blackHoleActive = (targetAllActive or targetSelectedActive)
+    if blackHoleActive then
+        startPrimaryLoop()
+    else
+        -- stopping primary handled by loop's condition; but ensure blackHoleActive false
+        blackHoleActive = false
+    end
+
+    -- PAA response: create/destroy depending on PAAEnabled and primary mode
+    if PAAEnabled then
+        if targetAllActive then
+            PAA_isUsingSelected = false
+            refreshPAA()
+            -- ensure connections are present
+            if #paaConnections == 0 then
+                paaConnections[#paaConnections+1] = Players.PlayerAdded:Connect(onPlayerAddedForPAA)
+                paaConnections[#paaConnections+1] = Players.PlayerRemoving:Connect(onPlayerRemovingForPAA)
+            end
+        else
+            -- primary all turned off -> delete extra BHs (PAA paused)
             deleteExtraBlackHoles()
         end
     end
 end
 
--- Toggle target selected behavior (legacy)
-local function toggleTargetSelected()
-    blackHoleActive = toggleState
+-- Toggle target-selected
+local function setTargetSelected(value)
+    targetSelectedActive = value
+    targetAllActive = targetAllActive -- unchanged
+    blackHoleActive = (targetAllActive or targetSelectedActive)
     if blackHoleActive then
-        if not Attachment1 or not Attachment1.Parent then
-            Attachment1 = setupPlayer()
-        end
-
-        anchoredOnce = false
-        processWorkspaceParts()
-        spawn(function()
-            local phaseT = 0
-            local lastHeartbeat = tick()
-            while blackHoleActive do
-                local now = tick()
-                local dt = now - lastHeartbeat
-                lastHeartbeat = now
-                phaseT = phaseT + dt
-
-                local selectedPlayers = getSelectedPlayers()
-                if #selectedPlayers > 0 then
-                    targetPlayer = selectedPlayers[math.random(1, #selectedPlayers)]
-                else
-                    targetPlayer = nil
-                end
-                if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local hrp = targetPlayer.Character.HumanoidRootPart
-                    local vel = hrp.Velocity or Vector3.new(0,0,0)
-                    local speed = vel.Magnitude
-                    local dir = (speed > 0.5) and vel.Unit or hrp.CFrame.LookVector
-                    local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
-                    local phase = phaseT * (2 * math.pi * BH_OSC_FREQUENCY)
-                    local primaryOffset = dir * (math.sin(phase) * amplitude)
-                    local lateral = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
-                    local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
-                    local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
-
-                    if Attachment1 then
-                        local success, cur = pcall(function() return Attachment1.WorldCFrame end)
-                        local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
-                        Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
-                    end
-                end
-                wait(switchDelay)
-            end
-        end)
+        startPrimaryLoop()
     else
         blackHoleActive = false
-        if unanchorTimerRunning and unanchorCoroutine then
-            unanchorTimerRunning = false
-            for part, anchored in pairs(initiallyAnchoredParts) do
-                if part and part.Parent and anchored == false then
-                    part.Anchored = false
-                    ForcePart(part)
-                end
-            end
-        end
-        clearProcessedParts()
+    end
 
-        if PAAEnabled then
+    if PAAEnabled then
+        if targetSelectedActive then
+            PAA_isUsingSelected = true
+            refreshPAA()
+            -- ensure connections are present
+            if #paaConnections == 0 then
+                paaConnections[#paaConnections+1] = Players.PlayerAdded:Connect(onPlayerAddedForPAA)
+                paaConnections[#paaConnections+1] = Players.PlayerRemoving:Connect(onPlayerRemovingForPAA)
+            end
+        else
             deleteExtraBlackHoles()
         end
     end
@@ -776,7 +832,6 @@ end
 -- Keep primary behavior consistent on respawn but do NOT reparent Attachment1 to local player
 local function onCharacterAdded(character)
     if blackHoleActive then
-        -- do not attach Attachment1 to character; keep it in folder
         processedParts = {}
         processWorkspaceParts()
     end
@@ -806,7 +861,7 @@ function startRebalancer()
             end
 
             if bhCount > 0 and #parts > 0 then
-                -- exact equal-count calculation
+                -- exact equal-count calculation for part distribution
                 local total = #parts
                 local base = math.floor(total / bhCount)
                 local rem = total - (base * bhCount) -- remainder to distribute (0..bhCount-1)
@@ -824,7 +879,6 @@ function startRebalancer()
                         if not p then break end
                         local ap = p:FindFirstChildOfClass("AlignPosition")
                         if ap then
-                            -- ensure the BH attachment is safe and BH active
                             if bh and bh.Attachment and bh._active then
                                 ap.Attachment1 = bh.Attachment
                                 p.CanCollide = false
@@ -920,34 +974,14 @@ localPlayer.Chatted:Connect(onLocalPlayerChatted)
 
 -- ---- GUI (TurtleLib) ----
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/miroeramaa/TurtleLib/main/TurtleUiLib.lua"))()
-local window = library:Window("made by JLchris") 
+local window = library:Window("made by JLchris")
 
 window:Toggle("Unanchored Target All", false, function(Value)
-    toggleState = Value
-    blackHoleActive = Value
-    toggleBlackHole()
-
-    if PAAEnabled then
-        if Value then
-            refreshPAA()
-        else
-            deleteExtraBlackHoles()
-        end
-    end
+    setTargetAll(Value)
 end)
 
 window:Toggle("Target Selected Players", false, function(Value)
-    toggleState = Value
-    blackHoleActive = Value
-    toggleTargetSelected()
-
-    if PAAEnabled then
-        if Value then
-            refreshPAA()
-        else
-            deleteExtraBlackHoles()
-        end
-    end
+    setTargetSelected(Value)
 end)
 
 window:Button("Load Player List Script", function()
@@ -1004,47 +1038,20 @@ window:Button("Delete Extra Blackholes (DBH)", function()
     deleteExtraBlackHoles()
 end)
 
--- Loop Fix Parts toggle: every 0.8s bring every black hole 10 studs above the local player,
--- then 0.1s later return them to targeting players.
-local loopFixActive = false
-window:Toggle("Loop Fix Parts", false, function(Value)
-    loopFixActive = Value
-    if loopFixActive then
-        spawn(function()
-            while loopFixActive do
-                wait(0.8)
-                if not loopFixActive then break end
-                if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local hrp = localPlayer.Character.HumanoidRootPart
-                    local topCF = hrp.CFrame * CFrame.new(0,10,0)
-                    if Attachment1 then pcall(function() Attachment1.WorldCFrame = topCF end) end
-                    for _, bh in ipairs(extraBlackHoles) do
-                        if bh and bh.Attachment then pcall(function() bh.Attachment.WorldCFrame = topCF end) end
-                    end
-                end
-                wait(0.1)
-                if not loopFixActive then break end
-                for _, bh in ipairs(extraBlackHoles) do
-                    if bh and bh.Attachment then
-                        local tgt = bh.TargetPlayer
-                        if tgt and tgt.Character and tgt.Character:FindFirstChild("HumanoidRootPart") then
-                            pcall(function() bh.Attachment.WorldCFrame = tgt.Character.HumanoidRootPart.CFrame end)
-                        end
-                    end
-                end
-                if Attachment1 and targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    pcall(function() Attachment1.WorldCFrame = targetPlayer.Character.HumanoidRootPart.CFrame end)
-                end
-            end
-        end)
-    end
-end)
-
--- Continuous refresh for selection-based PAA if selected mode is enabled
+-- Continuous refresh for selection-based PAA if selected mode is enabled and targetSelectedActive is on
 spawn(function()
     while true do
-        if PAAEnabled and PAA_isUsingSelected then
-            refreshPAA()
+        if PAAEnabled then
+            if PAA_isUsingSelected then
+                if targetSelectedActive then
+                    refreshPAA()
+                end
+            else
+                -- PAA using all players: only refresh when targetAllActive is true (primary targeting mode for all)
+                if targetAllActive then
+                    refreshPAA()
+                end
+            end
         end
         wait(2)
     end
