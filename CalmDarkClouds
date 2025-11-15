@@ -1,0 +1,189 @@
+-- Server script: place in ServerScriptService
+-- Creates Sky in Lighting, configures fog + outer Atmosphere, adds post-processing,
+-- creates a LocalScript in StarterPlayerScripts that gives each client a near dense fog effect.
+
+local Lighting = game:GetService("Lighting")
+local StarterPlayer = game:GetService("StarterPlayer")
+local StarterPlayerScripts = StarterPlayer:FindFirstChild("StarterPlayerScripts") or Instance.new("StarterPlayerScripts", StarterPlayer)
+StarterPlayerScripts.Name = "StarterPlayerScripts"
+
+-- ====== SKY ======
+local function createOrReplaceSky()
+    local sky = Lighting:FindFirstChildOfClass("Sky") or Instance.new("Sky")
+    sky.Name = "CustomSky"
+    sky.SkyboxBk = "rbxassetid://246480323"
+    sky.SkyboxDn = "rbxassetid://246480523"
+    sky.SkyboxFt = "rbxassetid://246480105"
+    sky.SkyboxLf = "rbxassetid://246480549"
+    sky.SkyboxRt = "rbxassetid://246480565"
+    sky.SkyboxUp = "rbxassetid://246480504"
+    sky.Parent = Lighting
+end
+
+-- ====== GLOBAL FOG ======
+local function configureGlobalFog()
+    Lighting.FogColor = Color3.fromRGB(55,55,55)  -- dark outer fog color
+    -- severe fog baseline; tweak FogEnd as needed for your map scale
+    Lighting.FogStart = 0
+    Lighting.FogEnd = 200
+end
+
+-- ====== OUTER ATMOSPHERE ======
+local function createOuterAtmosphere()
+    local atm = Lighting:FindFirstChild("OuterAtmosphere") or Instance.new("Atmosphere")
+    atm.Name = "OuterAtmosphere"
+    atm.Color = Color3.fromRGB(55,55,55)  -- darker outer atmosphere color
+    atm.Density = 0.25    -- less dense at close range, gives distant haze
+    atm.Haze = 0.40
+    atm.Offset = 0.0
+    atm.Glare = 0.2
+    if pcall(function() return atm.Decay end) then
+        atm.Decay = Color3.new(1,1,1)
+    end
+    atm.Parent = Lighting
+end
+
+-- ====== POST-PROCESSING (BLOOM + BLUR + COLOR CORRECTION) ======
+local function createPostProcessing()
+    -- Bloom
+    local bloom = Lighting:FindFirstChild("GlobalBloom") or Instance.new("BloomEffect")
+    bloom.Name = "GlobalBloom"
+    bloom.Intensity = 2
+    bloom.Size = 56
+    bloom.Threshold = 0.6
+    bloom.Parent = Lighting
+
+    -- Blur
+    local blur = Lighting:FindFirstChild("GlobalBlur") or Instance.new("BlurEffect")
+    blur.Name = "GlobalBlur"
+    blur.Size = 2
+    blur.Parent = Lighting
+
+    -- Color Correction (tint/contrast toward gray)
+    local cc = Lighting:FindFirstChild("GlobalColorCorrection") or Instance.new("ColorCorrectionEffect")
+    cc.Name = "GlobalColorCorrection"
+    cc.Saturation = -0.1
+    cc.Contrast = -0.05
+    cc.TintColor = Color3.fromRGB(90,90,90)
+    cc.Parent = Lighting
+end
+
+-- ====== MAKE PARTS REFLECTIVE UTILITY ======
+local function SetPartsReflective(amount)
+    amount = amount or 0.25
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            -- skip terrain or very large/intentional assets by name if you want
+            if obj.Name ~= "Terrain" then
+                pcall(function()
+                    obj.Reflectance = amount
+                    -- switch to a reflective Material where appropriate
+                    if obj.Material ~= Enum.Material.Glass and obj.Material ~= Enum.Material.Metal then
+                        obj.Material = Enum.Material.Metal
+                    end
+                end)
+            end
+        end
+    end
+end
+
+-- ====== CREATE CLIENT LOCALSCRIPT (for inner dense fog + camera-local tweaks) ======
+local function createClientLocalScript()
+    local existing = StarterPlayerScripts:FindFirstChild("ClientInnerFog_and_Effects")
+    if existing then existing:Destroy() end
+
+    local localsrc = Instance.new("LocalScript")
+    localsrc.Name = "ClientInnerFog_and_Effects"
+    localsrc.Source = [[
+-- LocalScript: runs for each player (auto-created by server script)
+local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- Local near-fog color (brighter gray)
+local innerFogColor = Color3.fromRGB(100,100,100)
+
+-- Create camera-attached ParticleEmitter to simulate near dense fog
+local function createCameraFogEmitter()
+    local att = Instance.new("Attachment")
+    att.Name = "_InnerFogAttachment"
+    att.Parent = camera
+
+    local emitter = Instance.new("ParticleEmitter")
+    emitter.Name = "_InnerFogEmitter"
+    emitter.Parent = att
+    emitter.Rate = 120
+    emitter.Lifetime = NumberRange.new(0.8,1.8)
+    emitter.Speed = NumberRange.new(0.2,0.8)
+    emitter.Rotation = NumberRange.new(0,360)
+    emitter.RotSpeed = NumberRange.new(-10,10)
+    emitter.VelocitySpread = 180
+    emitter.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0,0.6), NumberSequenceKeypoint.new(1,0.9)})
+    emitter.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 6), NumberSequenceKeypoint.new(1, 14)})
+    emitter.Texture = "rbxasset://textures/particles/smoke_main.dds"
+    emitter.Color = ColorSequence.new(innerFogColor, innerFogColor)
+    emitter.ZOffset = 2
+    emitter.LockedToPart = false
+    emitter.EmissionDirection = Enum.NormalId.Front
+    return att, emitter
+end
+
+local att, emitter = createCameraFogEmitter()
+
+-- Ensure a local blur effect exists for this client (affects only this player's camera)
+local blur = Lighting:FindFirstChild("GlobalBlur")
+if not blur then
+    blur = Instance.new("BlurEffect")
+    blur.Name = "GlobalBlur"
+    blur.Size = 0
+    blur.Parent = Lighting
+end
+
+-- Save originals so we can respect the global feel and only nudge locally
+local originalFogStart = Lighting.FogStart
+local originalFogEnd = Lighting.FogEnd
+local originalFogColor = Lighting.FogColor
+
+-- Local inner fog target values for this player
+local innerFogEnd = 60 -- near dense layer
+local lerpSpeed = 2
+
+RunService:BindToRenderStep("InnerFogUpdate", Enum.RenderPriority.Camera.Value + 1, function(dt)
+    -- Lerp client's FogEnd toward a nearer value for a dense local layer
+    local current = Lighting.FogEnd or 0
+    local target = innerFogEnd
+    local newVal = current + (target - current) * math.clamp(lerpSpeed * dt, 0, 1)
+    Lighting.FogEnd = newVal
+
+    -- Keep FogColor as the global outer color (particles supply the brighter inner gray)
+    Lighting.FogColor = originalFogColor or Color3.fromRGB(55,55,55)
+
+    -- Slight blur increase when moving faster to emphasize thickness
+    local speed = 0
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        speed = player.Character.HumanoidRootPart.Velocity.Magnitude
+    end
+    blur.Size = math.clamp(2 + speed * 0.02, 0, 10)
+end)
+
+-- Cleanup when player leaves or script unloads
+player.AncestryChanged:Connect(function()
+    pcall(function() if att then att:Destroy() end end)
+end)
+]]
+    localsrc.Parent = StarterPlayerScripts
+end
+
+-- ====== RUN EVERYTHING ======
+createOrReplaceSky()
+configureGlobalFog()
+createOuterAtmosphere()
+createPostProcessing()
+createClientLocalScript()
+
+-- Make parts reflective (optional) - adjust amount (0..1)
+SetPartsReflective(0.25)
+
+print("Custom sky + fog + atmosphere + effects setup complete.")
