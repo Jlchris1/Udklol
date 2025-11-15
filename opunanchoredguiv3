@@ -1,4 +1,4 @@
--- Full updated script (client) with Life Cycle Mode and death-aware targeting
+-- Full updated script (client) with Life Cycle Mode, ROTATE_INTERVAL = 0.2, and "Reset Cycle" button
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
@@ -16,7 +16,7 @@ local targetAllActive = false
 local targetSelectedActive = false
 local primaryLoopRunning = false
 
-local switchDelay = 0.2
+local switchDelay = 0.13
 local processedParts = {}
 local initiallyAnchoredParts = {}
 local anchoredOnce = false
@@ -44,10 +44,10 @@ local BH_OSC_FREQUENCY = 1 / (BH_SWAP_INTERVAL * 2)
 local BH_AMPLITUDE_FACTOR = 0.22
 local BH_MIN_AMPLITUDE = 0.6
 local BH_MAX_AMPLITUDE = 80
-local TARGET_SMOOTHNESS = 100
+local TARGET_SMOOTHNESS = 6.0
 
--- ROTATION settings for extra BH remainder
-local ROTATE_INTERVAL = 0.12 -- seconds between rotating reassigns for leftover BHs
+-- ROTATION settings for extra BH remainder (swap cooldown changed to 0.2s)
+local ROTATE_INTERVAL = 0.2 -- seconds between rotating reassigns for leftover BHs
 
 -- Life Cycle Mode state
 local LifeCycleMode = false
@@ -593,7 +593,6 @@ local function assignTargetsForPAA()
         end
     end
 
-    -- If LifeCycle allows whitelisted selected, getSelectedPlayers used earlier already respected that
     shuffle(paaBHs)
     distributeBHListEvenly(paaBHs, players)
 end
@@ -717,29 +716,22 @@ local function checkCycleCompletionAndMaybeRestart()
     -- if cycleActive and all players in cyclePlayers are dead -> restart cycle
     if not cycleActive then return end
     if #cyclePlayers == 0 then
-        -- nothing to track: restart cycle immediately
         cycleRestartPending = true
         return
     end
     for _, pl in ipairs(cyclePlayers) do
         if not cycleDead[pl] then
-            -- someone still alive in cycle
             return
         end
     end
-    -- everyone died at least once -> start a new cycle
     cycleRestartPending = true
 end
 
 local function scheduleCycleRestart()
     if cycleRestartPending then
         cycleRestartPending = false
-        -- small delay to let death events settle
         spawn(function()
             wait(0.12)
-            -- start new cycle snapshot using current primary mode
-            -- Note: new players who joined during the previous cycle are included now
-            -- Build snapshot:
             local newSnapshot = {}
             if targetSelectedActive then
                 newSnapshot = getSelectedPlayers(true)
@@ -754,7 +746,6 @@ local function scheduleCycleRestart()
                     cycleDead[pl] = false
                 end
             end
-            -- reconnect death watchers
             clearCycleConnections()
             for _, pl in ipairs(cyclePlayers) do
                 if pl and pl.Parent then
@@ -775,14 +766,12 @@ local function scheduleCycleRestart()
                     end
                     local cconn = pl.CharacterAdded:Connect(onHumanoidAdded)
                     table.insert(cycleConns, cconn)
-                    -- player leaving
                     local rconn = pl.AncestryChanged:Connect(function()
-                        -- if player left game, remove them from the cyclePlayers list
                         if not pl.Parent then
                             for i = #cyclePlayers, 1, -1 do
                                 if cyclePlayers[i] == pl then table.remove(cyclePlayers, i) end
                             end
-                            cycleDead[pl] = true -- treat leaving similar to died so cycle can progress
+                            cycleDead[pl] = true
                             assignTargetsForPAA()
                             assignTargetsForCMD()
                             checkCycleCompletionAndMaybeRestart()
@@ -791,7 +780,6 @@ local function scheduleCycleRestart()
                     table.insert(cycleConns, rconn)
                 end
             end
-            -- Reassign BHs now for the new cycle
             assignTargetsForPAA()
             assignTargetsForCMD()
         end)
@@ -806,7 +794,7 @@ local function startCycleSnapshot()
 
     local snapshot = {}
     if targetSelectedActive then
-        snapshot = getSelectedPlayers(true) -- selected may include whitelisted
+        snapshot = getSelectedPlayers(true)
     else
         snapshot = getAllNonLocalPlayers()
     end
@@ -818,7 +806,6 @@ local function startCycleSnapshot()
         end
     end
 
-    -- connect death watchers for snapshot players and handle leaving
     clearCycleConnections()
     for _, pl in ipairs(cyclePlayers) do
         if pl and pl.Parent then
@@ -838,7 +825,6 @@ local function startCycleSnapshot()
             if pl.Character then attachHumanoidWatcher(pl.Character) end
             local cconn = pl.CharacterAdded:Connect(attachHumanoidWatcher)
             table.insert(cycleConns, cconn)
-            -- leaving event
             local rconn = pl.AncestryChanged:Connect(function()
                 if not pl.Parent then
                     for i = #cyclePlayers, 1, -1 do
@@ -855,9 +841,19 @@ local function startCycleSnapshot()
         end
     end
 
-    -- initial assignment
     assignTargetsForPAA()
     assignTargetsForCMD()
+end
+
+-- Immediate cycle reset function (used by Reset Cycle button)
+local function resetCycleNow()
+    if not LifeCycleMode then return end
+    -- only reset if primary mode is active (targetAll or targetSelected)
+    if not (targetAllActive or targetSelectedActive) then
+        return
+    end
+    -- immediate restart snapshot
+    startCycleSnapshot()
 end
 
 local function tryStartCycleIfNeeded()
@@ -869,7 +865,6 @@ end
 
 local function endCycleMode()
     stopCycle()
-    -- when ending LifeCycle, reassign BHs normally
     assignTargetsForPAA()
     assignTargetsForCMD()
 end
@@ -930,11 +925,9 @@ function startRebalancer()
                 end
             end
 
-            -- ensure PAA and CMD BHs maintain valid player targets (LifeCycle-aware)
             if PAAEnabled then assignTargetsForPAA() end
             assignTargetsForCMD()
 
-            -- if cycle restart pending, handle it
             if cycleRestartPending then
                 scheduleCycleRestart()
             end
@@ -1134,11 +1127,15 @@ window:Toggle("Target Selected Players", false, function(Value) setTargetSelecte
 window:Toggle("Life Cycle Mode", false, function(Value)
     LifeCycleMode = Value
     if LifeCycleMode then
-        -- start cycle only if primary mode active
         tryStartCycleIfNeeded()
     else
         endCycleMode()
     end
+end)
+
+-- Reset Cycle button: instantly restarts the current Life Cycle (only when LifeCycleMode is ON and a primary target mode is active)
+window:Button("Reset Cycle", function()
+    resetCycleNow()
 end)
 
 window:Button("Load Player List Script", function()
@@ -1204,7 +1201,6 @@ spawn(function()
     while true do
         if #extraBlackHoles > 0 and not rebalancerRunning then startRebalancer()
         elseif #extraBlackHoles == 0 and rebalancerRunning then stopRebalancer() end
-        -- if cycle restart pending, process it regularly
         if cycleRestartPending then scheduleCycleRestart() end
         wait(0.5)
     end
