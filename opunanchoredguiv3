@@ -1,4 +1,7 @@
--- Full updated script (client) with Life Cycle Mode, ROTATE_INTERVAL = 0.2, and "Reset Cycle" button
+-- Full updated script (client)
+-- Handles: Selected/Whitelisted bools, PAA, CMD blackholes, Life Cycle Mode, Reset Cycle button
+-- ROTATE_INTERVAL = 0.2 (swap cooldown)
+
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
@@ -46,7 +49,7 @@ local BH_MIN_AMPLITUDE = 0.6
 local BH_MAX_AMPLITUDE = 80
 local TARGET_SMOOTHNESS = 6.0
 
--- ROTATION settings for extra BH remainder (swap cooldown changed to 0.2s)
+-- ROTATION settings for extra BH remainder (swap cooldown set to 0.2)
 local ROTATE_INTERVAL = 0.2 -- seconds between rotating reassigns for leftover BHs
 
 -- Life Cycle Mode state
@@ -54,7 +57,7 @@ local LifeCycleMode = false
 local cycleActive = false
 local cyclePlayers = {}        -- snapshot players for the current cycle (Player instances)
 local cycleDead = {}           -- set: player -> true if died this cycle
-local cycleConns = {}          -- for Humanoid.Died & PlayerRemoving connections
+local cycleConns = {}          -- for Humanoid.Died & CharacterAdded/AncestryChanged connections
 local cycleRestartPending = false
 
 -- Setup folder & primary attachment
@@ -134,8 +137,9 @@ end
 -- Whitelist check: returns true if player has BoolValue "Whitelisted" == true
 local function isWhitelisted(player)
     if not player then return false end
-    if player:FindFirstChild("Whitelisted") and typeof(player.Whitelisted.Value) == "boolean" then
-        return player.Whitelisted.Value
+    local v = player:FindFirstChild("Whitelisted")
+    if v and typeof(v.Value) == "boolean" then
+        return v.Value
     end
     return false
 end
@@ -151,11 +155,11 @@ local function isPlayerAlive(player)
     return false
 end
 
--- Return players excluding local & whitelisted
+-- Return players excluding local & whitelisted. Use when we want "target all" semantics.
 local function getAllNonLocalPlayers()
     local res = {}
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= localPlayer and not isWhitelisted(p) then
+        if p and p ~= localPlayer and p.Parent and not isWhitelisted(p) then
             table.insert(res, p)
         end
     end
@@ -163,14 +167,18 @@ local function getAllNonLocalPlayers()
 end
 
 -- Return selected players; allowWhitelisted = true will include whitelisted selected players
+-- (use allowWhitelisted=false when building Life Cycle snapshot so whitelist never participates in cycles)
 local function getSelectedPlayers(allowWhitelisted)
     local res = {}
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= localPlayer and player:FindFirstChild("Selected") and player.Selected.Value then
-            if allowWhitelisted then
-                table.insert(res, player)
-            else
-                if not isWhitelisted(player) then table.insert(res, player) end
+        if player and player ~= localPlayer and player.Parent then
+            local sel = player:FindFirstChild("Selected")
+            if sel and typeof(sel.Value) == "boolean" and sel.Value == true then
+                if allowWhitelisted then
+                    table.insert(res, player)
+                else
+                    if not isWhitelisted(player) then table.insert(res, player) end
+                end
             end
         end
     end
@@ -475,7 +483,7 @@ local function deleteAllExtraBlackHoles()
     stopRebalancer()
 end
 
--- ---------- NEW: Even distribution + rotating leftovers ----------
+-- ---------- Even distribution + rotating leftovers ----------
 local rotatingCoroutine = nil
 local rotatingActive = false
 
@@ -579,7 +587,7 @@ local function assignTargetsForPAA()
 
     local players = {}
     if LifeCycleMode and cycleActive then
-        -- use cycle alive players (snapshot), only include alive ones
+        -- use LifeCycle snapshot players (explicitly excludes whitelisted during snapshot)
         for _, pl in ipairs(cyclePlayers) do
             if pl and pl.Parent and not cycleDead[pl] and isPlayerAlive(pl) then
                 table.insert(players, pl)
@@ -587,7 +595,8 @@ local function assignTargetsForPAA()
         end
     else
         if PAA_isUsingSelected then
-            players = getSelectedPlayers(targetSelectedActive)
+            -- PAA+Selected uses selected players and should include whitelisted selected players
+            players = getSelectedPlayers(true)
         else
             players = getAllNonLocalPlayers()
         end
@@ -636,7 +645,6 @@ local function refreshPAA()
     deleteBHsBySource("PAA")
     local targets = {}
     if LifeCycleMode and cycleActive then
-        targets = {}
         for _, pl in ipairs(cyclePlayers) do
             if pl and pl.Parent and not cycleDead[pl] and isPlayerAlive(pl) then
                 table.insert(targets, pl)
@@ -644,7 +652,7 @@ local function refreshPAA()
         end
     else
         if PAA_isUsingSelected then
-            targets = getSelectedPlayers(targetSelectedActive)
+            targets = getSelectedPlayers(true) -- include whitelisted selected here
         else
             targets = getAllNonLocalPlayers()
         end
@@ -669,7 +677,7 @@ end
 -- Player join/leave handlers for PAA live updates (only affects PAA BHs)
 local function onPlayerAddedForPAA(pl)
     if PAAEnabled and not PAA_isUsingSelected and pl ~= localPlayer and not isWhitelisted(pl) then
-        -- Only add PAA BH if not LifeCycleMode active; if LifeCycle active we do NOT add mid-cycle
+        -- Only add live mid-cycle if LifeCycleMode is off; if LifeCycle active we do NOT add mid-cycle
         if LifeCycleMode and cycleActive then
             return
         end
@@ -713,7 +721,6 @@ local function stopCycle()
 end
 
 local function checkCycleCompletionAndMaybeRestart()
-    -- if cycleActive and all players in cyclePlayers are dead -> restart cycle
     if not cycleActive then return end
     if #cyclePlayers == 0 then
         cycleRestartPending = true
@@ -734,7 +741,8 @@ local function scheduleCycleRestart()
             wait(0.12)
             local newSnapshot = {}
             if targetSelectedActive then
-                newSnapshot = getSelectedPlayers(true)
+                -- snapshot for the new cycle excludes whitelisted players (by design)
+                newSnapshot = getSelectedPlayers(false)
             else
                 newSnapshot = getAllNonLocalPlayers()
             end
@@ -792,9 +800,10 @@ local function startCycleSnapshot()
     cyclePlayers = {}
     cycleDead = {}
 
+    -- Life Cycle snapshot: intentionally exclude whitelisted players
     local snapshot = {}
     if targetSelectedActive then
-        snapshot = getSelectedPlayers(true)
+        snapshot = getSelectedPlayers(false) -- exclude whitelisted from cycle
     else
         snapshot = getAllNonLocalPlayers()
     end
@@ -848,11 +857,7 @@ end
 -- Immediate cycle reset function (used by Reset Cycle button)
 local function resetCycleNow()
     if not LifeCycleMode then return end
-    -- only reset if primary mode is active (targetAll or targetSelected)
-    if not (targetAllActive or targetSelectedActive) then
-        return
-    end
-    -- immediate restart snapshot
+    if not (targetAllActive or targetSelectedActive) then return end
     startCycleSnapshot()
 end
 
@@ -1004,7 +1009,7 @@ local function startPrimaryLoop()
             phaseT = phaseT + dt
 
             if targetSelectedActive then
-                local selectedPlayers = getSelectedPlayers(true) -- allow whitelisted selected only when targetSelectedActive
+                local selectedPlayers = getSelectedPlayers(true) -- allow whitelisted selected when not LifeCycle
                 if #selectedPlayers > 0 then
                     targetPlayer = selectedPlayers[math.random(1, #selectedPlayers)]
                 else
@@ -1062,7 +1067,6 @@ local function setTargetAll(value)
         if targetAllActive then
             tryStartCycleIfNeeded()
         else
-            -- turning off primary may stop the cycle
             stopCycle()
         end
     end
@@ -1133,7 +1137,7 @@ window:Toggle("Life Cycle Mode", false, function(Value)
     end
 end)
 
--- Reset Cycle button: instantly restarts the current Life Cycle (only when LifeCycleMode is ON and a primary target mode is active)
+-- Reset Cycle button (instant reset while Life Cycle Mode is ON)
 window:Button("Reset Cycle", function()
     resetCycleNow()
 end)
