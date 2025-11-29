@@ -1,26 +1,52 @@
 -- Full LocalScript (place in StarterPlayerScripts)
+-- Behavior:
+-- • Event-driven detection (no repeated scanning of the same sounds)
+-- • TextBox shows only the most-recently-started Sound's id (switches, not stack)
+-- • Anti-lag ("/e antilag") freezes the textbox display, BUT:
+--     — the detector still detects newly played sounds
+--     — newly detected sounds are STILL added to History
+-- • History entries are unique, include name + id, Copy button, and Play/Pause (solo)
+-- • Solo mode mutes non-target sounds and mutes new sounds that start/create while solo active
+-- • Toggle button is always visible next to the GUI
+-- • Uses processedSounds to avoid double-checking already-seen Sound instances
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
 local SoundService = game:GetService("SoundService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 -----------------------------------------------------------
+-- Helpers
+-----------------------------------------------------------
+local function formatId(str)
+	if not str then return "" end
+	local id = tostring(str):match("%d+")
+	return id and ("rbxassetid://" .. id) or tostring(str)
+end
+
+local function notify(titleText, bodyText)
+	pcall(function()
+		StarterGui:SetCore("SendNotification", {
+			Title = titleText;
+			Text = bodyText;
+			Duration = 2;
+		})
+	end)
+end
+
+-----------------------------------------------------------
 -- GUI CREATION
 -----------------------------------------------------------
-
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SoundDetectorGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
------------------------------------------------------------
 -- MAIN FRAME
------------------------------------------------------------
-
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
 frame.Size = UDim2.new(0, 420, 0, 150)
@@ -29,80 +55,7 @@ frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 frame.BorderSizePixel = 0
 frame.Parent = screenGui
 
------------------------------------------------------------
--- DRAGGING
------------------------------------------------------------
-
-local dragging, dragStart, startPos
-
-frame.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		dragging = true
-		dragStart = input.Position
-		startPos = frame.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				dragging = false
-			end
-		end)
-	end
-end)
-
-UIS.InputChanged:Connect(function(input)
-	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-		local delta = input.Position - dragStart
-		frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
-			startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-	end
-end)
-
------------------------------------------------------------
--- HIDE/SHOW TOGGLE (ALWAYS VISIBLE)
------------------------------------------------------------
-
-local toggle = Instance.new("TextButton")
-toggle.Size = UDim2.new(0, 26, 0, 26)
-toggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-toggle.Text = "-"
-toggle.TextColor3 = Color3.new(1,1,1)
-toggle.Font = Enum.Font.SourceSansBold
-toggle.TextSize = 18
-toggle.ZIndex = 10 -- always on top
-toggle.Parent = screenGui
-
--- initial position next to the main frame (pixel offset)
-toggle.Position = UDim2.new(0, frame.AbsolutePosition.X + frame.AbsoluteSize.X + 8,
-                            0, frame.AbsolutePosition.Y)
-
-local frameVisible = true
-
-local function updateTogglePosition()
-	-- Keep toggle next to frame so it never disappears with the frame
-	if frameVisible then
-		toggle.Text = "-"
-		toggle.Position = UDim2.new(0, frame.AbsolutePosition.X + frame.AbsoluteSize.X + 8,
-		                            0, frame.AbsolutePosition.Y)
-	else
-		toggle.Text = "+"
-		-- Keep it where it currently is (so user can reopen)
-		toggle.Position = UDim2.new(0, toggle.Position.X.Offset, 0, toggle.Position.Y.Offset)
-	end
-end
-
-toggle.MouseButton1Click:Connect(function()
-	frameVisible = not frameVisible
-	frame.Visible = frameVisible
-	updateTogglePosition()
-end)
-
--- update toggle position when frame is dragged or resized
-frame:GetPropertyChangedSignal("Position"):Connect(updateTogglePosition)
-frame:GetPropertyChangedSignal("Size"):Connect(updateTogglePosition)
-
------------------------------------------------------------
--- TITLE + INFO TEXT
------------------------------------------------------------
-
+-- Title + Info
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -36, 0, 24)
 title.Position = UDim2.new(0, 6, 0, 6)
@@ -121,14 +74,11 @@ info.BackgroundTransparency = 1
 info.Font = Enum.Font.SourceSans
 info.TextSize = 12
 info.TextColor3 = Color3.fromRGB(200,200,200)
-info.Text = "Detects currently playing audios & lets you copy them. Use the History for past audios."
+info.Text = "Detects currently playing audios & lets you copy them. Use History for past audios."
 info.TextXAlignment = Enum.TextXAlignment.Left
 info.Parent = frame
 
------------------------------------------------------------
 -- CURRENT DETECTED TEXTBOX
------------------------------------------------------------
-
 local textbox = Instance.new("TextBox")
 textbox.Size = UDim2.new(1, -12, 0, 36)
 textbox.Position = UDim2.new(0, 6, 0, 50)
@@ -159,10 +109,7 @@ countLabel.Font = Enum.Font.SourceSans
 countLabel.TextSize = 14
 countLabel.Parent = frame
 
------------------------------------------------------------
 -- HISTORY BUTTON
------------------------------------------------------------
-
 local historyButton = Instance.new("TextButton")
 historyButton.Size = UDim2.new(0, 110, 0, 28)
 historyButton.Position = UDim2.new(0, 6, 0, 122)
@@ -172,10 +119,7 @@ historyButton.Font = Enum.Font.SourceSansBold
 historyButton.BackgroundColor3 = Color3.fromRGB(70,70,70)
 historyButton.Parent = frame
 
------------------------------------------------------------
 -- HISTORY PANEL
------------------------------------------------------------
-
 local historyFrame = Instance.new("Frame")
 historyFrame.Size = UDim2.new(0, 330, 0, 260)
 historyFrame.Position = UDim2.new(0, 450, 0, 60)
@@ -196,27 +140,58 @@ local layout = Instance.new("UIListLayout")
 layout.Parent = historyList
 layout.Padding = UDim.new(0, 6)
 
-local history = {} -- stored ids to avoid duplicates
-local historyButtons = {} -- store UI elements for toggling icons if needed
+local history = {} -- map[id] = true to avoid duplicates (history IDs)
+local historyButtons = {}
 
 historyButton.MouseButton1Click:Connect(function()
 	historyFrame.Visible = not historyFrame.Visible
 end)
 
------------------------------------------------------------
--- COPY HELPER (tries multiple APIs, falls back to instructing)
------------------------------------------------------------
+-- TOGGLE (always visible next to the frame)
+local toggle = Instance.new("TextButton")
+toggle.Size = UDim2.new(0, 26, 0, 26)
+toggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+toggle.Text = "-"
+toggle.TextColor3 = Color3.new(1,1,1)
+toggle.Font = Enum.Font.SourceSansBold
+toggle.TextSize = 18
+toggle.ZIndex = 10
+toggle.Parent = screenGui
+toggle.Position = UDim2.new(0, frame.AbsolutePosition.X + frame.AbsoluteSize.X + 8,
+                            0, frame.AbsolutePosition.Y)
 
-local function notify(titleText, bodyText)
-	pcall(function()
-		StarterGui:SetCore("SendNotification", {
-			Title = titleText;
-			Text = bodyText;
-			Duration = 2;
-		})
-	end)
+local frameVisible = true
+local function updateTogglePosition()
+	local posX = frame.AbsolutePosition.X + frame.AbsoluteSize.X + 8
+	local posY = frame.AbsolutePosition.Y
+	if frameVisible then
+		toggle.Text = "-"
+		toggle.Position = UDim2.new(0, posX, 0, posY)
+	else
+		toggle.Text = "+"
+	end
 end
 
+toggle.MouseButton1Click:Connect(function()
+	frameVisible = not frameVisible
+	frame.Visible = frameVisible
+	updateTogglePosition()
+end)
+
+RunService.Heartbeat:Connect(function()
+	-- keep toggle near frame (only when visible)
+	if frame and toggle and frame.Visible then
+		updateTogglePosition()
+	end
+	-- update count label from playingCount (keeps UI reactive without scanning)
+	if countLabel and playingCount ~= nil then
+		countLabel.Text = "Detected: " .. tostring(playingCount)
+	end
+end)
+
+-----------------------------------------------------------
+-- Clipboard helper (uses textbox fallback if needed)
+-----------------------------------------------------------
 local function copyToClipboard(text)
 	if not text or text == "" then
 		notify("Copy failed", "Nothing to copy.")
@@ -241,35 +216,28 @@ local function copyToClipboard(text)
 		end
 	end
 
-	-- fallback: place text into the main textbox and focus it so user can manually copy
+	-- fallback: put into textbox and focus so user can Ctrl/Cmd+C
 	textbox.Text = text
 	textbox:CaptureFocus()
 	notify("Manual copy", "Automatic copy unavailable. Text placed in box — press Ctrl/Cmd+C to copy.")
 	return false
 end
 
------------------------------------------------------------
--- FORMAT ID HELPER
------------------------------------------------------------
-
-local function formatId(str)
-	local id = tostring(str):match("%d+")
-	return id and ("rbxassetid://" .. id) or tostring(str)
-end
+copyButton.MouseButton1Click:Connect(function()
+	copyToClipboard(textbox.Text)
+end)
 
 -----------------------------------------------------------
 -- SOLO / PLAY CONTROL
--- When an entry is played: mute every other Sound (set Volume=0) and play the selected asset locally (looped).
--- New sounds created/started while solo is active will be muted automatically.
+-- (unchanged from previous behavior; occasional scans here are fine)
 -----------------------------------------------------------
-
 local soloState = {
-	activeId = nil,               -- the rbxassetid being soloed (string)
-	playerSound = nil,            -- the local Sound instance used to play the soloed asset
-	prevVolumes = {},             -- map [soundInstance] = previousVolume
-	descAddedConn = nil,         -- connection for descendant added
-	playChangedConns = {},       -- map [soundInstance] = connection for Playing property (to detect new starts)
-	activeEntryButton = nil,     -- UI button reference to change icon back when stopped
+	activeId = nil,
+	playerSound = nil,
+	prevVolumes = {},      -- map [soundInstance] = previousVolume
+	descAddedConn = nil,
+	playChangedConns = {}, -- map [soundInstance] = conn
+	activeEntryButton = nil,
 }
 
 local function safeSetVolume(sound, vol)
@@ -278,18 +246,11 @@ end
 
 local function storeAndMuteSound(s)
 	if not s or not s:IsA("Sound") then return end
-	-- don't touch the playerSound we create for solo
 	if soloState.playerSound and s == soloState.playerSound then return end
-	-- if we haven't stored this sound's original volume, store it
 	if not soloState.prevVolumes[s] then
 		local ok, vol = pcall(function() return s.Volume end)
-		if ok then
-			soloState.prevVolumes[s] = vol
-		else
-			soloState.prevVolumes[s] = 1
-		end
+		soloState.prevVolumes[s] = ok and vol or 1
 	end
-	-- mute it
 	safeSetVolume(s, 0)
 end
 
@@ -303,7 +264,6 @@ local function restoreAllVolumes()
 end
 
 local function stopSolo()
-	-- stop and remove our local player sound
 	if soloState.playerSound then
 		pcall(function()
 			soloState.playerSound:Stop()
@@ -312,22 +272,18 @@ local function stopSolo()
 		soloState.playerSound = nil
 	end
 
-	-- disconnect descendant added
 	if soloState.descAddedConn then
 		pcall(function() soloState.descAddedConn:Disconnect() end)
 		soloState.descAddedConn = nil
 	end
 
-	-- disconnect all per-sound play changed connections
 	for s, conn in pairs(soloState.playChangedConns) do
 		pcall(function() conn:Disconnect() end)
 	end
 	soloState.playChangedConns = {}
 
-	-- restore volumes
 	restoreAllVolumes()
 
-	-- reset activeId and update UI icon if needed
 	if soloState.activeEntryButton then
 		pcall(function() soloState.activeEntryButton.Text = "▶️" end)
 		soloState.activeEntryButton = nil
@@ -336,64 +292,54 @@ local function stopSolo()
 end
 
 local function startSolo(rbxAssetId, entryButton)
-	-- if the same id is already active, toggle off
 	if soloState.activeId == rbxAssetId then
 		stopSolo()
 		return
 	end
 
-	-- if another solo is active, stop it first
 	if soloState.activeId then
 		stopSolo()
 	end
 
-	-- set active id and UI
 	soloState.activeId = rbxAssetId
 	soloState.activeEntryButton = entryButton
 	if entryButton then
 		pcall(function() entryButton.Text = "⏸️" end)
 	end
 
-	-- Create a local looping Sound to play the requested asset
 	local localSound = Instance.new("Sound")
 	localSound.Name = "SoundDetectorPlayer"
 	localSound.SoundId = rbxAssetId
 	localSound.Looped = true
 	localSound.Volume = 1
-	localSound.Parent = SoundService -- play globally for the client
+	localSound.Parent = SoundService
 	soloState.playerSound = localSound
 
-	-- Mute all existing sounds that are not the target
+	-- mute non-target sounds and store their original volumes
 	for _, s in ipairs(game:GetDescendants()) do
 		if s:IsA("Sound") then
 			local formatted = formatId(s.SoundId)
 			if formatted ~= rbxAssetId then
 				storeAndMuteSound(s)
 			else
-				-- For the target sound(s) in the world, ensure they are audible
-				-- Also store their volume so we can restore later
 				if not soloState.prevVolumes[s] then
 					local ok, vol = pcall(function() return s.Volume end)
 					soloState.prevVolumes[s] = ok and vol or 1
 				end
-				-- keep target volumes as they were (do not mute)
 			end
 		end
 	end
 
-	-- Play our local sound (safe pcall)
 	pcall(function() localSound:Play() end)
 
-	-- If new Sounds are added while solo is active, mute them unless they match the active id
+	-- mute newly added sounds unless they match active id
 	soloState.descAddedConn = game.DescendantAdded:Connect(function(desc)
 		if not desc or not desc:IsA("Sound") then return end
-		-- small delay to allow Sound properties to be set on creation
 		task.delay(0.05, function()
 			local formatted = formatId(desc.SoundId)
 			if formatted ~= soloState.activeId then
 				storeAndMuteSound(desc)
 			else
-				-- if it matches active id, ensure it uses audible volume and store original volume
 				if not soloState.prevVolumes[desc] then
 					local ok, vol = pcall(function() return desc.Volume end)
 					soloState.prevVolumes[desc] = ok and vol or 1
@@ -402,12 +348,10 @@ local function startSolo(rbxAssetId, entryButton)
 		end)
 	end)
 
-	-- Also watch existing and future sounds for "Playing" toggles and mute quickly when they start
-	-- For existing sounds: connect to their Playing property so when they start we immediately mute if needed
+	-- connect Playing changed for existing sounds to quickly mute new starts
 	for _, s in ipairs(game:GetDescendants()) do
 		if s:IsA("Sound") then
 			local conn = s:GetPropertyChangedSignal("Playing"):Connect(function()
-				-- if someone starts playing a non-target sound while solo is active, mute it
 				if soloState.activeId and s.Playing then
 					local formatted = formatId(s.SoundId)
 					if formatted ~= soloState.activeId then
@@ -418,18 +362,13 @@ local function startSolo(rbxAssetId, entryButton)
 			soloState.playChangedConns[s] = conn
 		end
 	end
-
-	-- When new descendants are added that are Sound, attach Playing changed listener too
-	-- (we attach in DescendantAdded handler above to mute; attach connection now as well)
-	-- Note: connections for newly added sounds are created inside the DescendantAdded handler to avoid missing them.
 end
 
 -----------------------------------------------------------
--- CREATE HISTORY ENTRY (clicking label OR pressing the copy button copies the id)
--- plus a Play/Pause button ▶️ / ⏸️ which solo-plays that asset
+-- HISTORY ENTRY CREATION (unique ids only)
 -----------------------------------------------------------
-
 local function addHistoryEntry(id, name)
+	id = formatId(id)
 	if history[id] then return end
 	history[id] = true
 
@@ -438,7 +377,7 @@ local function addHistoryEntry(id, name)
 	entry.BackgroundColor3 = Color3.fromRGB(40,40,40)
 	entry.Parent = historyList
 
-	-- Play/Pause small button
+	-- Play/Pause button
 	local playBtn = Instance.new("TextButton")
 	playBtn.Size = UDim2.new(0, 28, 1, -4)
 	playBtn.Position = UDim2.new(0, 4, 0, 2)
@@ -449,7 +388,7 @@ local function addHistoryEntry(id, name)
 	playBtn.TextColor3 = Color3.new(1,1,1)
 	playBtn.Parent = entry
 
-	-- clickable label: looks like label but is a button so clicking copies
+	-- clickable label (copies on click)
 	local labelBtn = Instance.new("TextButton")
 	labelBtn.Size = UDim2.new(1, -150, 1, 0)
 	labelBtn.Position = UDim2.new(0, 40, 0, 0)
@@ -471,23 +410,16 @@ local function addHistoryEntry(id, name)
 	copyBtn.BackgroundColor3 = Color3.fromRGB(70,100,160)
 	copyBtn.Parent = entry
 
-	-- clicking either the label or the copy button copies the id to clipboard
 	local function onCopy()
 		copyToClipboard(id)
 	end
-
 	copyBtn.MouseButton1Click:Connect(onCopy)
 	labelBtn.MouseButton1Click:Connect(onCopy)
 
-	-- play/pause behavior
 	playBtn.MouseButton1Click:Connect(function()
-		-- toggle: if this id is already active, stop solo; otherwise start solo for this id
 		if soloState.activeId == id then
-			-- stop solo
 			stopSolo()
 		else
-			-- start solo with this button so icon can be updated
-			-- update any previous active button icon
 			if soloState.activeEntryButton and soloState.activeEntryButton ~= playBtn then
 				pcall(function() soloState.activeEntryButton.Text = "▶️" end)
 			end
@@ -495,7 +427,6 @@ local function addHistoryEntry(id, name)
 		end
 	end)
 
-	-- Keep reference so we can change icons later if needed
 	historyButtons[id] = {
 		frame = entry;
 		playBtn = playBtn;
@@ -503,73 +434,234 @@ local function addHistoryEntry(id, name)
 		labelBtn = labelBtn;
 	}
 
-	-- update canvas size
-	historyList.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y)
+	-- update canvas size after layout updates
+	task.defer(function()
+		historyList.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y)
+	end)
 end
 
 -----------------------------------------------------------
--- LIVE AUDIO DETECTION
+-- RELIABLE, EVENT-DRIVEN SOUND DETECTION (no double-checking)
+-- • processedSounds prevents reconnecting / reprocessing the same Sound instance
+-- • playingCount maintained incrementally to avoid scanning the whole game
+-- • lastPlayedTime used to choose the most-recently-started Sound
+-- • antiLag freezes textbox updates but detection + history continue
 -----------------------------------------------------------
 
-task.spawn(function()
-	while true do
-		local playing = {}
+local processedSounds = {}      -- map[soundInstance] = true (prevents double-processing)
+local soundConns = {}           -- map [sound] = connection for Playing
+local soundAncestryConns = {}   -- map [sound] = ancestry connection
+local lastPlayedTime = {}       -- map [sound] = tick() when it started playing
+local playingCount = 0          -- current number of playing sounds tracked
+local antiLag = false           -- toggled via chat "/e antilag" (freezes textbox display)
 
-		for _, s in ipairs(game:GetDescendants()) do
-			if s:IsA("Sound") and s.Playing then
-				local formatted = formatId(s.SoundId)
-				if formatted and formatted ~= "" then
-					-- store last known name for the asset (if multiple different Sound instances use same ID, name of last encountered will be used)
-					playing[formatted] = s.Name or "Unknown"
-					addHistoryEntry(formatted, s.Name)
-				end
+local function cleanupSoundConnections(s)
+	if soundConns[s] then
+		pcall(function() soundConns[s]:Disconnect() end)
+		soundConns[s] = nil
+	end
+	if soundAncestryConns[s] then
+		pcall(function() soundAncestryConns[s]:Disconnect() end)
+		soundAncestryConns[s] = nil
+	end
+	lastPlayedTime[s] = nil
+	processedSounds[s] = nil
+end
+
+local function refreshCurrentDisplayed()
+	-- choose the most recently started playing sound from lastPlayedTime
+	local bestSound = nil
+	local bestTime = -math.huge
+
+	for s, startedAt in pairs(lastPlayedTime) do
+		if s and s.Parent and s.Playing then
+			local t = startedAt or tick()
+			if t > bestTime then
+				bestTime = t
+				bestSound = s
 			end
 		end
+	end
 
-		local list = {}
-		for id,_ in pairs(playing) do table.insert(list,id) end
-		table.sort(list)
+	-- Update textbox only if antiLag is false
+	if bestSound then
+		local id = formatId(bestSound.SoundId)
+		if not antiLag then
+			textbox.Text = id
+		end
+		-- count label uses playingCount (kept updated elsewhere)
+		countLabel.Text = "Detected: " .. tostring(playingCount)
+	else
+		if not antiLag then
+			textbox.Text = ""
+			textbox.PlaceholderText = "No sound detected"
+		end
+		countLabel.Text = "Detected: " .. tostring(playingCount)
+	end
+end
 
-		textbox.Text = table.concat(list, ", ")
-		countLabel.Text = "Detected: " .. tostring(#list)
-
-		-- If solo is active, continuously ensure new/quickly-started sounds are muted:
-		if soloState.activeId then
-			for _, s in ipairs(game:GetDescendants()) do
-				if s:IsA("Sound") then
-					local formatted = formatId(s.SoundId)
-					if formatted ~= soloState.activeId then
-						-- store and mute any sound that slipped through
-						storeAndMuteSound(s)
-					end
-				end
-			end
+local function onSoundPlayingChanged(s)
+	local wasPlaying = lastPlayedTime[s] ~= nil
+	if s.Playing then
+		-- If this sound was not previously considered "playing", increment playingCount
+		if not wasPlaying then
+			playingCount = playingCount + 1
 		end
 
-		task.wait(0.3)
+		lastPlayedTime[s] = tick()
+
+		-- always add to history even when antiLag is on (but only once, history guards duplicates)
+		local id = formatId(s.SoundId)
+		if id ~= "" and not history[id] then
+			addHistoryEntry(id, s.Name or (s.Parent and s.Parent.Name) or "Unknown")
+		end
+
+		-- update textbox immediately only if antiLag is false
+		if not antiLag then
+			textbox.Text = id
+		end
+
+		-- if solo active and not the target, mute it
+		if soloState.activeId and formatId(s.SoundId) ~= soloState.activeId then
+			storeAndMuteSound(s)
+		end
+	else
+		-- sound stopped playing
+		if wasPlaying then
+			playingCount = math.max(0, playingCount - 1)
+		end
+		lastPlayedTime[s] = nil
+
+		-- refresh display only if antiLag is false (if frozen, keep the frozen id)
+		if not antiLag then
+			refreshCurrentDisplayed()
+		else
+			-- still update the count label even when frozen
+			countLabel.Text = "Detected: " .. tostring(playingCount)
+		end
+	end
+end
+
+local function connectToSound(s)
+	-- only process each Sound instance once
+	if not s or not s:IsA("Sound") or processedSounds[s] then return end
+	processedSounds[s] = true
+
+	-- Playing property changed connection
+	local conn = s:GetPropertyChangedSignal("Playing"):Connect(function()
+		pcall(function() onSoundPlayingChanged(s) end)
+	end)
+	soundConns[s] = conn
+
+	-- cleanup when removed from the world
+	local ancConn = s.AncestryChanged:Connect(function(_, parent)
+		if not parent then
+			cleanupSoundConnections(s)
+		end
+	end)
+	soundAncestryConns[s] = ancConn
+
+	-- if it's already playing when we connect, treat it as started now
+	if s.Playing then
+		-- ensure we count it once
+		if not lastPlayedTime[s] then
+			playingCount = playingCount + 1
+		end
+		lastPlayedTime[s] = tick()
+
+		local id = formatId(s.SoundId)
+		if id ~= "" and not history[id] then
+			addHistoryEntry(id, s.Name or (s.Parent and s.Parent.Name) or "Unknown")
+		end
+
+		-- if solo active and not the target, mute it
+		if soloState.activeId and formatId(s.SoundId) ~= soloState.activeId then
+			storeAndMuteSound(s)
+		end
+
+		-- update textbox only if not frozen
+		if not antiLag then
+			textbox.Text = formatId(s.SoundId)
+		end
+	end
+end
+
+-- Connect all existing Sounds (one-time loop at start; not repeated)
+for _, s in ipairs(game:GetDescendants()) do
+	if s:IsA("Sound") then
+		connectToSound(s)
+	end
+end
+
+-- Listen for new Sounds (event-based; processedSounds prevents re-processing)
+local descAddedConn = game.DescendantAdded:Connect(function(desc)
+	if desc:IsA("Sound") then
+		-- tiny delay to allow creator to set SoundId etc.
+		task.delay(0.03, function()
+			connectToSound(desc)
+			-- if playing on creation, handle it now
+			if desc.Playing then
+				pcall(function() onSoundPlayingChanged(desc) end)
+			end
+		end)
+	end
+end)
+
+-- Clean up removed Sounds (redundant but safe)
+local descRemovingConn = game.DescendantRemoving:Connect(function(desc)
+	if desc:IsA("Sound") then
+		cleanupSoundConnections(desc)
+	end
+end)
+
+-----------------------------------------------------------
+-- Anti-lag toggle via chat "/e antilag" or "antilag"
+-- Freezes textbox updates but detection & history still run.
+-----------------------------------------------------------
+player.Chatted:Connect(function(msg)
+	if not msg then return end
+	local cleaned = msg:lower():gsub("%s+", " ")
+	if cleaned:find("antilag") then
+		antiLag = not antiLag
+		if antiLag then
+			notify("Anti-lag ON", "Textbox updates frozen. Detection & history still active.")
+		else
+			notify("Anti-lag OFF", "Textbox updates resumed.")
+			-- refresh displayed current to latest when toggled off
+			task.defer(function()
+				task.wait(0.05)
+				pcall(refreshCurrentDisplayed)
+			end)
+		end
 	end
 end)
 
 -----------------------------------------------------------
 -- COPY CURRENT TEXTBOX
 -----------------------------------------------------------
-
 copyButton.MouseButton1Click:Connect(function()
 	copyToClipboard(textbox.Text)
 end)
 
 -----------------------------------------------------------
--- Clean up on script stop / player leaving (best-effort)
+-- CLEANUP on player leaving
 -----------------------------------------------------------
-
-local function cleanup()
+local function cleanupEverything()
+	for s, conn in pairs(soundConns) do pcall(function() conn:Disconnect() end) end
+	for s, conn in pairs(soundAncestryConns) do pcall(function() conn:Disconnect() end) end
+	pcall(function() descAddedConn:Disconnect() end)
+	pcall(function() descRemovingConn:Disconnect() end)
 	stopSolo()
 	pcall(function() screenGui:Destroy() end)
 end
 
--- Try to clean up when player leaves or script is disabled
 player.AncestryChanged:Connect(function(_, parent)
-	if not parent then cleanup() end
+	if not parent then cleanupEverything() end
 end)
 
-return
+-- ensure script references for safe checks
+if script and typeof(script) == "Instance" then
+	-- no-op, just keeping script in scope for environments that check it
+end
+
+-- done
