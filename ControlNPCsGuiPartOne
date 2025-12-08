@@ -1,11 +1,11 @@
--- Unified NPC GUI (full script)
--- Features: NPC scanning, per-type controls, trackers, and a Click-Kill Tool + Void v4 feature
--- Note: This is a single-file LocalScript meant to be placed in a LocalScript context (e.g., StarterPlayerScripts)
+-- Unified NPC GUI (full script) - updated with draggable Click-Kill equip GUI (starts left-middle)
+-- Place as a LocalScript in StarterPlayerScripts
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
@@ -38,10 +38,10 @@ local trackerScanRunning = false
 setmetatable(NPCs, { __mode = "k" })
 setmetatable(trackedNPCs, { __mode = "k" })
 
--- EFFECTS list (removed "Void" and "Void3"; added "VoidV4")
+-- EFFECTS list (removed "Void" and "Void3"; added "VoidV4"; removed "HPNaN" and "Heal")
 local EFFECTS = {
     "Kill","Fling","PlatformStand","Sit","Anchor","CancelChase","GetRid","Erase",
-    "Spasm","Jump","Speed","JumpPower","HipHeight","Heal","HPNaN","Tracker","VoidV4"
+    "Spasm","Jump","Speed","JumpPower","HipHeight","Tracker","VoidV4"
 }
 
 local typeFeaturePages = {}
@@ -226,12 +226,6 @@ local function setHipHeight(model, value)
     if hum then pcall(function() hum.HipHeight = value end) end
 end
 
-local function healTickModel(model, amt)
-    if not isAllowed(model, "Heal") then return end
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    if hum then pcall(function() hum.Health = math.min(hum.MaxHealth or hum.Health, hum.Health + amt) end) end
-end
-
 local function setSpeed(model,val)
     if not isAllowed(model, "Speed") then return end
     local hum = model:FindFirstChildOfClass("Humanoid")
@@ -242,12 +236,6 @@ local function setJumpPower(model,val)
     if not isAllowed(model, "JumpPower") then return end
     local hum = model:FindFirstChildOfClass("Humanoid")
     if hum then pcall(function() if hum.JumpPower ~= nil then hum.JumpPower = val else hum.JumpHeight = val end end) end
-end
-
-local function setHPNaN(model)
-    if not isAllowed(model, "HPNaN") then return end
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    if hum then pcall(function() hum.Health = 0/0 end) end
 end
 
 local function cancelChaseForModel(model)
@@ -262,28 +250,72 @@ local function cancelChaseForModel(model)
     end)
 end
 
--- Void v4: PlatformStand, disable collisions, apply Y velocity -500
-local function voidV4Model(model)
+-- Void v4: PlatformStand, disable collisions, apply Y velocity (default -500). Accepts optional yVel param.
+local function voidV4Model(model, yVel)
     if not isAllowed(model, "VoidV4") then return end
+    yVel = tonumber(yVel) or -500
     local hum = model and model:FindFirstChildOfClass("Humanoid")
     if hum then pcall(function() hum.PlatformStand = true end) end
     iterateParts(model, function(p)
         pcall(function()
             p.CanCollide = false
             if p.AssemblyLinearVelocity ~= nil then
-                p.AssemblyLinearVelocity = Vector3.new(0, -500, 0)
+                p.AssemblyLinearVelocity = Vector3.new(0, yVel, 0)
             else
-                p.Velocity = Vector3.new(0, -500, 0)
+                p.Velocity = Vector3.new(0, yVel, 0)
             end
         end)
     end)
 end
 
 -- TRACKER & HIGHLIGHT
+local function removeTrackerFromModel(model)
+    if not model then return end
+    local data = trackedNPCs[model]
+    -- Destroy objects referenced in trackedNPCs table
+    if data then
+        if data.gui then
+            pcall(function() data.gui:Destroy() end)
+        end
+        if data.highlight then
+            pcall(function() data.highlight:Destroy() end)
+        end
+        -- disconnect stored connections
+        if data._connections then
+            for _,c in ipairs(data._connections) do
+                pcall(function() c:Disconnect() end)
+            end
+        end
+    end
+
+    -- Also attempt to remove any stray BillboardGui/Highlight in PlayerGui that refer to the model
+    for _,desc in ipairs(PlayerGui:GetDescendants()) do
+        if desc:IsA("BillboardGui") and desc.Name == "NPCTracker" then
+            local ador = desc.Adornee
+            if ador and ador:IsDescendantOf(model) then
+                pcall(function() desc:Destroy() end)
+            elseif not ador then
+                pcall(function() desc:Destroy() end)
+            end
+        elseif desc:IsA("Highlight") and desc.Name == "NPCHighlight" then
+            local ador = desc.Adornee
+            if ador and ador:IsDescendantOf(model) then
+                pcall(function() desc:Destroy() end)
+            elseif not ador then
+                pcall(function() desc:Destroy() end)
+            end
+        end
+    end
+
+    trackedNPCs[model] = nil
+end
+
 local function addTrackerToModel(model)
     if not model then return end
     if not isAllowed(model, "Tracker") then return end
-    if trackedNPCs[model] then return end
+
+    -- Remove any previous leftover trackers for this model first (defensive)
+    removeTrackerFromModel(model)
 
     local part = getBestPartForModel(model)
     if not part then return end
@@ -313,16 +345,45 @@ local function addTrackerToModel(model)
     highlight.OutlineColor = Color3.fromRGB(80,200,120)
     highlight.OutlineTransparency = 0
 
-    trackedNPCs[model] = { gui = gui, label = label, highlight = highlight, adornee = part }
-end
+    -- connection table for cleanup
+    local conns = {}
 
-local function removeTrackerFromModel(model)
-    local data = trackedNPCs[model]
-    if data then
-        if data.gui then pcall(function() data.gui:Destroy() end) end
-        if data.highlight then pcall(function() data.highlight:Destroy() end) end
+    -- Humanoid death should remove tracker
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if hum and hum:IsA("Humanoid") then
+        table.insert(conns, hum.Died:Connect(function()
+            removeTrackerFromModel(model)
+        end))
     end
-    trackedNPCs[model] = nil
+
+    -- If model is removed from workspace (Parent changes), remove tracker
+    table.insert(conns, model.AncestryChanged:Connect(function(_, newParent)
+        if not model.Parent or not isNPC(model) then
+            removeTrackerFromModel(model)
+        end
+    end))
+
+    -- Monitor the adornee part: if its position goes to zero or below void threshold, remove the tracker
+    if part and part:IsA("BasePart") then
+        local function checkPartPos()
+            if not part or not part.Parent then
+                removeTrackerFromModel(model)
+                return
+            end
+            local pos = nil
+            pcall(function() pos = part.Position end)
+            if pos then
+                if pos == Vector3.new(0,0,0) or pos.Y < -5000 then
+                    removeTrackerFromModel(model)
+                end
+            end
+        end
+        table.insert(conns, part:GetPropertyChangedSignal("Position"):Connect(checkPartPos))
+        -- Also run initial check
+        checkPartPos()
+    end
+
+    trackedNPCs[model] = { gui = gui, label = label, highlight = highlight, adornee = part, _connections = conns }
 end
 
 local function updateAllTrackers()
@@ -571,8 +632,9 @@ featTitle.TextColor3 = Color3.new(1,1,1)
 featTitle.Text = "Type Features"
 featTitle.Parent = FeaturesPanel
 
+-- Make the features scroll smaller on Y so it doesn't block quick adjust controls
 local featScroll = Instance.new("ScrollingFrame")
-featScroll.Size = UDim2.new(1, -12, 1, - 110)
+featScroll.Size = UDim2.new(1, -12, 1, - 160) -- reduced Y height (was -110)
 featScroll.Position = UDim2.new(0,6,0,36)
 featScroll.BackgroundTransparency = 1
 featScroll.ScrollBarThickness = 6
@@ -621,7 +683,7 @@ local function makeSmallLoopBtn(parent, posY)
     return btn
 end
 
--- Organized feature inputs
+-- Organized feature inputs (removed Heal & HPNaN)
 local speedLabel_feat = makeSmallLabel(FeaturesPanel, "Speed (type)", -80)
 local speedInput_feat = makeSmallInput(FeaturesPanel, "16", -80)
 local speedLoop_feat = makeSmallLoopBtn(FeaturesPanel, -80)
@@ -633,10 +695,6 @@ local jpLoop_feat = makeSmallLoopBtn(FeaturesPanel, -56)
 local hipLabel_feat = makeSmallLabel(FeaturesPanel, "Hip (type)", -32)
 local hipInput_feat = makeSmallInput(FeaturesPanel, "2", -32)
 local hipLoop_feat = makeSmallLoopBtn(FeaturesPanel, -32)
-
-local healLabel_feat = makeSmallLabel(FeaturesPanel, "Heal/tick", -104)
-local healInput_feat = makeSmallInput(FeaturesPanel, "5", -104)
-local healLoop_feat = makeSmallLoopBtn(FeaturesPanel, -104)
 
 local flingLabel_feat = makeSmallLabel(FeaturesPanel, "Fling Pwr", -128)
 local flingInput_feat = makeSmallInput(FeaturesPanel, "200", -128)
@@ -678,6 +736,11 @@ local flingBox = Instance.new("TextBox"); flingBox.Size = UDim2.new(0.56,0,1,0);
 local flingBtn = Instance.new("TextButton"); flingBtn.Size = UDim2.new(0.42, -6, 1, 0); flingBtn.Position = UDim2.new(0.56, 6, 0, 0); flingBtn.BackgroundColor3 = Color3.fromRGB(100,50,50); flingBtn.BorderSizePixel = 0; flingBtn.Font = Enum.Font.Gotham; flingBtn.TextSize = SMALL_FONT; flingBtn.TextColor3 = Color3.new(1,1,1); flingBtn.Text = "Fling"; flingBtn.Parent = flingBoxRow
 local flingLoopBtn = Instance.new("TextButton"); flingLoopBtn.Size = UDim2.new(0.32,0,1,0); flingLoopBtn.Position = UDim2.new(0.68, 6, 0, 0); flingLoopBtn.BackgroundColor3 = Color3.fromRGB(40,40,40); flingLoopBtn.BorderSizePixel = 0; flingLoopBtn.Font = Enum.Font.Gotham; flingLoopBtn.TextSize = 11; flingLoopBtn.TextColor3 = Color3.new(1,1,1); flingLoopBtn.Text = "Loop: Off"; flingLoopBtn.Parent = flingBoxRow
 
+-- Kill+Fling controls (new row placed below the fling row)
+local killFlingFrame = Instance.new("Frame"); killFlingFrame.Size = UDim2.new(1,0,0,BTN_H); killFlingFrame.BackgroundTransparency = 1; killFlingFrame.Parent = ctrlScroll
+local killFlingBtn = Instance.new("TextButton"); killFlingBtn.Size = UDim2.new(0.66,0,1,0); killFlingBtn.Position = UDim2.new(0,0,0,0); killFlingBtn.BackgroundColor3 = Color3.fromRGB(70,30,30); killFlingBtn.BorderSizePixel = 0; killFlingBtn.Font = Enum.Font.Gotham; killFlingBtn.TextSize = SMALL_FONT; killFlingBtn.TextColor3 = Color3.new(1,1,1); killFlingBtn.Text = "Kill+Fling"; killFlingBtn.Parent = killFlingFrame
+local killFlingLoopBtn = Instance.new("TextButton"); killFlingLoopBtn.Size = UDim2.new(0.32,0,1,0); killFlingLoopBtn.Position = UDim2.new(0.68, 6, 0, 0); killFlingLoopBtn.BackgroundColor3 = Color3.fromRGB(40,40,40); killFlingLoopBtn.BorderSizePixel = 0; killFlingLoopBtn.Font = Enum.Font.Gotham; killFlingLoopBtn.TextSize = 11; killFlingLoopBtn.TextColor3 = Color3.new(1,1,1); killFlingLoopBtn.Text = "Loop: Off"; killFlingLoopBtn.Parent = killFlingFrame
+
 local psBtn, psLoopBtn = makeRow(ctrlScroll, "PlatformStand")
 local sitBtn, sitLoopBtn = makeRow(ctrlScroll, "Sit")
 local anchorBtn, anchorLoopBtn = makeRow(ctrlScroll, "Anchor")
@@ -715,69 +778,229 @@ trackerToggleBtn.TextColor3 = Color3.new(1,1,1)
 trackerToggleBtn.Text = "Toggle NPC Tracker"
 trackerToggleBtn.Parent = trackerFrame
 
--- TOOL: Click-Kill Tool creation on respawn toggle
+-- LocalScript click-kill tool integration
+-- We'll implement createClickKillTool() and setCreateClickKillOnRespawn() using your provided tool script
+-- plus an equip GUI to configure Click-Kill fling power and toggle.
+
+local backpack = player:WaitForChild("Backpack")
 local createClickKillOnRespawn = false
 local clickToolConn = nil
-local function toolExists()
-    if player.Backpack:FindFirstChild("ClickKillTool") then return true end
-    if player.Character and player.Character:FindFirstChild("ClickKillTool") then return true end
-    return false
+
+-- Click-Kill tool state for the equip GUI
+local clickToolFlingEnabled = false
+local clickToolFlingPower = 200
+
+-- We'll create a GUI that appears when the tool is equipped.
+local function ensureClickKillGui()
+    -- If already exists, return it
+    local existing = PlayerGui:FindFirstChild("NPCKillToolGUI")
+    if existing and existing:IsA("ScreenGui") then return existing end
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "NPCKillToolGUI"
+    sg.ResetOnSpawn = false
+    sg.Parent = PlayerGui
+    sg.Enabled = false
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 220, 0, 80)
+    -- Start on left side, middle of the screen
+    frame.Position = UDim2.new(0, 8, 0.5, -40)
+    frame.AnchorPoint = Vector2.new(0, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    frame.BorderSizePixel = 0
+    frame.Parent = sg
+
+    -- Make frame draggable: manual dragging for cross-platform
+    frame.Active = true -- allow input
+    local dragging = false
+    local dragInput = nil
+    local dragStart = nil
+    local startPos = nil
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragInput = input
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    dragInput = nil
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging and dragStart and startPos then
+            local delta = input.Position - dragStart
+            -- Convert startPos to pixel offsets and apply delta
+            local newX = startPos.X.Offset + delta.X
+            local newY = startPos.Y.Offset + delta.Y
+            -- clamp to screen bounds approximately
+            local screenW = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.X or 1920
+            local screenH = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.Y or 1080
+            newX = math.clamp(newX, 0, screenW - frame.AbsoluteSize.X)
+            newY = math.clamp(newY, 0, screenH - frame.AbsoluteSize.Y)
+            frame.Position = UDim2.new(0, newX, 0, newY)
+        end
+    end)
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -8, 0, 20)
+    title.Position = UDim2.new(0, 4, 0, 4)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 14
+    title.TextColor3 = Color3.new(1,1,1)
+    title.Text = "NPCKill Tool - Click Fling"
+    title.Parent = frame
+
+    local pLabel = Instance.new("TextLabel")
+    pLabel.Size = UDim2.new(0.5, -6, 0, 24)
+    pLabel.Position = UDim2.new(0, 4, 0, 28)
+    pLabel.BackgroundTransparency = 1
+    pLabel.Font = Enum.Font.Gotham
+    pLabel.TextSize = 12
+    pLabel.TextColor3 = Color3.new(1,1,1)
+    pLabel.Text = "Fling Power"
+    pLabel.Parent = frame
+
+    local pBox = Instance.new("TextBox")
+    pBox.Size = UDim2.new(0.44, 0, 0, 24)
+    pBox.Position = UDim2.new(0.5, 4, 0, 28)
+    pBox.Text = tostring(clickToolFlingPower)
+    pBox.PlaceholderText = "200"
+    pBox.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    pBox.TextColor3 = Color3.new(1,1,1)
+    pBox.Font = Enum.Font.Gotham
+    pBox.TextSize = 12
+    pBox.ClearTextOnFocus = false
+    pBox.Parent = frame
+
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(1, -8, 0, 20)
+    toggleBtn.Position = UDim2.new(0, 4, 0, 56)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(58,58,58)
+    toggleBtn.Font = Enum.Font.Gotham
+    toggleBtn.TextSize = 12
+    toggleBtn.TextColor3 = Color3.new(1,1,1)
+    toggleBtn.Text = "Click-Kill Fling: Off"
+    toggleBtn.Parent = frame
+
+    -- Wire up interactions
+    pBox.FocusLost:Connect(function()
+        local v = tonumber(pBox.Text)
+        if v then
+            clickToolFlingPower = v
+        else
+            pBox.Text = tostring(clickToolFlingPower or 200)
+        end
+    end)
+
+    toggleBtn.MouseButton1Click:Connect(function()
+        clickToolFlingEnabled = not clickToolFlingEnabled
+        toggleBtn.Text = "Click-Kill Fling: " .. (clickToolFlingEnabled and "On" or "Off")
+    end)
+
+    return sg
 end
 
 local function createClickKillTool()
-    if toolExists() then return end
+    -- avoid duplicates in backpack
+    if backpack:FindFirstChild("NPCKillTool") then return end
+
     local tool = Instance.new("Tool")
-    tool.Name = "ClickKillTool"
-    tool.RequiresHandle = true
-    tool.CanBeDropped = true
+    tool.Name = "NPCKillTool"
+    tool.RequiresHandle = false
+    tool.Parent = backpack
 
-    local handle = Instance.new("Part")
-    handle.Name = "Handle"
-    handle.Size = Vector3.new(1,1,1)
-    handle.Transparency = 1
-    handle.CanCollide = false
-    handle.Parent = tool
-
-    -- LocalScript for tool behavior (runs on the client)
-    local ls = Instance.new("LocalScript")
-    ls.Name = "ClickKillClient"
-    ls.Source = [[
-        local tool = script.Parent
-        local player = game.Players.LocalPlayer
-        local function findModelFromPart(part)
-            if not part then return nil end
-            return part:FindFirstAncestorOfClass("Model")
+    local function isNPC_model(model)
+        if not model then return false end
+        local humanoid = model:FindFirstChildOfClass("Humanoid")
+        if humanoid and not game.Players:GetPlayerFromCharacter(model) then
+            return true
         end
-        local mouse = nil
-        tool.Equipped:Connect(function()
-            mouse = player:GetMouse()
-        end)
-        tool.Unequipped:Connect(function()
-            mouse = nil
-        end)
-        tool.Activated:Connect(function()
-            if not mouse then return end
-            local target = mouse.Target
-            local model = findModelFromPart(target)
-            if not model then return end
-            local hum = model:FindFirstChildOfClass("Humanoid")
-            if hum then
-                pcall(function() hum.Health = 100 end)
-                task.wait(0.02)
-                pcall(function() -- set to 0 (or use TakeDamage)
-                    local ok = pcall(function() hum:TakeDamage(math.huge) end)
-                    if not ok then hum.Health = 0 end
-                end)
-            end
-        end)
-    ]]
-    ls.Parent = tool
+        return false
+    end
 
-    tool.Parent = player.Backpack
+    local function getNPCModel(part)
+        local current = part
+        while current do
+            if current:IsA("Model") and isNPC_model(current) then
+                return current
+            end
+            current = current.Parent
+        end
+        return nil
+    end
+
+    -- Ensure equip GUI is prepared (hidden)
+    local gui = ensureClickKillGui()
+    -- equipped/unequipped show/hide GUI
+    tool.Equipped:Connect(function()
+        local sg = PlayerGui:FindFirstChild("NPCKillToolGUI")
+        if sg then sg.Enabled = true end
+    end)
+    tool.Unequipped:Connect(function()
+        local sg = PlayerGui:FindFirstChild("NPCKillToolGUI")
+        if sg then sg.Enabled = false end
+    end)
+
+    tool.Activated:Connect(function()
+        local mouse = player:GetMouse()
+        local targetPart = mouse.Target
+        if not targetPart then return end
+
+        local npcModel = getNPCModel(targetPart)
+        if not npcModel then return end
+
+        local humanoid = npcModel:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            -- If click-kill fling enabled, kill then fling
+            if clickToolFlingEnabled then
+                -- Kill
+                pcall(function() humanoid.Health = 0 end)
+                -- compute fling velocity away from local player
+                local playerPos = nil
+                if player.Character and player.Character.PrimaryPart then
+                    pcall(function() playerPos = player.Character.PrimaryPart.Position end)
+                end
+                local pwr = tonumber(clickToolFlingPower) or tonumber(flingBox.Text) or 200
+                -- apply velocity to all parts away from player
+                iterateParts(npcModel, function(p)
+                    if p and p:IsA("BasePart") and not p.Anchored then
+                        pcall(function()
+                            local dir = Vector3.new(0,1,0)
+                            if playerPos then
+                                local ok, pos = pcall(function() return p.Position end)
+                                if ok and pos then
+                                    dir = (pos - playerPos)
+                                    if dir.Magnitude <= 0.001 then
+                                        dir = Vector3.new(0,1,0)
+                                    else
+                                        dir = dir.Unit
+                                    end
+                                end
+                            end
+                            local velocity = dir * pwr + Vector3.new(0, pwr * 0.45, 0)
+                            if p.AssemblyLinearVelocity ~= nil then p.AssemblyLinearVelocity = velocity else p.Velocity = velocity end
+                        end)
+                    end
+                end)
+            else
+                -- Default simple kill sequence if fling not enabled
+                pcall(function() humanoid.Health = 0 end)
+                pcall(function() humanoid.Health = 1 end)
+                pcall(function() humanoid.Health = 0 end)
+            end
+        end
+    end)
 end
 
 local function onCharacterAddedForTool(char)
-    -- create tool when respawned if toggle is on
     if createClickKillOnRespawn then
         -- small delay to ensure Backpack exists
         task.wait(0.1)
@@ -794,12 +1017,11 @@ local function setCreateClickKillOnRespawn(enabled)
     if enabled then
         -- create on next respawn
         clickToolConn = player.CharacterAdded:Connect(onCharacterAddedForTool)
-        -- also, if player already just respawned (character present), do not create now per requirement.
-        -- Only create on future respawn, so we don't create immediately here.
+        -- Only create on future respawn per requirement (do not create immediately)
     end
 end
 
--- TRACKER scan functions
+-- tracker scan functions
 local function startTrackerScan()
     if trackerScanRunning then return end
     trackerScanRunning = true
@@ -953,7 +1175,7 @@ local function ensureTypeFeaturePage(typeName)
         local btn = Instance.new("TextButton"); btn.Size = UDim2.new(0.5,0,1,0); btn.Position = UDim2.new(0,0,0,0); btn.BackgroundColor3 = Color3.fromRGB(58,58,58); btn.BorderSizePixel = 0; btn.Font = Enum.Font.Gotham; btn.TextSize = SMALL_FONT; btn.TextColor3 = Color3.new(1,1,1); btn.Text = eff; btn.Parent = row
         local small
         local input = nil
-        local hasTextbox = (eff == "Speed" or eff == "JumpPower" or eff == "HipHeight" or eff == "Heal" or eff == "Fling")
+        local hasTextbox = (eff == "Speed" or eff == "JumpPower" or eff == "HipHeight" or eff == "Fling")
         if eff ~= "Tracker" then
             small = Instance.new("TextButton"); small.Size = UDim2.new(0.48,0,1,0); small.Position = UDim2.new(0.52,6,0,0); small.BackgroundColor3 = Color3.fromRGB(40,40,40); small.BorderSizePixel = 0; small.Font = Enum.Font.Gotham; small.TextSize = 11; small.TextColor3 = Color3.new(1,1,1); small.Text = "Loop: Off"; small.Parent = row
         else
@@ -965,7 +1187,6 @@ local function ensureTypeFeaturePage(typeName)
             if eff == "Speed" then input.Text = "16"
             elseif eff == "JumpPower" then input.Text = "50"
             elseif eff == "HipHeight" then input.Text = "2"
-            elseif eff == "Heal" then input.Text = "5"
             elseif eff == "Fling" then input.Text = tostring(flingBox.Text or "200")
             else input.Text = "" end
             input.Parent = row
@@ -989,8 +1210,6 @@ local function ensureTypeFeaturePage(typeName)
             elseif eff == "Speed" then local v = tonumber(input and input.Text) or 16 for _,m in ipairs(list) do setSpeed(m, v) end
             elseif eff == "JumpPower" then local v = tonumber(input and input.Text) or 50 for _,m in ipairs(list) do setJumpPower(m, v) end
             elseif eff == "HipHeight" then local v = tonumber(input and input.Text) or 2 for _,m in ipairs(list) do setHipHeight(m, v) end
-            elseif eff == "Heal" then local v = tonumber(input and input.Text) or 0 for _,m in ipairs(list) do healTickModel(m, v) end
-            elseif eff == "HPNaN" then for _,m in ipairs(list) do setHPNaN(m) end
             elseif eff == "Tracker" then
                 if excluded[selectedType] and excluded[selectedType]["Tracker"] then return end
                 for _,m in ipairs(list) do
@@ -1023,8 +1242,6 @@ local function ensureTypeFeaturePage(typeName)
                         elseif eff == "Speed" then local v = tonumber(input and input.Text) or 16 for _,m in ipairs(list) do setSpeed(m, v) end
                         elseif eff == "JumpPower" then local v = tonumber(input and input.Text) or 50 for _,m in ipairs(list) do setJumpPower(m, v) end
                         elseif eff == "HipHeight" then local v = tonumber(input and input.Text) or 2 for _,m in ipairs(list) do setHipHeight(m, v) end
-                        elseif eff == "Heal" then local v = tonumber(input and input.Text) or 0 for _,m in ipairs(list) do healTickModel(m, v) end
-                        elseif eff == "HPNaN" then for _,m in ipairs(list) do setHPNaN(m) end
                         end
                     end)
                 else
@@ -1040,7 +1257,6 @@ local function ensureTypeFeaturePage(typeName)
                 if eff == "Speed" then local v = tonumber(input.Text) if v and not (excluded[selectedType] and excluded[selectedType]["Speed"]) then for _,m in ipairs(list) do setSpeed(m, v) end end
                 elseif eff == "JumpPower" then local v = tonumber(input.Text) if v and not (excluded[selectedType] and excluded[selectedType]["JumpPower"]) then for _,m in ipairs(list) do setJumpPower(m, v) end end
                 elseif eff == "HipHeight" then local v = tonumber(input.Text) if v and not (excluded[selectedType] and excluded[selectedType]["HipHeight"]) then for _,m in ipairs(list) do setHipHeight(m, v) end end
-                elseif eff == "Heal" then local v = tonumber(input.Text) if v and not (excluded[selectedType] and excluded[selectedType]["Heal"]) then for _,m in ipairs(list) do healTickModel(m, v) end end
                 elseif eff == "Fling" then local p = tonumber(input.Text) or tonumber(flingBox.Text) or 200 for _,m in ipairs(list) do pcall(function() flingModel(m, p) end) end
                 end
             end)
@@ -1129,6 +1345,40 @@ end)
 flingBtn.MouseButton1Click:Connect(function() local p = tonumber(flingBox.Text) or 200 for _,m in ipairs(getNPCsArray()) do pcall(function() flingModel(m,p) end) end end)
 flingLoopBtn.MouseButton1Click:Connect(function() loops.flingAll = not loops.flingAll; flingLoopBtn.Text = "Loop: " .. (loops.flingAll and "On" or "Off"); if loops.flingAll then startLoop("flingAll", function() local p = tonumber(flingBox.Text) or 200 for _,m in ipairs(getNPCsArray()) do pcall(function() flingModel(m,p) end) end end) else stopLoop("flingAll") end end)
 
+-- Kill+Fling behavior: kills and then flings all NPCs using flingBox value
+killFlingBtn.MouseButton1Click:Connect(function()
+    local p = tonumber(flingBox.Text) or 200
+    for _,m in ipairs(getNPCsArray()) do
+        if isAllowed(m, "Kill") then
+            local hum = m:FindFirstChildOfClass("Humanoid")
+            if hum then
+                pcall(function() hum.Health = 0 end)
+            end
+        end
+        pcall(function() flingModel(m, p) end)
+    end
+end)
+killFlingLoopBtn.MouseButton1Click:Connect(function()
+    loops.killFlingAll = not loops.killFlingAll
+    killFlingLoopBtn.Text = "Loop: " .. (loops.killFlingAll and "On" or "Off")
+    if loops.killFlingAll then
+        startLoop("killFlingAll", function()
+            local p = tonumber(flingBox.Text) or 200
+            for _,m in ipairs(getNPCsArray()) do
+                pcall(function()
+                    if isAllowed(m, "Kill") then
+                        local hum = m:FindFirstChildOfClass("Humanoid")
+                        if hum then pcall(function() hum.Health = 0 end) end
+                    end
+                    flingModel(m, p)
+                end)
+            end
+        end)
+    else
+        stopLoop("killFlingAll")
+    end
+end)
+
 psBtn.MouseButton1Click:Connect(function() for _,m in ipairs(getNPCsArray()) do platformStand(m) end end)
 psLoopBtn.MouseButton1Click:Connect(function() loops.ps = not loops.ps; psLoopBtn.Text = "Loop: " .. (loops.ps and "On" or "Off"); if loops.ps then startLoop("ps", function() for _,m in ipairs(getNPCsArray()) do platformStand(m) end end) else stopLoop("ps") end end)
 
@@ -1150,7 +1400,8 @@ v4LoopBtn.MouseButton1Click:Connect(function()
     loops.v4 = not loops.v4
     v4LoopBtn.Text = "Loop: "..(loops.v4 and "On" or "Off")
     if loops.v4 then
-        startLoop("v4", function() for _,m in ipairs(getNPCsArray()) do if isAllowed(m,"VoidV4") then pcall(function() voidV4Model(m) end) end end end)
+        -- use -5000 when loop is on
+        startLoop("v4", function() for _,m in ipairs(getNPCsArray()) do if isAllowed(m,"VoidV4") then pcall(function() voidV4Model(m, -5000) end) end end end)
     else
         stopLoop("v4")
     end
@@ -1263,9 +1514,12 @@ do
                 lastCountsHash = h
                 rebuildGroupedList()
             end
-            for t,_ in pairs(trackedTypes) do
-                for _,m in ipairs(getNPCsByName(t)) do
-                    if not trackedNPCs[m] and (not excluded[t] or not excluded[t]["Tracker"]) then addTrackerToModel(m) end
+            -- Only add tracked type trackers when tracker scan is enabled
+            if trackerScanRunning then
+                for t,_ in pairs(trackedTypes) do
+                    for _,m in ipairs(getNPCsByName(t)) do
+                        if not trackedNPCs[m] and (not excluded[t] or not excluded[t]["Tracker"]) then addTrackerToModel(m) end
+                    end
                 end
             end
         end
