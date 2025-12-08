@@ -1,4 +1,4 @@
--- Unified NPC GUI (full script) - updated final: Click-Kill respawn button now TextScaled = true
+-- Unified NPC GUI (full script) - updated with draggable Click-Kill equip GUI (starts left-middle)
 -- Place as a LocalScript in StarterPlayerScripts
 
 local Players = game:GetService("Players")
@@ -804,11 +804,49 @@ local function ensureClickKillGui()
 
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(0, 220, 0, 80)
-    frame.Position = UDim2.new(0, 10, 0.5, -40) -- LEFT middle start (10px from left, vertically centered)
+    -- Start on left side, middle of the screen
+    frame.Position = UDim2.new(0, 8, 0.5, -40)
     frame.AnchorPoint = Vector2.new(0, 0)
     frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
     frame.BorderSizePixel = 0
     frame.Parent = sg
+
+    -- Make frame draggable: manual dragging for cross-platform
+    frame.Active = true -- allow input
+    local dragging = false
+    local dragInput = nil
+    local dragStart = nil
+    local startPos = nil
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragInput = input
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    dragInput = nil
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging and dragStart and startPos then
+            local delta = input.Position - dragStart
+            -- Convert startPos to pixel offsets and apply delta
+            local newX = startPos.X.Offset + delta.X
+            local newY = startPos.Y.Offset + delta.Y
+            -- clamp to screen bounds approximately
+            local screenW = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.X or 1920
+            local screenH = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.Y or 1080
+            newX = math.clamp(newX, 0, screenW - frame.AbsoluteSize.X)
+            newY = math.clamp(newY, 0, screenH - frame.AbsoluteSize.Y)
+            frame.Position = UDim2.new(0, newX, 0, newY)
+        end
+    end)
 
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, -8, 0, 20)
@@ -867,36 +905,6 @@ local function ensureClickKillGui()
         toggleBtn.Text = "Click-Kill Fling: " .. (clickToolFlingEnabled and "On" or "Off")
     end)
 
-    -- Make frame draggable
-    do
-        local dragging = false
-        local dragInput = nil
-        local dragStart = nil
-        local startPos = nil
-
-        frame.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                dragging = true
-                dragStart = input.Position
-                startPos = frame.Position
-                input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then
-                        dragging = false
-                    end
-                end)
-            end
-        end)
-
-        UserInputService.InputChanged:Connect(function(input)
-            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                local delta = input.Position - dragStart
-                local newX = startPos.X.Offset + delta.X
-                local newY = startPos.Y.Offset + delta.Y
-                frame.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
-            end
-        end)
-    end
-
     return sg
 end
 
@@ -931,7 +939,6 @@ local function createClickKillTool()
 
     -- Ensure equip GUI is prepared (hidden)
     local gui = ensureClickKillGui()
-
     -- equipped/unequipped show/hide GUI
     tool.Equipped:Connect(function()
         local sg = PlayerGui:FindFirstChild("NPCKillToolGUI")
@@ -952,17 +959,17 @@ local function createClickKillTool()
 
         local humanoid = npcModel:FindFirstChildOfClass("Humanoid")
         if humanoid then
-            -- Kill sequence (0 -> 1 -> 0) for death check, then fling if enabled
-            pcall(function() humanoid.Health = 0 end)
-            pcall(function() humanoid.Health = 1 end)
-            pcall(function() humanoid.Health = 0 end)
-
+            -- If click-kill fling enabled, kill then fling
             if clickToolFlingEnabled then
+                -- Kill
+                pcall(function() humanoid.Health = 0 end)
+                -- compute fling velocity away from local player
                 local playerPos = nil
                 if player.Character and player.Character.PrimaryPart then
                     pcall(function() playerPos = player.Character.PrimaryPart.Position end)
                 end
                 local pwr = tonumber(clickToolFlingPower) or tonumber(flingBox.Text) or 200
+                -- apply velocity to all parts away from player
                 iterateParts(npcModel, function(p)
                     if p and p:IsA("BasePart") and not p.Anchored then
                         pcall(function()
@@ -983,6 +990,11 @@ local function createClickKillTool()
                         end)
                     end
                 end)
+            else
+                -- Default simple kill sequence if fling not enabled
+                pcall(function() humanoid.Health = 0 end)
+                pcall(function() humanoid.Health = 1 end)
+                pcall(function() humanoid.Health = 0 end)
             end
         end
     end)
@@ -1333,15 +1345,15 @@ end)
 flingBtn.MouseButton1Click:Connect(function() local p = tonumber(flingBox.Text) or 200 for _,m in ipairs(getNPCsArray()) do pcall(function() flingModel(m,p) end) end end)
 flingLoopBtn.MouseButton1Click:Connect(function() loops.flingAll = not loops.flingAll; flingLoopBtn.Text = "Loop: " .. (loops.flingAll and "On" or "Off"); if loops.flingAll then startLoop("flingAll", function() local p = tonumber(flingBox.Text) or 200 for _,m in ipairs(getNPCsArray()) do pcall(function() flingModel(m,p) end) end end) else stopLoop("flingAll") end end)
 
--- Kill+Fling behavior: kills (0->1->0) then flings all NPCs using flingBox value
+-- Kill+Fling behavior: kills and then flings all NPCs using flingBox value
 killFlingBtn.MouseButton1Click:Connect(function()
     local p = tonumber(flingBox.Text) or 200
     for _,m in ipairs(getNPCsArray()) do
-        local hum = m:FindFirstChildOfClass("Humanoid")
-        if hum then
-            pcall(function() hum.Health = 0 end)
-            pcall(function() hum.Health = 1 end)
-            pcall(function() hum.Health = 0 end)
+        if isAllowed(m, "Kill") then
+            local hum = m:FindFirstChildOfClass("Humanoid")
+            if hum then
+                pcall(function() hum.Health = 0 end)
+            end
         end
         pcall(function() flingModel(m, p) end)
     end
@@ -1354,11 +1366,9 @@ killFlingLoopBtn.MouseButton1Click:Connect(function()
             local p = tonumber(flingBox.Text) or 200
             for _,m in ipairs(getNPCsArray()) do
                 pcall(function()
-                    local hum = m:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        pcall(function() hum.Health = 0 end)
-                        pcall(function() hum.Health = 1 end)
-                        pcall(function() hum.Health = 0 end)
+                    if isAllowed(m, "Kill") then
+                        local hum = m:FindFirstChildOfClass("Humanoid")
+                        if hum then pcall(function() hum.Health = 0 end) end
                     end
                     flingModel(m, p)
                 end)
@@ -1390,7 +1400,7 @@ v4LoopBtn.MouseButton1Click:Connect(function()
     loops.v4 = not loops.v4
     v4LoopBtn.Text = "Loop: "..(loops.v4 and "On" or "Off")
     if loops.v4 then
-        -- use -5000 for looped VoidV4 as requested
+        -- use -5000 when loop is on
         startLoop("v4", function() for _,m in ipairs(getNPCsArray()) do if isAllowed(m,"VoidV4") then pcall(function() voidV4Model(m, -5000) end) end end end)
     else
         stopLoop("v4")
@@ -1466,7 +1476,7 @@ end)
 
 -- Click-Kill Tool creation toggle UI (placed in advanced panel)
 local toolToggleFrame = Instance.new("Frame"); toolToggleFrame.Size = UDim2.new(1,0,0,BTN_H); toolToggleFrame.BackgroundTransparency = 1; toolToggleFrame.Parent = advScroll
-local toolToggleBtn = Instance.new("TextButton"); toolToggleBtn.Size = UDim2.new(0.64,0,1,0); toolToggleBtn.Position = UDim2.new(0,0,0,0); toolToggleBtn.BackgroundColor3 = Color3.fromRGB(58,58,58); toolToggleBtn.BorderSizePixel = 0; toolToggleBtn.Font = Enum.Font.Gotham; toolToggleBtn.TextSize = SMALL_FONT; toolToggleBtn.TextColor3 = Color3.new(1,1,1); toolToggleBtn.Text = "Create Click-Kill Tool on Respawn: Off"; toolToggleBtn.TextScaled = true; toolToggleBtn.Parent = toolToggleFrame
+local toolToggleBtn = Instance.new("TextButton"); toolToggleBtn.Size = UDim2.new(0.64,0,1,0); toolToggleBtn.Position = UDim2.new(0,0,0,0); toolToggleBtn.BackgroundColor3 = Color3.fromRGB(58,58,58); toolToggleBtn.BorderSizePixel = 0; toolToggleBtn.Font = Enum.Font.Gotham; toolToggleBtn.TextSize = SMALL_FONT; toolToggleBtn.TextColor3 = Color3.new(1,1,1); toolToggleBtn.Text = "Create Click-Kill Tool on Respawn: Off"; toolToggleBtn.Parent = toolToggleFrame
 local toolToggleClear = Instance.new("TextButton"); toolToggleClear.Size = UDim2.new(0.32,0,1,0); toolToggleClear.Position = UDim2.new(0.66,6,0,0); toolToggleClear.BackgroundColor3 = Color3.fromRGB(40,40,40); toolToggleClear.BorderSizePixel = 0; toolToggleClear.Font = Enum.Font.Gotham; toolToggleClear.TextSize = 11; toolToggleClear.TextColor3 = Color3.new(1,1,1); toolToggleClear.Text = "Create Now"; toolToggleClear.Parent = toolToggleFrame
 
 toolToggleBtn.MouseButton1Click:Connect(function()
