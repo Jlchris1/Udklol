@@ -7,7 +7,11 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
-local PlayerGui = player:WaitForChild("PlayerGui")
+
+-- NOTE: don't cache PlayerGui (it can be recreated on respawn). Use this helper when you need it.
+local function getPlayerGui()
+    return player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
+end
 
 -- CONFIG (compact/mobile)
 local SCAN_INTERVAL = 0.45
@@ -288,21 +292,24 @@ local function removeTrackerFromModel(model)
         end
     end
 
-    -- Also attempt to remove any stray BillboardGui/Highlight in PlayerGui that refer to the model
-    for _,desc in ipairs(PlayerGui:GetDescendants()) do
-        if desc:IsA("BillboardGui") and desc.Name == "NPCTracker" then
-            local ador = desc.Adornee
-            if ador and ador:IsDescendantOf(model) then
-                pcall(function() desc:Destroy() end)
-            elseif not ador then
-                pcall(function() desc:Destroy() end)
-            end
-        elseif desc:IsA("Highlight") and desc.Name == "NPCHighlight" then
-            local ador = desc.Adornee
-            if ador and ador:IsDescendantOf(model) then
-                pcall(function() desc:Destroy() end)
-            elseif not ador then
-                pcall(function() desc:Destroy() end)
+    -- Also attempt to remove any stray BillboardGui/Highlight in current PlayerGui that refer to the model
+    local pg = getPlayerGui()
+    if pg then
+        for _,desc in ipairs(pg:GetDescendants()) do
+            if desc:IsA("BillboardGui") and desc.Name == "NPCTracker" then
+                local ador = desc.Adornee
+                if ador and ador:IsDescendantOf(model) then
+                    pcall(function() desc:Destroy() end)
+                elseif not ador then
+                    pcall(function() desc:Destroy() end)
+                end
+            elseif desc:IsA("Highlight") and desc.Name == "NPCHighlight" then
+                local ador = desc.Adornee
+                if ador and ador:IsDescendantOf(model) then
+                    pcall(function() desc:Destroy() end)
+                elseif not ador then
+                    pcall(function() desc:Destroy() end)
+                end
             end
         end
     end
@@ -320,13 +327,16 @@ local function addTrackerToModel(model)
     local part = getBestPartForModel(model)
     if not part then return end
 
+    local pg = getPlayerGui()
+    if not pg then return end
+
     local gui = Instance.new("BillboardGui")
     gui.Name = "NPCTracker"
     gui.Size = UDim2.new(0,140,0,32)
     gui.StudsOffset = Vector3.new(0,1.5,0)
     gui.AlwaysOnTop = true
     gui.Adornee = part
-    gui.Parent = PlayerGui
+    gui.Parent = pg -- dynamic parent
 
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1,-4,1,-4)
@@ -340,7 +350,7 @@ local function addTrackerToModel(model)
     local highlight = Instance.new("Highlight")
     highlight.Name = "NPCHighlight"
     highlight.Adornee = model
-    highlight.Parent = PlayerGui
+    highlight.Parent = pg -- dynamic parent
     highlight.FillTransparency = 1
     highlight.OutlineColor = Color3.fromRGB(80,200,120)
     highlight.OutlineTransparency = 0
@@ -442,7 +452,7 @@ local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "UnifiedNPCGUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
-ScreenGui.Parent = PlayerGui
+ScreenGui.Parent = getPlayerGui()
 
 local SmallToggle = Instance.new("TextButton")
 SmallToggle.Name = "SmallToggle"
@@ -588,7 +598,7 @@ ExclusionPanel.Position = UDim2.new(0.5, -GUI_WIDTH/2 - 12 - 100, 0.45, 0) -- le
 ExclusionPanel.BackgroundColor3 = Color3.fromRGB(30,30,30)
 ExclusionPanel.BorderSizePixel = 0
 ExclusionPanel.Visible = false
-ExclusionPanel.Parent = ScreenGui
+ExclusionPanel.Parent = getPlayerGui()
 
 local exclTitle = Instance.new("TextLabel")
 exclTitle.Size = UDim2.new(1, -8, 0, 22)
@@ -620,7 +630,7 @@ FeaturesPanel.Position = UDim2.new(0.5, GUI_WIDTH/2 + 12 + 100, 0.45, 0) -- righ
 FeaturesPanel.BackgroundColor3 = Color3.fromRGB(30,30,30)
 FeaturesPanel.BorderSizePixel = 0
 FeaturesPanel.Visible = false
-FeaturesPanel.Parent = ScreenGui
+FeaturesPanel.Parent = getPlayerGui()
 
 local featTitle = Instance.new("TextLabel")
 featTitle.Size = UDim2.new(1, -8, 0, 22)
@@ -782,7 +792,6 @@ trackerToggleBtn.Parent = trackerFrame
 -- We'll implement createClickKillTool() and setCreateClickKillOnRespawn() using your provided tool script
 -- plus an equip GUI to configure Click-Kill fling power and toggle.
 
-local backpack = player:WaitForChild("Backpack")
 local createClickKillOnRespawn = false
 local clickToolConn = nil
 
@@ -793,13 +802,15 @@ local clickToolFlingPower = 200
 -- We'll create a GUI that appears when the tool is equipped.
 local function ensureClickKillGui()
     -- If already exists, return it
-    local existing = PlayerGui:FindFirstChild("NPCKillToolGUI")
+    local pg = getPlayerGui()
+    if not pg then return nil end
+    local existing = pg:FindFirstChild("NPCKillToolGUI")
     if existing and existing:IsA("ScreenGui") then return existing end
 
     local sg = Instance.new("ScreenGui")
     sg.Name = "NPCKillToolGUI"
     sg.ResetOnSpawn = false
-    sg.Parent = PlayerGui
+    sg.Parent = pg
     sg.Enabled = false
 
     local frame = Instance.new("Frame")
@@ -909,13 +920,18 @@ local function ensureClickKillGui()
 end
 
 local function createClickKillTool()
-    -- avoid duplicates in backpack
-    if backpack:FindFirstChild("NPCKillTool") then return end
+    -- look up backpack dynamically (avoid stale reference)
+    local bp = player:FindFirstChild("Backpack") or player:WaitForChild("Backpack")
+    if not bp then return end
+
+    -- avoid duplicates in backpack OR character
+    if bp:FindFirstChild("NPCKillTool") then return end
+    if player.Character and player.Character:FindFirstChild("NPCKillTool") then return end
 
     local tool = Instance.new("Tool")
     tool.Name = "NPCKillTool"
     tool.RequiresHandle = false
-    tool.Parent = backpack
+    tool.Parent = bp
 
     local function isNPC_model(model)
         if not model then return false end
@@ -941,11 +957,11 @@ local function createClickKillTool()
     local gui = ensureClickKillGui()
     -- equipped/unequipped show/hide GUI
     tool.Equipped:Connect(function()
-        local sg = PlayerGui:FindFirstChild("NPCKillToolGUI")
+        local sg = getPlayerGui() and getPlayerGui():FindFirstChild("NPCKillToolGUI")
         if sg then sg.Enabled = true end
     end)
     tool.Unequipped:Connect(function()
-        local sg = PlayerGui:FindFirstChild("NPCKillToolGUI")
+        local sg = getPlayerGui() and getPlayerGui():FindFirstChild("NPCKillToolGUI")
         if sg then sg.Enabled = false end
     end)
 
@@ -1586,17 +1602,56 @@ end)
 
 -- Ensure trackers remain attached or cleaned after respawn
 player.CharacterAdded:Connect(function(char)
+    -- reparent / re-create trackers into the new PlayerGui if necessary
+    local pg = getPlayerGui()
     for m,_ in pairs(trackedNPCs) do
-        if trackedNPCs[m] then
-            local data = trackedNPCs[m]
-            if data and data.gui and data.adornee and data.adornee.Parent then
-                data.gui.Adornee = data.adornee
-                data.gui.Parent = PlayerGui
-                data.highlight.Parent = PlayerGui
+        local data = trackedNPCs[m]
+        if data then
+            local okGui = data.gui and data.gui.Parent and data.gui.Adornee and data.gui.Adornee.Parent
+            local okHighlight = data.highlight and data.highlight.Parent
+            -- if both gui and highlight still exist and adornee part is valid, reparent to current PlayerGui
+            if (okGui or okHighlight) then
+                if data.gui and pg then
+                    pcall(function() data.gui.Parent = pg end)
+                end
+                if data.highlight and pg then
+                    pcall(function() data.highlight.Parent = pg end)
+                end
             else
+                -- gui/highlight were destroyed (likely due to PlayerGui recreation). Remove and recreate tracker.
                 removeTrackerFromModel(m)
+                -- if Tracker is allowed for this model's type, re-add
+                if m and m.Parent and not (excluded[m.Name] and excluded[m.Name]["Tracker"]) then
+                    addTrackerToModel(m)
+                end
             end
         end
+    end
+end)
+
+-- Also watch PlayerGui being removed/added (defensive): when PlayerGui is recreated, reattach or recreate trackers
+player.ChildAdded:Connect(function(child)
+    if child.Name == "PlayerGui" then
+        -- small delay to allow other ScreenGuis to be created
+        task.delay(0.1, function()
+            local pg = getPlayerGui()
+            -- reattach existing trackers to new PlayerGui or recreate
+            for m,_ in pairs(trackedNPCs) do
+                local data = trackedNPCs[m]
+                if data then
+                    if data.gui and data.gui.Parent then
+                        pcall(function() data.gui.Parent = pg end)
+                    elseif data.highlight and data.highlight.Parent then
+                        pcall(function() data.highlight.Parent = pg end)
+                    else
+                        removeTrackerFromModel(m)
+                        if m and m.Parent and not (excluded[m.Name] and excluded[m.Name]["Tracker"]) then
+                            addTrackerToModel(m)
+                        end
+                    end
+                end
+            end
+        end)
     end
 end)
 
