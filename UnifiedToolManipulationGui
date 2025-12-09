@@ -1,0 +1,806 @@
+-- UnifiedTool_Compact_AllFeatures.lua
+-- Place as a LocalScript in StarterPlayerScripts
+-- Merges GripTargetGui, KillAura, and NPC KillAura features into one compact, mobile-friendly GUI.
+-- Updated: TextBoxes use PlaceholderText to describe purpose and start empty (user types number).
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+
+-- Helper to always fetch PlayerGui (avoids caching across respawns)
+local function getPlayerGui()
+    return player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
+end
+
+-- CONFIG (defaults used when textbox is empty or invalid)
+local DEFAULT_COOLDOWN = 0.12
+local DEFAULT_LOOP_RATE = 0.08
+local NPC_LOOP_RATE = 0.30
+local HRP_ADJUST_RATE = 0.5
+local TOOL_RESIZE_LOOP_RATE = 3
+local MAIN_W, MAIN_H = 300, 320 -- main GUI size
+local MINI_W, MINI_H = 30, 30   -- toggle size
+
+-- Utility to create instances quickly
+local function new(class, props)
+    local o = Instance.new(class)
+    if props then
+        for k, v in pairs(props) do
+            if k == "Parent" then
+                o.Parent = v
+            else
+                pcall(function() o[k] = v end)
+            end
+        end
+    end
+    return o
+end
+
+-- Root ScreenGui
+local screenGui = new("ScreenGui", { Name = "UnifiedToolGuiAll", ResetOnSpawn = false, Parent = getPlayerGui(), ZIndexBehavior = Enum.ZIndexBehavior.Global })
+
+-- Small top-right toggle (different spot; smaller)
+local miniToggle = new("TextButton", {
+    Parent = screenGui,
+    Name = "MiniToggle",
+    Size = UDim2.new(0, MINI_W, 0, MINI_H),
+    Position = UDim2.new(1, - (MINI_W + 12), 0, 12),
+    BackgroundColor3 = Color3.fromRGB(28,28,28),
+    Text = "≡",
+    Font = Enum.Font.SourceSansBold,
+    TextSize = 18,
+    TextColor3 = Color3.fromRGB(230,230,230),
+    AutoButtonColor = true,
+})
+new("UICorner", { Parent = miniToggle, CornerRadius = UDim.new(1,0) })
+new("UIStroke", { Parent = miniToggle, Color = Color3.fromRGB(150,190,255), Thickness = 1, Transparency = 0.9 })
+
+-- Transient label that only shows while touch/mouse held on toggle
+local transientLabel = new("TextLabel", {
+    Parent = screenGui,
+    Name = "OpenLabel",
+    Size = UDim2.new(0, 110, 0, 26),
+    Position = miniToggle.Position - UDim2.new(0, 120, 0, 0),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BackgroundTransparency = 0.75,
+    Text = "Open Tool gui",
+    Font = Enum.Font.SourceSans,
+    TextSize = 13,
+    TextColor3 = Color3.fromRGB(24,24,24),
+    Visible = false,
+})
+new("UICorner", { Parent = transientLabel, CornerRadius = UDim.new(0,10) })
+
+-- Main compact frame (centered)
+local mainFrame = new("Frame", {
+    Parent = screenGui,
+    Name = "MainFrame",
+    Size = UDim2.new(0, MAIN_W, 0, MAIN_H),
+    Position = UDim2.new(0.5, 0, 0.5, 0),
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    BackgroundColor3 = Color3.fromRGB(22,22,22),
+    BorderSizePixel = 0,
+    Visible = false,
+})
+new("UICorner", { Parent = mainFrame, CornerRadius = UDim.new(0, 12) })
+new("UIStroke", { Parent = mainFrame, Color = Color3.fromRGB(150,190,255), Thickness = 2, Transparency = 0.9 })
+
+-- Title + close
+local titleBar = new("Frame", { Parent = mainFrame, Size = UDim2.new(1, -16, 0, 38), Position = UDim2.new(0, 8, 0, 8), BackgroundTransparency = 1 })
+new("TextLabel", { Parent = titleBar, Size = UDim2.new(0.7,0,1,0), BackgroundTransparency = 1, Text = "Unified TOOL", Font = Enum.Font.SourceSansBold, TextSize = 16, TextColor3 = Color3.fromRGB(240,240,240), TextXAlignment = Enum.TextXAlignment.Left })
+local closeBtn = new("TextButton", { Parent = titleBar, Size = UDim2.new(0, 32, 0, 24), Position = UDim2.new(1, -32, 0, 6), BackgroundColor3 = Color3.fromRGB(40,40,40), Text = "✕", Font = Enum.Font.SourceSansBold, TextSize = 14, TextColor3 = Color3.fromRGB(230,230,230) })
+new("UICorner", { Parent = closeBtn, CornerRadius = UDim.new(0,8) })
+
+-- Tabs bar
+local tabsBar = new("Frame", { Parent = mainFrame, Size = UDim2.new(1, -16, 0, 34), Position = UDim2.new(0,8,0,52), BackgroundTransparency = 1 })
+local tabs = {}
+local function makeTab(name, order)
+    local width = (MAIN_W - 32) / 4
+    local btn = new("TextButton", { Parent = tabsBar, Size = UDim2.new(0, width, 0, 28), Position = UDim2.new(0, 8 + ((order-1) * (width + 0)), 0, 0), BackgroundColor3 = Color3.fromRGB(36,36,36), Text = name, Font = Enum.Font.SourceSansSemibold, TextSize = 12, TextColor3 = Color3.fromRGB(240,240,240) })
+    new("UICorner", { Parent = btn, CornerRadius = UDim.new(0,8) })
+    new("UIStroke", { Parent = btn, Color = Color3.fromRGB(150,190,255), Thickness = 1, Transparency = 0.9 })
+    tabs[name] = btn
+    return btn
+end
+
+local tabPlayers = makeTab("Players", 1)
+local tabKillAura = makeTab("KillAura", 2)
+local tabNPCs = makeTab("NPCs", 3)
+local tabTools = makeTab("Tools", 4)
+
+-- Content scrolling area
+local content = new("Frame", { Parent = mainFrame, Size = UDim2.new(1, -16, 1, -110), Position = UDim2.new(0,8,0,98), BackgroundTransparency = 1 })
+local function makeScrollPage()
+    local sf = new("ScrollingFrame", { Parent = content, Size = UDim2.new(1,0,1,0), CanvasSize = UDim2.new(0,0,0,0), BackgroundTransparency = 1, ScrollBarThickness = 8 })
+    local layout = new("UIListLayout", { Parent = sf, FillDirection = Enum.FillDirection.Vertical, HorizontalAlignment = Enum.HorizontalAlignment.Left, Padding = UDim.new(0,6) })
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        sf.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 8)
+    end)
+    return sf
+end
+
+local pagePlayers = makeScrollPage(); pagePlayers.Visible = true
+local pageKillAura = makeScrollPage(); pageKillAura.Visible = false
+local pageNPCs = makeScrollPage(); pageNPCs.Visible = false
+local pageTools = makeScrollPage(); pageTools.Visible = false
+
+local function setActiveTab(name)
+    pagePlayers.Visible = (name == "Players")
+    pageKillAura.Visible = (name == "KillAura")
+    pageNPCs.Visible = (name == "NPCs")
+    pageTools.Visible = (name == "Tools")
+    for t,v in pairs(tabs) do v.BackgroundColor3 = (t == name) and Color3.fromRGB(64,64,64) or Color3.fromRGB(36,36,36) end
+end
+setActiveTab("Players")
+
+tabPlayers.MouseButton1Click:Connect(function() setActiveTab("Players") end)
+tabKillAura.MouseButton1Click:Connect(function() setActiveTab("KillAura") end)
+tabNPCs.MouseButton1Click:Connect(function() setActiveTab("NPCs") end)
+tabTools.MouseButton1Click:Connect(function() setActiveTab("Tools") end)
+
+-- small UI makers
+local function label(parent, txt)
+    return new("TextLabel", { Parent = parent, Size = UDim2.new(1, -12, 0, 18), BackgroundTransparency = 1, Text = txt, TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.SourceSans, TextSize = 12, TextColor3 = Color3.fromRGB(235,235,235) })
+end
+local function textbox(parent, placeholder)
+    -- START EMPTY. PlaceholderText describes purpose and appears only when Text == "".
+    local tb = new("TextBox", { Parent = parent, Size = UDim2.new(1, -12, 0, 26), BackgroundColor3 = Color3.fromRGB(240,240,240), PlaceholderText = placeholder, Text = "", Font = Enum.Font.SourceSans, TextSize = 14 })
+    tb.ClearTextOnFocus = false
+    new("UICorner", { Parent = tb, CornerRadius = UDim.new(0,8) })
+    return tb
+end
+local function toggleBtn(parent, text)
+    local b = new("TextButton", { Parent = parent, Size = UDim2.new(1, -12, 0, 28), BackgroundColor3 = Color3.fromRGB(220,220,220), Text = text .. " : OFF", Font = Enum.Font.SourceSans, TextSize = 13 })
+    new("UICorner", { Parent = b, CornerRadius = UDim.new(0,8) })
+    new("UIStroke", { Parent = b, Color = Color3.fromRGB(150,190,255), Thickness = 1, Transparency = 0.9 })
+    return b
+end
+local function smallBtn(parent, text)
+    local b = new("TextButton", { Parent = parent, Size = UDim2.new(1, -12, 0, 28), BackgroundColor3 = Color3.fromRGB(180,180,180), Text = text, Font = Enum.Font.SourceSansSemibold, TextSize = 13 })
+    new("UICorner", { Parent = b, CornerRadius = UDim.new(0,10) })
+    new("UIStroke", { Parent = b, Color = Color3.fromRGB(150,190,255), Thickness = 1, Transparency = 0.9 })
+    return b
+end
+
+-- ------------------ PLAYERS PAGE ------------------
+label(pagePlayers, "Grip / Player Targeting")
+local cooldownBox = textbox(pagePlayers, "Cooldown (sec) - default 0.12 (type a number)")
+local btnAttachTool = smallBtn(pagePlayers, "Attach Tool (Shirt)")
+local btnAttachTargetAll = toggleBtn(pagePlayers, "Attach Target All (round-robin)")
+local btnAttachSelected = toggleBtn(pagePlayers, "Attach Selected Targets")
+local btnNormalTargetAll = toggleBtn(pagePlayers, "Normal Target All (tools)")
+local btnNormalSelected = toggleBtn(pagePlayers, "Normal Selected Targets")
+local btnLoadPlayerList = smallBtn(pagePlayers, "Load Player List (external URL)")
+
+-- ------------------ KILLAURA PAGE (players) ------------------
+label(pageKillAura, "Kill-Aura (Players)")
+local rangeBox = textbox(pageKillAura, "Kill aura range (players) - default 8")
+local enableKillToggle = toggleBtn(pageKillAura, "Enable Kill Aura (players)")
+label(pageKillAura, "Tool & HRP sizing")
+local toolSizeBox = textbox(pageKillAura, "Tool size (scale) - default 1")
+local autoToolSizeToggle = toggleBtn(pageKillAura, "Auto Tool Resize (local)")
+label(pageKillAura, "Attach Kill-Aura")
+local attachRangeBox = textbox(pageKillAura, "Attach range (players) - default 8")
+local enableAttachKillToggle = toggleBtn(pageKillAura, "Enable Attach Kill Aura (players)")
+label(pageKillAura, "HRP adjust (players)")
+local hrpSizeBox = textbox(pageKillAura, "HRP size (scale) - default 2")
+local loopHrpAdjustToggle = toggleBtn(pageKillAura, "Loop HRP adjust (players)")
+local hrpSelectedAdjustToggle = toggleBtn(pageKillAura, "Selected HRP only")
+local autoKillSelectedToggle = toggleBtn(pageKillAura, "Auto Kill-Aura (Sel.)")
+local applySelectedHrpBtn = smallBtn(pageKillAura, "Apply HRP to Selected (players)")
+
+-- ------------------ NPCs PAGE ------------------
+label(pageNPCs, "NPC Kill-Aura & Utilities")
+local npcRangeBox = textbox(pageNPCs, "Kill aura range (NPCs) - default 8")
+local npcAttachRangeBox = textbox(pageNPCs, "Attach range (NPCs) - default 8")
+local enableNpcKillToggle = toggleBtn(pageNPCs, "Enable Kill Aura (NPCs)")
+local enableNpcAttachToggle = toggleBtn(pageNPCs, "Enable Attach Kill Aura (NPCs)")
+label(pageNPCs, "NPC HRP adjust")
+local npcHrpSizeBox = textbox(pageNPCs, "NPC HRP size (scale) - default 2")
+local loopNpcHrpToggle = toggleBtn(pageNPCs, "Loop HRP adjust (NPCs)")
+local npcTargetAllToggle = toggleBtn(pageNPCs, "Target All NPCs (attach)")
+local npcAttachTargetToggle = toggleBtn(pageNPCs, "Attach Target NPCs (loop)")
+local npcKillAllToggle = toggleBtn(pageNPCs, "Kill All (equipped tools)")
+local npcAttachToolBtn = smallBtn(pageNPCs, "Attach Tools to Shirt (local)")
+local npcUnattachBtn = smallBtn(pageNPCs, "Unattach Tools (to char)")
+
+-- ------------------ TOOLS PAGE ------------------
+label(pageTools, "Tool Utilities")
+local makeMasslessBtn = smallBtn(pageTools, "Make Local Tools Massless")
+local tpAttachedToSelectedBtn = smallBtn(pageTools, "Teleport attached tools -> Selected Player(s)")
+local tpNormalToSelectedBtn = smallBtn(pageTools, "Teleport normal tools -> Selected Player(s)")
+
+-- ------------------ Core functionality (merged) ------------------
+
+-- safe number read: uses textbox value only when it parses; otherwise fallback default
+local function safeNumFromTextBox(tb, fallback)
+    if not tb then return fallback end
+    local s = tostring(tb.Text or "")
+    if s == "" then return fallback end
+    local n = tonumber(s)
+    if n and n > 0 then return n end
+    return fallback
+end
+
+-- Whitelist / Selected helpers (BoolValue under player)
+local function isWhitelisted(pl)
+    local ok, val = pcall(function()
+        local b = pl:FindFirstChild("Whitelisted")
+        return b and b:IsA("BoolValue") and b.Value
+    end)
+    return ok and val
+end
+local function isSelected(pl)
+    local ok, val = pcall(function()
+        local b = pl:FindFirstChild("Selected")
+        return b and b:IsA("BoolValue") and b.Value
+    end)
+    return ok and val
+end
+
+-- Tools helpers
+local function makeToolsMassless()
+    local char = player.Character
+    if not char then return end
+    for _,desc in pairs(char:GetDescendants()) do
+        if desc:IsA("BasePart") and desc.Name == "Handle" then
+            pcall(function() desc.Massless = true end)
+        end
+    end
+end
+
+local function attachToolsToShirt()
+    local char = player.Character
+    if not char then return end
+    local container = char:FindFirstChild("Shirt") or char:FindFirstChildWhichIsA("Humanoid")
+    if not container then return end
+    for _, t in pairs(char:GetChildren()) do
+        if t:IsA("Tool") then pcall(function() t.Parent = container end) end
+    end
+end
+
+local function unattachToolsToCharacter()
+    local char = player.Character
+    if not char then return end
+    local container = char:FindFirstChild("Shirt") or char:FindFirstChildWhichIsA("Humanoid")
+    for _, tool in pairs(char:GetChildren()) do
+        if tool:IsA("Tool") and tool.Parent ~= char then
+            pcall(function() tool.Parent = char end)
+        end
+    end
+    if container then
+        for _, tool in pairs(container:GetChildren()) do
+            if tool:IsA("Tool") then pcall(function() tool.Parent = char end) end
+        end
+    end
+end
+
+local function getToolsInShirt()
+    local out = {}
+    local char = player.Character
+    if not char then return out end
+    local container = char:FindFirstChild("Shirt") or char:FindFirstChildWhichIsA("Humanoid")
+    if not container then return out end
+    for _, t in pairs(container:GetChildren()) do
+        if t:IsA("Tool") then table.insert(out, t) end
+    end
+    return out
+end
+
+local function teleportAttachedToolsToPlayer(targetPlayer)
+    if not targetPlayer or not targetPlayer.Character then return end
+    local targetHRP = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not targetHRP then return end
+    for _, tool in pairs(getToolsInShirt()) do
+        local h = tool:FindFirstChild("Handle")
+        if h then pcall(function() h.Massless = true h.Position = targetHRP.Position end) end
+    end
+end
+
+local function teleportNormalToolsToPlayer(targetPlayer)
+    local char = player.Character
+    if not char or not targetPlayer or not targetPlayer.Character then return end
+    local targetHRP = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not targetHRP then return end
+    for _, tool in pairs(char:GetChildren()) do
+        if tool:IsA("Tool") then
+            local h = tool:FindFirstChild("Handle")
+            if h then pcall(function() h.Massless = true h.Position = targetHRP.Position end) end
+        end
+    end
+end
+
+local function applyToolSizeToLocalTools(size)
+    local char = player.Character
+    if not char then return end
+    for _, tool in pairs(char:GetChildren()) do
+        if tool:IsA("Tool") then
+            for _, obj in pairs(tool:GetDescendants()) do
+                if obj:IsA("BasePart") then
+                    pcall(function() obj.Massless = true obj.Size = Vector3.new(size,size,size) end)
+                elseif obj:IsA("MeshPart") then
+                    pcall(function() obj.Scale = Vector3.new(size,size,size) end)
+                end
+            end
+        end
+    end
+end
+
+-- local HRP helper
+local function getMyHRP()
+    local char = player.Character
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart")
+end
+
+local function playersInRange(range, selectedOnly, skipWhitelisted)
+    local result = {}
+    local myHRP = getMyHRP()
+    if not myHRP then return result end
+    for _, pl in pairs(Players:GetPlayers()) do
+        if pl ~= player and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
+            if skipWhitelisted and isWhitelisted(pl) then
+            elseif selectedOnly and not isSelected(pl) then
+            else
+                local hrp = pl.Character.HumanoidRootPart
+                if (hrp.Position - myHRP.Position).Magnitude <= range then
+                    table.insert(result, pl)
+                end
+            end
+        end
+    end
+    return result
+end
+
+-- NPC helpers
+local function getAllNPCs()
+    local results = {}
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChildWhichIsA("Humanoid") and not Players:GetPlayerFromCharacter(obj) then
+            table.insert(results, obj)
+        end
+    end
+    return results
+end
+
+local function getNPCHRP(model)
+    if not model then return nil end
+    return model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function getNearestNPC(range)
+    local myHRP = getMyHRP()
+    if not myHRP then return nil end
+    local nearest, shortest = nil, math.huge
+    for _, npc in ipairs(getAllNPCs()) do
+        local hrp = getNPCHRP(npc)
+        if hrp then
+            local d = (hrp.Position - myHRP.Position).Magnitude
+            if d < shortest and d <= range then shortest = d nearest = npc end
+        end
+    end
+    return nearest
+end
+
+local function teleportToolsToNPC(npc)
+    local npcHRP = getNPCHRP(npc)
+    if not npcHRP then return end
+    local char = player.Character
+    if not char then return end
+    for _, tool in pairs(char:GetChildren()) do
+        if tool:IsA("Tool") and tool.Parent == char then
+            local handle = tool:FindFirstChild("Handle")
+            if handle then pcall(function() handle.Massless = true handle.Position = npcHRP.Position end) end
+        end
+    end
+end
+
+local function teleportShirtToolsToNPC(npc)
+    local npcHRP = getNPCHRP(npc)
+    if not npcHRP then return end
+    local char = player.Character
+    if not char then return end
+    local container = char:FindFirstChild("Shirt") or char:FindFirstChildWhichIsA("Humanoid")
+    if container then
+        for _, tool in pairs(container:GetChildren()) do
+            if tool:IsA("Tool") then
+                for _, part in pairs(tool:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        pcall(function() part.Massless = true part.Position = npcHRP.Position end)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ================= Runtime toggles & loops =================
+local runtime = {
+    attachAllActive = false,
+    attachSelectedActive = false,
+    normalAllActive = false,
+    normalSelectedActive = false,
+    killAuraPlayersActive = false,
+    attachKillPlayersActive = false,
+    autoToolSizeActive = false,
+    loopHrpAdjustActive = false,
+    autoKillSelectedPlayers = false,
+    hrpSelectedOnly = false,
+    killAuraNPCsActive = false,
+    attachKillNPCsActive = false,
+    targetAllNPCs = false,
+    attachTargetNPCs = false,
+    killAllNPCsActive = false,
+}
+
+-- Player loops
+local function attachTargetAllPlayersLoop()
+    local idx = 1
+    while runtime.attachAllActive do
+        local all = Players:GetPlayers()
+        local count = #all
+        if count > 1 then
+            idx = (idx % count) + 1
+            local candidate = all[idx]
+            if candidate and candidate ~= player and not isWhitelisted(candidate) and candidate.Character and candidate.Character:FindFirstChild("HumanoidRootPart") then
+                teleportAttachedToolsToPlayer(candidate)
+            end
+        end
+        task.wait(safeNumFromTextBox(cooldownBox, DEFAULT_COOLDOWN))
+    end
+end
+
+local function attachSelectedPlayersLoop()
+    while runtime.attachSelectedActive do
+        for _, pl in pairs(Players:GetPlayers()) do
+            if pl ~= player and isSelected(pl) and not isWhitelisted(pl) and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
+                teleportAttachedToolsToPlayer(pl)
+            end
+        end
+        task.wait(safeNumFromTextBox(cooldownBox, DEFAULT_COOLDOWN))
+    end
+end
+
+local function normalTargetAllPlayersLoop()
+    local idx = 1
+    while runtime.normalAllActive do
+        local all = Players:GetPlayers()
+        local count = #all
+        if count > 1 then
+            local attempts = 0
+            while attempts < count and runtime.normalAllActive do
+                idx = (idx % count) + 1
+                local cand = all[idx]
+                attempts = attempts + 1
+                if cand and cand ~= player and not isWhitelisted(cand) and cand.Character and cand.Character:FindFirstChild("HumanoidRootPart") then
+                    teleportNormalToolsToPlayer(cand)
+                    break
+                end
+            end
+        end
+        task.wait(safeNumFromTextBox(cooldownBox, DEFAULT_COOLDOWN))
+    end
+end
+
+local function normalSelectedPlayersLoop()
+    while runtime.normalSelectedActive do
+        for _, pl in pairs(Players:GetPlayers()) do
+            if pl ~= player and isSelected(pl) and not isWhitelisted(pl) and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
+                teleportNormalToolsToPlayer(pl)
+            end
+        end
+        task.wait(safeNumFromTextBox(cooldownBox, DEFAULT_COOLDOWN))
+    end
+end
+
+-- KillAura players
+local function killAuraPlayersLoop()
+    while runtime.killAuraPlayersActive do
+        local range = safeNumFromTextBox(rangeBox, 8)
+        local targets = playersInRange(range, runtime.autoKillSelectedPlayers, true)
+        for _, tgt in ipairs(targets) do
+            teleportAttachedToolsToPlayer(tgt)
+            teleportNormalToolsToPlayer(tgt)
+        end
+        task.wait(DEFAULT_LOOP_RATE)
+    end
+end
+
+local function attachKillPlayersLoop()
+    while runtime.attachKillPlayersActive do
+        local range = safeNumFromTextBox(attachRangeBox, 8)
+        local targets = playersInRange(range, runtime.autoKillSelectedPlayers, true)
+        for _, tgt in ipairs(targets) do teleportAttachedToolsToPlayer(tgt) end
+        task.wait(DEFAULT_LOOP_RATE)
+    end
+end
+
+-- Auto tool resize
+local function toolSizeLoop()
+    while runtime.autoToolSizeActive do
+        local newSize = safeNumFromTextBox(toolSizeBox, 1)
+        applyToolSizeToLocalTools(newSize)
+        task.wait(TOOL_RESIZE_LOOP_RATE)
+    end
+end
+
+-- HRP adjust (players & NPCs)
+local function hrpAdjustLoop()
+    while runtime.loopHrpAdjustActive do
+        local sizeVal = safeNumFromTextBox(hrpSizeBox, 2)
+        for _, pl in pairs(Players:GetPlayers()) do
+            if pl ~= player and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
+                if not isWhitelisted(pl) and (not runtime.hrpSelectedOnly or isSelected(pl)) then
+                    pcall(function() local hrp = pl.Character.HumanoidRootPart hrp.Size = Vector3.new(sizeVal, sizeVal, sizeVal) hrp.CanCollide = false end)
+                end
+            end
+        end
+        for _, npc in ipairs(getAllNPCs()) do
+            local hr = getNPCHRP(npc)
+            if hr then pcall(function() hr.Size = Vector3.new(sizeVal, sizeVal, sizeVal) hr.CanCollide = false end) end
+        end
+        task.wait(HRP_ADJUST_RATE)
+    end
+end
+
+-- NPC loops
+local function killAuraNPCsLoop()
+    while runtime.killAuraNPCsActive do
+        local rng = safeNumFromTextBox(npcRangeBox, 8)
+        local target = getNearestNPC(rng)
+        if target then teleportToolsToNPC(target) end
+        task.wait(NPC_LOOP_RATE)
+    end
+end
+
+local function attachKillNPCsLoop()
+    while runtime.attachKillNPCsActive do
+        local rng = safeNumFromTextBox(npcAttachRangeBox, 8)
+        local target = getNearestNPC(rng)
+        if target then teleportShirtToolsToNPC(target) end
+        task.wait(NPC_LOOP_RATE)
+    end
+end
+
+local function killAllNPCsLoop()
+    while runtime.killAllNPCsActive do
+        for _, npc in ipairs(getAllNPCs()) do teleportToolsToNPC(npc) end
+        task.wait(NPC_LOOP_RATE)
+    end
+end
+
+local function targetAllNPCsLoop()
+    while runtime.targetAllNPCs do
+        for _, npc in ipairs(getAllNPCs()) do teleportShirtToolsToNPC(npc) end
+        task.wait(NPC_LOOP_RATE)
+    end
+end
+
+local function attachTargetNPCsLoop()
+    while runtime.attachTargetNPCs do
+        for _, npc in ipairs(getAllNPCs()) do teleportShirtToolsToNPC(npc) end
+        task.wait(NPC_LOOP_RATE)
+    end
+end
+
+-- ================= Wiring UI -> runtime =================
+
+-- Players page wiring
+btnAttachTool.MouseButton1Click:Connect(function()
+    attachToolsToShirt()
+    btnAttachTool.BackgroundColor3 = Color3.fromRGB(120,200,120)
+    task.delay(0.2, function() if btnAttachTool and btnAttachTool.Parent then btnAttachTool.BackgroundColor3 = Color3.fromRGB(180,180,180) end end)
+end)
+
+btnLoadPlayerList.MouseButton1Click:Connect(function()
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Playerlistv6"))()
+    end)
+    btnLoadPlayerList.BackgroundColor3 = Color3.fromRGB(0,200,0)
+    task.delay(0.15, function() if btnLoadPlayerList and btnLoadPlayerList.Parent then btnLoadPlayerList:Destroy() end end)
+end)
+
+btnAttachTargetAll.MouseButton1Click:Connect(function()
+    runtime.attachAllActive = not runtime.attachAllActive
+    btnAttachTargetAll.Text = "Attach Target All : " .. (runtime.attachAllActive and "ON" or "OFF")
+    btnAttachTargetAll.BackgroundColor3 = runtime.attachAllActive and Color3.fromRGB(180,60,60) or Color3.fromRGB(220,220,220)
+    if runtime.attachAllActive then task.spawn(attachTargetAllPlayersLoop) end
+end)
+
+btnAttachSelected.MouseButton1Click:Connect(function()
+    runtime.attachSelectedActive = not runtime.attachSelectedActive
+    btnAttachSelected.Text = "Attach Selected Targets : " .. (runtime.attachSelectedActive and "ON" or "OFF")
+    btnAttachSelected.BackgroundColor3 = runtime.attachSelectedActive and Color3.fromRGB(180,60,60) or Color3.fromRGB(220,220,220)
+    if runtime.attachSelectedActive then task.spawn(attachSelectedPlayersLoop) end
+end)
+
+btnNormalTargetAll.MouseButton1Click:Connect(function()
+    runtime.normalAllActive = not runtime.normalAllActive
+    btnNormalTargetAll.Text = "Normal Target All (tools) : " .. (runtime.normalAllActive and "ON" or "OFF")
+    btnNormalTargetAll.BackgroundColor3 = runtime.normalAllActive and Color3.fromRGB(180,60,60) or Color3.fromRGB(220,220,220)
+    if runtime.normalAllActive then task.spawn(normalTargetAllPlayersLoop) end
+end)
+
+btnNormalSelected.MouseButton1Click:Connect(function()
+    runtime.normalSelectedActive = not runtime.normalSelectedActive
+    btnNormalSelected.Text = "Normal Selected Targets : " .. (runtime.normalSelectedActive and "ON" or "OFF")
+    btnNormalSelected.BackgroundColor3 = runtime.normalSelectedActive and Color3.fromRGB(180,60,60) or Color3.fromRGB(220,220,220)
+    if runtime.normalSelectedActive then task.spawn(normalSelectedPlayersLoop) end
+end)
+
+-- KillAura (players) wiring
+enableKillToggle.MouseButton1Click:Connect(function()
+    runtime.killAuraPlayersActive = not runtime.killAuraPlayersActive
+    enableKillToggle.Text = "Enable Kill Aura (players) : " .. (runtime.killAuraPlayersActive and "ON" or "OFF")
+    enableKillToggle.BackgroundColor3 = runtime.killAuraPlayersActive and Color3.fromRGB(120,200,120) or Color3.fromRGB(220,220,220)
+    if runtime.killAuraPlayersActive then task.spawn(killAuraPlayersLoop) end
+end)
+
+enableAttachKillToggle.MouseButton1Click:Connect(function()
+    runtime.attachKillPlayersActive = not runtime.attachKillPlayersActive
+    enableAttachKillToggle.Text = "Enable Attach Kill Aura (players) : " .. (runtime.attachKillPlayersActive and "ON" or "OFF")
+    enableAttachKillToggle.BackgroundColor3 = runtime.attachKillPlayersActive and Color3.fromRGB(120,200,120) or Color3.fromRGB(220,220,220)
+    if runtime.attachKillPlayersActive then task.spawn(attachKillPlayersLoop) end
+end)
+
+autoToolSizeToggle.MouseButton1Click:Connect(function()
+    runtime.autoToolSizeActive = not runtime.autoToolSizeActive
+    autoToolSizeToggle.Text = "Auto Tool Resize (local) : " .. (runtime.autoToolSizeActive and "ON" or "OFF")
+    autoToolSizeToggle.BackgroundColor3 = runtime.autoToolSizeActive and Color3.fromRGB(120,200,120) or Color3.fromRGB(220,220,220)
+    if runtime.autoToolSizeActive then task.spawn(toolSizeLoop) end
+end)
+
+loopHrpAdjustToggle.MouseButton1Click:Connect(function()
+    runtime.loopHrpAdjustActive = not runtime.loopHrpAdjustActive
+    loopHrpAdjustToggle.Text = "Loop HRP adjust (players) : " .. (runtime.loopHrpAdjustActive and "ON" or "OFF")
+    loopHrpAdjustToggle.BackgroundColor3 = runtime.loopHrpAdjustActive and Color3.fromRGB(120,200,120) or Color3.fromRGB(220,220,220)
+    if runtime.loopHrpAdjustActive then task.spawn(hrpAdjustLoop) end
+end)
+
+hrpSelectedAdjustToggle.MouseButton1Click:Connect(function()
+    runtime.hrpSelectedOnly = not runtime.hrpSelectedOnly
+    hrpSelectedAdjustToggle.Text = "Selected HRP only : " .. (runtime.hrpSelectedOnly and "ON" or "OFF")
+    hrpSelectedAdjustToggle.BackgroundColor3 = runtime.hrpSelectedOnly and Color3.fromRGB(120,200,120) or Color3.fromRGB(220,220,220)
+end)
+
+autoKillSelectedToggle.MouseButton1Click:Connect(function()
+    runtime.autoKillSelectedPlayers = not runtime.autoKillSelectedPlayers
+    autoKillSelectedToggle.Text = "Auto Kill-Aura (Selected) : " .. (runtime.autoKillSelectedPlayers and "ON" or "OFF")
+    autoKillSelectedToggle.BackgroundColor3 = runtime.autoKillSelectedPlayers and Color3.fromRGB(120,200,120) or Color3.fromRGB(220,220,220)
+end)
+
+applySelectedHrpBtn.MouseButton1Click:Connect(function()
+    local sizeVal = safeNumFromTextBox(hrpSizeBox, 2)
+    for _, pl in pairs(Players:GetPlayers()) do
+        if pl ~= player and isSelected(pl) and not isWhitelisted(pl) and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
+            pcall(function()
+                local hrp = pl.Character.HumanoidRootPart
+                hrp.Size = Vector3.new(sizeVal, sizeVal, sizeVal)
+                hrp.CanCollide = false
+            end)
+        end
+    end
+end)
+
+-- NPC wiring
+enableNpcKillToggle.MouseButton1Click:Connect(function()
+    runtime.killAuraNPCsActive = not runtime.killAuraNPCsActive
+    enableNpcKillToggle.Text = "Enable Kill Aura (NPCs) : " .. (runtime.killAuraNPCsActive and "ON" or "OFF")
+    enableNpcKillToggle.BackgroundColor3 = runtime.killAuraNPCsActive and Color3.fromRGB(120,200,120) or Color3.fromRGB(220,220,220)
+    if runtime.killAuraNPCsActive then task.spawn(killAuraNPCsLoop) end
+end)
+
+enableNpcAttachToggle.MouseButton1Click:Connect(function()
+    runtime.attachKillNPCsActive = not runtime.attachKillNPCsActive
+    enableNpcAttachToggle.Text = "Enable Attach Kill Aura (NPCs) : " .. (runtime.attachKillNPCsActive and "ON" or "OFF")
+    enableNpcAttachToggle.BackgroundColor3 = runtime.attachKillNPCsActive and Color3.fromRGB(120,200,120) or Color3.fromRGB(220,220,220)
+    if runtime.attachKillNPCsActive then task.spawn(attachKillNPCsLoop) end
+end)
+
+loopNpcHrpToggle.MouseButton1Click:Connect(function()
+    runtime.loopHrpAdjustActive = not runtime.loopHrpAdjustActive
+    loopNpcHrpToggle.Text = "Loop HRP adjust (NPCs) : " .. (runtime.loopHrpAdjustActive and "ON" or "OFF")
+    loopNpcHrpToggle.BackgroundColor3 = runtime.loopHrpAdjustActive and Color3.fromRGB(120,200,120) or Color3.fromRGB(220,220,220)
+    if runtime.loopHrpAdjustActive then task.spawn(hrpAdjustLoop) end
+end)
+
+npcTargetAllToggle.MouseButton1Click:Connect(function()
+    runtime.targetAllNPCs = not runtime.targetAllNPCs
+    npcTargetAllToggle.Text = "Target All NPCs (attach) : " .. (runtime.targetAllNPCs and "ON" or "OFF")
+    npcTargetAllToggle.BackgroundColor3 = runtime.targetAllNPCs and Color3.fromRGB(180,60,60) or Color3.fromRGB(220,220,220)
+    if runtime.targetAllNPCs then task.spawn(targetAllNPCsLoop) end
+end)
+
+npcAttachTargetToggle.MouseButton1Click:Connect(function()
+    runtime.attachTargetNPCs = not runtime.attachTargetNPCs
+    npcAttachTargetToggle.Text = "Attach Target NPCs (loop) : " .. (runtime.attachTargetNPCs and "ON" or "OFF")
+    npcAttachTargetToggle.BackgroundColor3 = runtime.attachTargetNPCs and Color3.fromRGB(180,60,60) or Color3.fromRGB(220,220,220)
+    if runtime.attachTargetNPCs then task.spawn(attachTargetNPCsLoop) end
+end)
+
+npcKillAllToggle.MouseButton1Click:Connect(function()
+    runtime.killAllNPCsActive = not runtime.killAllNPCsActive
+    npcKillAllToggle.Text = "Kill All (equipped tools) : " .. (runtime.killAllNPCsActive and "ON" or "OFF")
+    npcKillAllToggle.BackgroundColor3 = runtime.killAllNPCsActive and Color3.fromRGB(180,60,60) or Color3.fromRGB(220,220,220)
+    if runtime.killAllNPCsActive then task.spawn(killAllNPCsLoop) end
+end)
+
+npcAttachToolBtn.MouseButton1Click:Connect(function()
+    attachToolsToShirt()
+    npcAttachToolBtn.BackgroundColor3 = Color3.fromRGB(120,200,120)
+    task.delay(0.18, function() if npcAttachToolBtn and npcAttachToolBtn.Parent then npcAttachToolBtn.BackgroundColor3 = Color3.fromRGB(180,180,180) end end)
+end)
+
+npcUnattachBtn.MouseButton1Click:Connect(function()
+    unattachToolsToCharacter()
+    npcUnattachBtn.BackgroundColor3 = Color3.fromRGB(120,200,120)
+    task.delay(0.18, function() if npcUnattachBtn and npcUnattachBtn.Parent then npcUnattachBtn.BackgroundColor3 = Color3.fromRGB(180,180,180) end end)
+end)
+
+-- Tools page wiring
+makeMasslessBtn.MouseButton1Click:Connect(function()
+    makeToolsMassless()
+    makeMasslessBtn.BackgroundColor3 = Color3.fromRGB(120,200,120)
+    task.delay(0.18, function() if makeMasslessBtn and makeMasslessBtn.Parent then makeMasslessBtn.BackgroundColor3 = Color3.fromRGB(180,180,180) end end)
+end)
+
+tpAttachedToSelectedBtn.MouseButton1Click:Connect(function()
+    local done = false
+    for _,pl in pairs(Players:GetPlayers()) do
+        if pl ~= player and isSelected(pl) and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
+            teleportAttachedToolsToPlayer(pl)
+            done = true
+        end
+    end
+    if not done then
+        for _,pl in pairs(Players:GetPlayers()) do
+            if pl ~= player and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then teleportAttachedToolsToPlayer(pl); break end
+        end
+    end
+end)
+
+tpNormalToSelectedBtn.MouseButton1Click:Connect(function()
+    local done = false
+    for _,pl in pairs(Players:GetPlayers()) do
+        if pl ~= player and isSelected(pl) and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
+            teleportNormalToolsToPlayer(pl)
+            done = true
+        end
+    end
+    if not done then
+        for _,pl in pairs(Players:GetPlayers()) do
+            if pl ~= player and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then teleportNormalToolsToPlayer(pl); break end
+        end
+    end
+end)
+
+-- Important: DO NOT replace placeholder text on FocusLost; leave field empty to show placeholder.
+-- (Users type their number; safeNumFromTextBox reads it when needed.)
+
+-- Open/close behaviour
+closeBtn.MouseButton1Click:Connect(function() mainFrame.Visible = false end)
+miniToggle.MouseButton1Click:Connect(function() mainFrame.Visible = not mainFrame.Visible end)
+
+-- Transient label: show only while mouse/touch held on toggle
+miniToggle.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        transientLabel.Visible = true
+    end
+end)
+miniToggle.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        transientLabel.Visible = false
+    end
+end)
+
+-- Reparent to PlayerGui on respawn
+player.CharacterAdded:Connect(function()
+    local pg = getPlayerGui()
+    if screenGui.Parent ~= pg then screenGui.Parent = pg end
+end)
+
+print("UnifiedTool_Compact_AllFeatures (placeholder-style textboxes) loaded. Toggle top-right to open.")
