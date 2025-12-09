@@ -1096,11 +1096,7 @@ local function XLQQ_fake_script() -- ToolManipulationGui.Script
 	
 	button.MouseButton1Click:Connect(function()
 		print("Button clicked!") -- Replace this with your custom code
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/ToolManipulationGuiVersion1"))()
-	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/ToolManipulationGuiVersion2"))()
-	
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/NPCtoolManipulationguitestrun"))()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/UnifiedToolManipulationGui"))()
 	end)
 end
 coroutine.wrap(XLQQ_fake_script)()
