@@ -4,8 +4,7 @@
 -- Instances:
 
 local JLadminGui = Instance.new("ScreenGui")
-local Toggle = Instance.new("TextButton")
-local MainFrame = Instance.new("Frame")
+local Main = Instance.new("Frame")
 local TopBar = Instance.new("Frame")
 local Tab1 = Instance.new("TextButton")
 local Tab3 = Instance.new("TextButton")
@@ -39,7 +38,6 @@ local TornadoGuiV6 = Instance.new("TextButton")
 local RopeTornadoGui = Instance.new("TextButton")
 local NPCcontroller = Instance.new("TextButton")
 local UnanchoredGuiV3 = Instance.new("TextButton")
-local TENDRILSCRIPT = Instance.new("TextButton")
 local Tab2Container = Instance.new("Frame")
 local ScrollingFrame_2 = Instance.new("ScrollingFrame")
 local ScpAndGamesScript = Instance.new("TextButton")
@@ -55,6 +53,7 @@ local LoopJP = Instance.new("TextButton")
 local JumpPowerAdjuster = Instance.new("TextBox")
 local SpeedAdjuster = Instance.new("TextBox")
 local LoopSpeed = Instance.new("TextButton")
+local Toggle = Instance.new("TextButton")
 
 --Properties:
 
@@ -63,33 +62,19 @@ JLadminGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 JLadminGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 JLadminGui.ResetOnSpawn = false
 
-Toggle.Name = "Toggle"
-Toggle.Parent = JLadminGui
-Toggle.BackgroundColor3 = Color3.fromRGB(91, 91, 91)
-Toggle.BorderColor3 = Color3.fromRGB(0, 0, 0)
-Toggle.BorderSizePixel = 0
-Toggle.Position = UDim2.new(0, 0, 0.187999994, 0)
-Toggle.Size = UDim2.new(0, 62, 0, 31)
-Toggle.Font = Enum.Font.SourceSansBold
-Toggle.Text = "Toggle Gui"
-Toggle.TextColor3 = Color3.fromRGB(0, 0, 0)
-Toggle.TextScaled = true
-Toggle.TextSize = 20.000
-Toggle.TextWrapped = true
-
-MainFrame.Name = "MainFrame"
-MainFrame.Parent = JLadminGui
-MainFrame.Active = true
-MainFrame.BackgroundColor3 = Color3.fromRGB(56, 56, 56)
-MainFrame.BorderColor3 = Color3.fromRGB(0, 0, 0)
-MainFrame.BorderSizePixel = 0
-MainFrame.LayoutOrder = 999999999
-MainFrame.Position = UDim2.new(0.116744123, 0, 0.159813464, 0)
-MainFrame.Size = UDim2.new(0, 510, 0, 281)
-MainFrame.ZIndex = 999999999
+Main.Name = "Main"
+Main.Parent = JLadminGui
+Main.Active = true
+Main.BackgroundColor3 = Color3.fromRGB(56, 56, 56)
+Main.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Main.BorderSizePixel = 0
+Main.LayoutOrder = 999999999
+Main.Position = UDim2.new(0.116744123, 0, 0.159813464, 0)
+Main.Size = UDim2.new(0, 510, 0, 281)
+Main.ZIndex = 999999999
 
 TopBar.Name = "TopBar"
-TopBar.Parent = MainFrame
+TopBar.Parent = Main
 TopBar.BackgroundColor3 = Color3.fromRGB(42, 42, 42)
 TopBar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 TopBar.BorderSizePixel = 0
@@ -179,7 +164,7 @@ DestroyGui.TextStrokeColor3 = Color3.fromRGB(202, 0, 0)
 DestroyGui.TextStrokeTransparency = 0.000
 
 ExtraButtonList.Name = "ExtraButtonList"
-ExtraButtonList.Parent = MainFrame
+ExtraButtonList.Parent = Main
 ExtraButtonList.BackgroundColor3 = Color3.fromRGB(42, 42, 42)
 ExtraButtonList.BorderColor3 = Color3.fromRGB(0, 0, 0)
 ExtraButtonList.BorderSizePixel = 0
@@ -231,7 +216,7 @@ OldGuiLauncher.TextSize = 14.000
 OldGuiLauncher.TextWrapped = true
 
 Tab1Container.Name = "Tab1Container"
-Tab1Container.Parent = MainFrame
+Tab1Container.Parent = Main
 Tab1Container.BackgroundColor3 = Color3.fromRGB(59, 59, 59)
 Tab1Container.BorderColor3 = Color3.fromRGB(0, 0, 0)
 Tab1Container.BorderSizePixel = 0
@@ -245,6 +230,7 @@ ScrollingFrame.BorderColor3 = Color3.fromRGB(0, 0, 0)
 ScrollingFrame.BorderSizePixel = 0
 ScrollingFrame.Size = UDim2.new(0, 341, 0, 210)
 ScrollingFrame.ZIndex = 999999999
+ScrollingFrame.CanvasPosition = Vector2.new(0, 279.5)
 ScrollingFrame.CanvasSize = UDim2.new(0, 0, 12, 0)
 ScrollingFrame.ScrollBarThickness = 2
 
@@ -538,22 +524,8 @@ UnanchoredGuiV3.TextScaled = true
 UnanchoredGuiV3.TextSize = 20.000
 UnanchoredGuiV3.TextWrapped = true
 
-TENDRILSCRIPT.Name = "TENDRILSCRIPT"
-TENDRILSCRIPT.Parent = ScrollingFrame
-TENDRILSCRIPT.BackgroundColor3 = Color3.fromRGB(65, 65, 65)
-TENDRILSCRIPT.BorderColor3 = Color3.fromRGB(0, 0, 0)
-TENDRILSCRIPT.BorderSizePixel = 0
-TENDRILSCRIPT.Position = UDim2.new(0, 0, 0.140000001, 0)
-TENDRILSCRIPT.Size = UDim2.new(0, 108, 0, 37)
-TENDRILSCRIPT.Font = Enum.Font.SourceSansBold
-TENDRILSCRIPT.Text = "Tendril gui [BIG CONGO MAMA BETA VERSION]"
-TENDRILSCRIPT.TextColor3 = Color3.fromRGB(0, 0, 0)
-TENDRILSCRIPT.TextScaled = true
-TENDRILSCRIPT.TextSize = 20.000
-TENDRILSCRIPT.TextWrapped = true
-
 Tab2Container.Name = "Tab2Container"
-Tab2Container.Parent = MainFrame
+Tab2Container.Parent = Main
 Tab2Container.BackgroundColor3 = Color3.fromRGB(59, 59, 59)
 Tab2Container.BorderColor3 = Color3.fromRGB(0, 0, 0)
 Tab2Container.BorderSizePixel = 0
@@ -682,7 +654,7 @@ Udklol.TextSize = 20.000
 Udklol.TextWrapped = true
 
 Tab3Container.Name = "Tab3Container"
-Tab3Container.Parent = MainFrame
+Tab3Container.Parent = Main
 Tab3Container.BackgroundColor3 = Color3.fromRGB(59, 59, 59)
 Tab3Container.BorderColor3 = Color3.fromRGB(0, 0, 0)
 Tab3Container.BorderSizePixel = 0
@@ -742,9 +714,23 @@ LoopSpeed.TextScaled = true
 LoopSpeed.TextSize = 20.000
 LoopSpeed.TextWrapped = true
 
+Toggle.Name = "Toggle"
+Toggle.Parent = JLadminGui
+Toggle.BackgroundColor3 = Color3.fromRGB(91, 91, 91)
+Toggle.BorderColor3 = Color3.fromRGB(0, 0, 0)
+Toggle.BorderSizePixel = 0
+Toggle.Position = UDim2.new(0, 0, 0.187999994, 0)
+Toggle.Size = UDim2.new(0, 62, 0, 31)
+Toggle.Font = Enum.Font.SourceSansBold
+Toggle.Text = "Toggle Gui"
+Toggle.TextColor3 = Color3.fromRGB(0, 0, 0)
+Toggle.TextScaled = true
+Toggle.TextSize = 20.000
+Toggle.TextWrapped = true
+
 -- Scripts:
 
-local function RIKALC_fake_script() -- JLadminGui.Script 
+local function ZVRXU_fake_script() -- JLadminGui.Script 
 	local script = Instance.new('Script', JLadminGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -755,73 +741,9 @@ local function RIKALC_fake_script() -- JLadminGui.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(RIKALC_fake_script)()
-local function GTDFPJ_fake_script() -- Toggle.LocalScript 
-	local script = Instance.new('LocalScript', Toggle)
-
-	local Players = game:GetService("Players")
-	local RunService = game:GetService("RunService")
-	
-	local player = Players.LocalPlayer
-	local PlayerGui = player:WaitForChild("PlayerGui")
-	
-	local toggleButton = script.Parent                   -- The toggle button
-	local jlAdminGui = PlayerGui:WaitForChild("JLadminGui") -- Parent GUI containing everything
-	local HIGHEST_ZINDEX = 10000                         -- Safe high ZIndex
-	
-	local toggleVisible = true
-	
-	-- Function to keep the toggle on top
-	local function keepToggleOnTop()
-		if toggleButton.Parent ~= PlayerGui then
-			toggleButton.Parent = PlayerGui
-		end
-	
-		local function setZIndexRecursively(frame, zIndex)
-			for _, child in ipairs(frame:GetChildren()) do
-				if child:IsA("GuiObject") then
-					child.ZIndex = zIndex
-					setZIndexRecursively(child, zIndex)
-				end
-			end
-		end
-	
-		setZIndexRecursively(toggleButton, HIGHEST_ZINDEX)
-	end
-	
-	-- Keep toggle on top every frame
-	RunService.RenderStepped:Connect(keepToggleOnTop)
-	
-	-- Handle respawns
-	player.CharacterAdded:Connect(function()
-		wait(0.1)
-		keepToggleOnTop()
-	end)
-	
-	-- Handle new GUIs added to PlayerGui
-	PlayerGui.ChildAdded:Connect(function(child)
-		wait(0.05)
-		keepToggleOnTop()
-	end)
-	
-	-- Function to toggle visibility of everything except the toggle
-	local function toggleJLadminGui()
-		toggleVisible = not toggleVisible
-	
-		for _, child in ipairs(jlAdminGui:GetChildren()) do
-			if child ~= toggleButton and child:IsA("GuiObject") then
-				child.Visible = toggleVisible
-			end
-		end
-	end
-	
-	-- Connect toggle button click
-	toggleButton.MouseButton1Click:Connect(toggleJLadminGui)
-	
-end
-coroutine.wrap(GTDFPJ_fake_script)()
-local function DQIMBKU_fake_script() -- MainFrame.LocalScript 
-	local script = Instance.new('LocalScript', MainFrame)
+coroutine.wrap(ZVRXU_fake_script)()
+local function TZSX_fake_script() -- Main.LocalScript 
+	local script = Instance.new('LocalScript', Main)
 
 	local UIS = game:GetService('UserInputService')
 	local frame = script.Parent
@@ -858,8 +780,8 @@ local function DQIMBKU_fake_script() -- MainFrame.LocalScript
 		end
 	end)
 end
-coroutine.wrap(DQIMBKU_fake_script)()
-local function XGWZSM_fake_script() -- Tab1.Tab1 
+coroutine.wrap(TZSX_fake_script)()
+local function WBDN_fake_script() -- Tab1.Tab1 
 	local script = Instance.new('Script', Tab1)
 
 	-- Put this LocalScript inside your GUI button
@@ -881,8 +803,8 @@ local function XGWZSM_fake_script() -- Tab1.Tab1
 		end
 	end)
 end
-coroutine.wrap(XGWZSM_fake_script)()
-local function MZXL_fake_script() -- Tab3.Tab3 
+coroutine.wrap(WBDN_fake_script)()
+local function WMNJYL_fake_script() -- Tab3.Tab3 
 	local script = Instance.new('Script', Tab3)
 
 	-- Put this LocalScript inside your GUI button
@@ -904,8 +826,8 @@ local function MZXL_fake_script() -- Tab3.Tab3
 		end
 	end)
 end
-coroutine.wrap(MZXL_fake_script)()
-local function JPQA_fake_script() -- Tab2.tab2 
+coroutine.wrap(WMNJYL_fake_script)()
+local function IEZON_fake_script() -- Tab2.tab2 
 	local script = Instance.new('Script', Tab2)
 
 	-- Put this LocalScript inside your GUI button
@@ -927,8 +849,8 @@ local function JPQA_fake_script() -- Tab2.tab2
 		end
 	end)
 end
-coroutine.wrap(JPQA_fake_script)()
-local function MTWA_fake_script() -- JLAdminGuiV1.RBGoutlineCode 
+coroutine.wrap(IEZON_fake_script)()
+local function XXODQOS_fake_script() -- JLAdminGuiV1.RBGoutlineCode 
 	local script = Instance.new('LocalScript', JLAdminGuiV1)
 
 	local gui = script.Parent
@@ -944,8 +866,8 @@ local function MTWA_fake_script() -- JLAdminGuiV1.RBGoutlineCode
 	end
 	
 end
-coroutine.wrap(MTWA_fake_script)()
-local function GFYX_fake_script() -- DestroyGui.Script 
+coroutine.wrap(XXODQOS_fake_script)()
+local function WTYAPL_fake_script() -- DestroyGui.Script 
 	local script = Instance.new('Script', DestroyGui)
 
 	local button = script.Parent
@@ -962,8 +884,8 @@ local function GFYX_fake_script() -- DestroyGui.Script
 	end)
 	
 end
-coroutine.wrap(GFYX_fake_script)()
-local function KUXHKT_fake_script() -- AdonisBypass.Script 
+coroutine.wrap(WTYAPL_fake_script)()
+local function GIUWSQC_fake_script() -- AdonisBypass.Script 
 	local script = Instance.new('Script', AdonisBypass)
 
 	-- Put this LocalScript inside your GUI button
@@ -974,8 +896,8 @@ local function KUXHKT_fake_script() -- AdonisBypass.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(KUXHKT_fake_script)()
-local function OUEDHFH_fake_script() -- OldMainGui.Script 
+coroutine.wrap(GIUWSQC_fake_script)()
+local function GKTYMBT_fake_script() -- OldMainGui.Script 
 	local script = Instance.new('Script', OldMainGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -986,8 +908,8 @@ local function OUEDHFH_fake_script() -- OldMainGui.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(OUEDHFH_fake_script)()
-local function CUEQZT_fake_script() -- OldGuiLauncher.Script 
+coroutine.wrap(GKTYMBT_fake_script)()
+local function DKZMLE_fake_script() -- OldGuiLauncher.Script 
 	local script = Instance.new('Script', OldGuiLauncher)
 
 	-- Put this LocalScript inside your GUI button
@@ -998,8 +920,8 @@ local function CUEQZT_fake_script() -- OldGuiLauncher.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(CUEQZT_fake_script)()
-local function YRLLB_fake_script() -- FlyGui.Script 
+coroutine.wrap(DKZMLE_fake_script)()
+local function WFILUF_fake_script() -- FlyGui.Script 
 	local script = Instance.new('Script', FlyGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -1010,8 +932,8 @@ local function YRLLB_fake_script() -- FlyGui.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(YRLLB_fake_script)()
-local function WRFYLWJ_fake_script() -- UnanchoredGui.Script 
+coroutine.wrap(WFILUF_fake_script)()
+local function OKCE_fake_script() -- UnanchoredGui.Script 
 	local script = Instance.new('Script', UnanchoredGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -1022,8 +944,8 @@ local function WRFYLWJ_fake_script() -- UnanchoredGui.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(WRFYLWJ_fake_script)()
-local function SOPKLA_fake_script() -- TornadoGui.Script 
+coroutine.wrap(OKCE_fake_script)()
+local function YKJSDF_fake_script() -- TornadoGui.Script 
 	local script = Instance.new('Script', TornadoGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -1035,8 +957,8 @@ local function SOPKLA_fake_script() -- TornadoGui.Script
 	end)
 	
 end
-coroutine.wrap(SOPKLA_fake_script)()
-local function NELM_fake_script() -- FlingGuiV2.Script 
+coroutine.wrap(YKJSDF_fake_script)()
+local function GTFH_fake_script() -- FlingGuiV2.Script 
 	local script = Instance.new('Script', FlingGuiV2)
 
 	-- Put this LocalScript inside your GUI button
@@ -1047,8 +969,8 @@ local function NELM_fake_script() -- FlingGuiV2.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(NELM_fake_script)()
-local function PRYF_fake_script() -- FlingGuiV1.Script 
+coroutine.wrap(GTFH_fake_script)()
+local function PPXPA_fake_script() -- FlingGuiV1.Script 
 	local script = Instance.new('Script', FlingGuiV1)
 
 	-- Put this LocalScript inside your GUI button
@@ -1059,8 +981,8 @@ local function PRYF_fake_script() -- FlingGuiV1.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(PRYF_fake_script)()
-local function AUUCP_fake_script() -- ToolReachGui.Script 
+coroutine.wrap(PPXPA_fake_script)()
+local function XJCV_fake_script() -- ToolReachGui.Script 
 	local script = Instance.new('Script', ToolReachGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -1071,8 +993,8 @@ local function AUUCP_fake_script() -- ToolReachGui.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(AUUCP_fake_script)()
-local function QLCDH_fake_script() -- LockOn.Script 
+coroutine.wrap(XJCV_fake_script)()
+local function KHSTYG_fake_script() -- LockOn.Script 
 	local script = Instance.new('Script', LockOn)
 
 	-- Put this LocalScript inside your GUI button
@@ -1083,8 +1005,8 @@ local function QLCDH_fake_script() -- LockOn.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(QLCDH_fake_script)()
-local function XRVD_fake_script() -- TpToolGiver.Script 
+coroutine.wrap(KHSTYG_fake_script)()
+local function KVCNY_fake_script() -- TpToolGiver.Script 
 	local script = Instance.new('Script', TpToolGiver)
 
 	-- Put this LocalScript inside your GUI button
@@ -1095,8 +1017,8 @@ local function XRVD_fake_script() -- TpToolGiver.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(XRVD_fake_script)()
-local function PJKCXAJ_fake_script() -- RespawnButtons.Script 
+coroutine.wrap(KVCNY_fake_script)()
+local function PXCVMOJ_fake_script() -- RespawnButtons.Script 
 	local script = Instance.new('Script', RespawnButtons)
 
 	-- Put this LocalScript inside your GUI button
@@ -1107,8 +1029,8 @@ local function PJKCXAJ_fake_script() -- RespawnButtons.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(PJKCXAJ_fake_script)()
-local function TZLQR_fake_script() -- UnanchoredGuiV2.Script 
+coroutine.wrap(PXCVMOJ_fake_script)()
+local function LBVDIS_fake_script() -- UnanchoredGuiV2.Script 
 	local script = Instance.new('Script', UnanchoredGuiV2)
 
 	-- Put this LocalScript inside your GUI button
@@ -1119,8 +1041,8 @@ local function TZLQR_fake_script() -- UnanchoredGuiV2.Script
 		-- Your code goes here:
 	end)
 end
-coroutine.wrap(TZLQR_fake_script)()
-local function AAYMOHH_fake_script() -- FloatGui.Script 
+coroutine.wrap(LBVDIS_fake_script)()
+local function OLLVT_fake_script() -- FloatGui.Script 
 	local script = Instance.new('Script', FloatGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -1131,8 +1053,8 @@ local function AAYMOHH_fake_script() -- FloatGui.Script
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/AFOfloatV5.5"))()
 	end)
 end
-coroutine.wrap(AAYMOHH_fake_script)()
-local function NVRVQ_fake_script() -- LockOn_2.LockOn 
+coroutine.wrap(OLLVT_fake_script)()
+local function HCKO_fake_script() -- LockOn_2.LockOn 
 	local script = Instance.new('Script', LockOn_2)
 
 	-- Put this LocalScript inside your GUI button
@@ -1143,8 +1065,8 @@ local function NVRVQ_fake_script() -- LockOn_2.LockOn
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/LockOn"))()
 	end)
 end
-coroutine.wrap(NVRVQ_fake_script)()
-local function CCGSAI_fake_script() -- BlockRemotes.Script 
+coroutine.wrap(HCKO_fake_script)()
+local function SZYX_fake_script() -- BlockRemotes.Script 
 	local script = Instance.new('Script', BlockRemotes)
 
 	-- Put this LocalScript inside your GUI button
@@ -1155,8 +1077,8 @@ local function CCGSAI_fake_script() -- BlockRemotes.Script
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/BlockRemotesGui"))()
 	end)
 end
-coroutine.wrap(CCGSAI_fake_script)()
-local function FPHDUP_fake_script() -- AbsorbStuff.AbsorbStuff 
+coroutine.wrap(SZYX_fake_script)()
+local function OEMTBRY_fake_script() -- AbsorbStuff.AbsorbStuff 
 	local script = Instance.new('Script', AbsorbStuff)
 
 	-- Put this LocalScript inside your GUI button
@@ -1167,8 +1089,8 @@ local function FPHDUP_fake_script() -- AbsorbStuff.AbsorbStuff
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/AbsorbStuffScript"))()
 	end)
 end
-coroutine.wrap(FPHDUP_fake_script)()
-local function BRQZEW_fake_script() -- VoidNpcs.VoidNPCS 
+coroutine.wrap(OEMTBRY_fake_script)()
+local function ZVAY_fake_script() -- VoidNpcs.VoidNPCS 
 	local script = Instance.new('Script', VoidNpcs)
 
 	-- Put this LocalScript inside your GUI button
@@ -1179,8 +1101,8 @@ local function BRQZEW_fake_script() -- VoidNpcs.VoidNPCS
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/INSTAKILLHEROEZWORLDENTITYSrequiresNomu"))()
 	end)
 end
-coroutine.wrap(BRQZEW_fake_script)()
-local function OWYUPJ_fake_script() -- ControlNpcs.partOne 
+coroutine.wrap(ZVAY_fake_script)()
+local function KUPVT_fake_script() -- ControlNpcs.partOne 
 	local script = Instance.new('Script', ControlNpcs)
 
 	-- Put this LocalScript inside your GUI button
@@ -1191,8 +1113,8 @@ local function OWYUPJ_fake_script() -- ControlNpcs.partOne
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/ControlNPCsGuiPartOne"))()
 	end)
 end
-coroutine.wrap(OWYUPJ_fake_script)()
-local function KFLC_fake_script() -- ControlNpcs.PartFloor 
+coroutine.wrap(KUPVT_fake_script)()
+local function XYNFNLZ_fake_script() -- ControlNpcs.PartFloor 
 	local script = Instance.new('Script', ControlNpcs)
 
 	-- Put this LocalScript inside your GUI button
@@ -1203,8 +1125,8 @@ local function KFLC_fake_script() -- ControlNpcs.PartFloor
 		loadstring(game:HttpGet(('https://raw.githubusercontent.com/SAZXHUB/Control-update/main/README.md'),true))()
 	end)
 end
-coroutine.wrap(KFLC_fake_script)()
-local function NNKDVA_fake_script() -- ToolManipulationGui.Script 
+coroutine.wrap(XYNFNLZ_fake_script)()
+local function WHRLYDE_fake_script() -- ToolManipulationGui.Script 
 	local script = Instance.new('Script', ToolManipulationGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -1216,8 +1138,8 @@ local function NNKDVA_fake_script() -- ToolManipulationGui.Script
 	
 	end)
 end
-coroutine.wrap(NNKDVA_fake_script)()
-local function XZTEIWA_fake_script() -- TornadoGuiV6.Script 
+coroutine.wrap(WHRLYDE_fake_script)()
+local function FGTVBW_fake_script() -- TornadoGuiV6.Script 
 	local script = Instance.new('Script', TornadoGuiV6)
 
 	-- Put this LocalScript inside your GUI button
@@ -1228,8 +1150,8 @@ local function XZTEIWA_fake_script() -- TornadoGuiV6.Script
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/TornadoGuiV6"))()
 	end)
 end
-coroutine.wrap(XZTEIWA_fake_script)()
-local function VXXWNKX_fake_script() -- RopeTornadoGui.Script 
+coroutine.wrap(FGTVBW_fake_script)()
+local function GQHA_fake_script() -- RopeTornadoGui.Script 
 	local script = Instance.new('Script', RopeTornadoGui)
 
 	-- Put this LocalScript inside your GUI button
@@ -1240,8 +1162,8 @@ local function VXXWNKX_fake_script() -- RopeTornadoGui.Script
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/RopeNadoGuiV2"))()
 	end)
 end
-coroutine.wrap(VXXWNKX_fake_script)()
-local function EZZOJD_fake_script() -- NPCcontroller.PartFive 
+coroutine.wrap(GQHA_fake_script)()
+local function NOVSKQ_fake_script() -- NPCcontroller.PartFive 
 	local script = Instance.new('Script', NPCcontroller)
 
 	-- Put this LocalScript inside your GUI button
@@ -1252,8 +1174,8 @@ local function EZZOJD_fake_script() -- NPCcontroller.PartFive
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/TCNSv2"))()
 	end)
 end
-coroutine.wrap(EZZOJD_fake_script)()
-local function NQZHNU_fake_script() -- NPCcontroller.PartFloor 
+coroutine.wrap(NOVSKQ_fake_script)()
+local function NWZK_fake_script() -- NPCcontroller.PartFloor 
 	local script = Instance.new('Script', NPCcontroller)
 
 	-- Put this LocalScript inside your GUI button
@@ -1264,8 +1186,8 @@ local function NQZHNU_fake_script() -- NPCcontroller.PartFloor
 		loadstring(game:HttpGet(('https://raw.githubusercontent.com/SAZXHUB/Control-update/main/README.md'),true))()
 	end)
 end
-coroutine.wrap(NQZHNU_fake_script)()
-local function INVMF_fake_script() -- UnanchoredGuiV3.Script 
+coroutine.wrap(NWZK_fake_script)()
+local function NTDSE_fake_script() -- UnanchoredGuiV3.Script 
 	local script = Instance.new('Script', UnanchoredGuiV3)
 
 	-- Put this LocalScript inside your GUI button
@@ -1276,19 +1198,8 @@ local function INVMF_fake_script() -- UnanchoredGuiV3.Script
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/opunanchoredguiv3"))()
 	end)
 end
-coroutine.wrap(INVMF_fake_script)()
-local function GIIUSF_fake_script() -- TENDRILSCRIPT.Script 
-	local script = Instance.new('Script', TENDRILSCRIPT)
-
-	-- Put this LocalScript inside your GUI button
-	local button = script.Parent
-	
-	button.MouseButton1Click:Connect(function()
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/TestScripts/refs/heads/main/Tendrils%20script%20test"))()
-	end)
-end
-coroutine.wrap(GIIUSF_fake_script)()
-local function SXVATL_fake_script() -- ScpAndGamesScript.ScpAndGamesOpScript 
+coroutine.wrap(NTDSE_fake_script)()
+local function XXOZD_fake_script() -- ScpAndGamesScript.ScpAndGamesOpScript 
 	local script = Instance.new('Script', ScpAndGamesScript)
 
 	-- Put this LocalScript inside your GUI button
@@ -1299,8 +1210,8 @@ local function SXVATL_fake_script() -- ScpAndGamesScript.ScpAndGamesOpScript
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/ScpRpMostOPscript"))()
 	end)
 end
-coroutine.wrap(SXVATL_fake_script)()
-local function CTOO_fake_script() -- Wormy.Wormy 
+coroutine.wrap(XXOZD_fake_script)()
+local function BMYRN_fake_script() -- Wormy.Wormy 
 	local script = Instance.new('Script', Wormy)
 
 	-- Put this LocalScript inside your GUI button
@@ -1311,8 +1222,8 @@ local function CTOO_fake_script() -- Wormy.Wormy
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/wormy"))()
 	end)
 end
-coroutine.wrap(CTOO_fake_script)()
-local function YOATFM_fake_script() -- TAU.TAU 
+coroutine.wrap(BMYRN_fake_script)()
+local function BYNZFTC_fake_script() -- TAU.TAU 
 	local script = Instance.new('Script', TAU)
 
 	-- Put this LocalScript inside your GUI button
@@ -1323,8 +1234,8 @@ local function YOATFM_fake_script() -- TAU.TAU
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Tau"))()
 	end)
 end
-coroutine.wrap(YOATFM_fake_script)()
-local function LTDEBT_fake_script() -- EG.EG 
+coroutine.wrap(BYNZFTC_fake_script)()
+local function VUIKH_fake_script() -- EG.EG 
 	local script = Instance.new('Script', EG)
 
 	-- Put this LocalScript inside your GUI button
@@ -1335,8 +1246,8 @@ local function LTDEBT_fake_script() -- EG.EG
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/NoWayINeededANewFileForE.Gbruh/refs/heads/main/ElementalGroundsV2"))()
 	end)
 end
-coroutine.wrap(LTDEBT_fake_script)()
-local function UOYJ_fake_script() -- KNS.KNS 
+coroutine.wrap(VUIKH_fake_script)()
+local function MMWLFZG_fake_script() -- KNS.KNS 
 	local script = Instance.new('Script', KNS)
 
 	-- Put this LocalScript inside your GUI button
@@ -1347,8 +1258,8 @@ local function UOYJ_fake_script() -- KNS.KNS
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/KillNoobsSimulatorGui"))()
 	end)
 end
-coroutine.wrap(UOYJ_fake_script)()
-local function ICJCTM_fake_script() -- ScaryElevator.SEV4 
+coroutine.wrap(MMWLFZG_fake_script)()
+local function OYNAX_fake_script() -- ScaryElevator.SEV4 
 	local script = Instance.new('Script', ScaryElevator)
 
 	-- Put this LocalScript inside your GUI button
@@ -1359,8 +1270,8 @@ local function ICJCTM_fake_script() -- ScaryElevator.SEV4
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/SEV4"))()
 	end)
 end
-coroutine.wrap(ICJCTM_fake_script)()
-local function ULWOLZ_fake_script() -- SDN.SDN 
+coroutine.wrap(OYNAX_fake_script)()
+local function BQWCZ_fake_script() -- SDN.SDN 
 	local script = Instance.new('Script', SDN)
 
 	-- Put this LocalScript inside your GUI button
@@ -1371,8 +1282,8 @@ local function ULWOLZ_fake_script() -- SDN.SDN
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/magic/refs/heads/main/SurvivalDisasterNatural"))()
 	end)
 end
-coroutine.wrap(ULWOLZ_fake_script)()
-local function OZELS_fake_script() -- Udklol.Udklol 
+coroutine.wrap(BQWCZ_fake_script)()
+local function ECNWOA_fake_script() -- Udklol.Udklol 
 	local script = Instance.new('Script', Udklol)
 
 	-- Put this LocalScript inside your GUI button
@@ -1383,8 +1294,8 @@ local function OZELS_fake_script() -- Udklol.Udklol
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Udklol"))()
 	end)
 end
-coroutine.wrap(OZELS_fake_script)()
-local function EDZI_fake_script() -- LoopJP.loopjp 
+coroutine.wrap(ECNWOA_fake_script)()
+local function CONHCN_fake_script() -- LoopJP.loopjp 
 	local script = Instance.new('Script', LoopJP)
 
 	local button = script.Parent -- toggle button
@@ -1428,8 +1339,8 @@ local function EDZI_fake_script() -- LoopJP.loopjp
 		end
 	end)
 end
-coroutine.wrap(EDZI_fake_script)()
-local function CUGMK_fake_script() -- JumpPowerAdjuster.jp 
+coroutine.wrap(CONHCN_fake_script)()
+local function NUOTE_fake_script() -- JumpPowerAdjuster.jp 
 	local script = Instance.new('Script', JumpPowerAdjuster)
 
 	local textBox = script.Parent -- assumes this script is a child of JumpPowerAdjuster
@@ -1461,8 +1372,8 @@ local function CUGMK_fake_script() -- JumpPowerAdjuster.jp
 		end
 	end)
 end
-coroutine.wrap(CUGMK_fake_script)()
-local function ZVPZ_fake_script() -- SpeedAdjuster.speed 
+coroutine.wrap(NUOTE_fake_script)()
+local function QVIM_fake_script() -- SpeedAdjuster.speed 
 	local script = Instance.new('Script', SpeedAdjuster)
 
 	local textBox = script.Parent -- assumes this script is a child of SpeedAdjuster
@@ -1494,8 +1405,8 @@ local function ZVPZ_fake_script() -- SpeedAdjuster.speed
 		end
 	end)
 end
-coroutine.wrap(ZVPZ_fake_script)()
-local function PKEP_fake_script() -- LoopSpeed.loopspeed 
+coroutine.wrap(QVIM_fake_script)()
+local function NCEUBHD_fake_script() -- LoopSpeed.loopspeed 
 	local script = Instance.new('Script', LoopSpeed)
 
 	local button = script.Parent -- toggle button
@@ -1539,4 +1450,32 @@ local function PKEP_fake_script() -- LoopSpeed.loopspeed
 		end
 	end)
 end
-coroutine.wrap(PKEP_fake_script)()
+coroutine.wrap(NCEUBHD_fake_script)()
+local function DALKJ_fake_script() -- Toggle.LocalScript 
+	local script = Instance.new('LocalScript', Toggle)
+
+	-- Put this LocalScript inside the toggle button
+	local button = script.Parent
+	local mainFrame = button.Parent:WaitForChild("Main") -- MainFrame is a sibling of the Toggle button
+	
+	local isVisible = true
+	
+	-- Verify we found the MainFrame
+	if not mainFrame then
+		warn("Main not found! Toggle functionality will not work.")
+		return
+	end
+	
+	-- Debug: Log when script loads
+	print("Toggle script loaded successfully")
+	
+	button.MouseButton1Click:Connect(function()
+		print("Toggle button clicked!")
+		isVisible = not isVisible
+		mainFrame.Visible = isVisible
+		mainFrame.Active = isVisible
+		print("Main visibility set to:", isVisible)
+	end)
+	
+end
+coroutine.wrap(DALKJ_fake_script)()
