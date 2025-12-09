@@ -1443,52 +1443,7 @@ local function XQJQFTL_fake_script() -- Toggle.toggle
 	local script = Instance.new('LocalScript', Toggle)
 
 	-- Put this LocalScript inside the toggle button
-	local button = script.Parent
-	local mainFrame = button.Parent:WaitForChild("MainFrame") -- Adjust if it's elsewhere
-	
-	local isVisible = true
-	
-	button.MouseButton1Click:Connect(function()
-		isVisible = not isVisible
-		mainFrame.Visible = isVisible
-		mainFrame.Active = isVisible
-	end)
-	
-end
-coroutine.wrap(XQJQFTL_fake_script)()
-local function RMQO_fake_script() -- Toggle.AntiOverlay 
-	local script = Instance.new('LocalScript', Toggle)
 
-	-- LocalScript inside your Toggle GUI
-	local toggle = script.Parent
-	local RunService = game:GetService("RunService")
-	local Player = game.Players.LocalPlayer
-	local PlayerGui = Player:WaitForChild("PlayerGui")
-	
-	-- Function to make sure the toggle is always on top
-	local function keepOnTop()
-		-- Put toggle directly under PlayerGui (top-level)
-		if toggle.Parent ~= PlayerGui then
-			toggle.Parent = PlayerGui
-		end
-	
-		-- Set high ZIndex for all elements inside the toggle
-		local function setZIndexRecursively(frame, zIndex)
-			for _, child in ipairs(frame:GetChildren()) do
-				if child:IsA("GuiObject") then
-					child.ZIndex = zIndex
-					setZIndexRecursively(child, zIndex)
-				end
-			end
-		end
-	
-		setZIndexRecursively(toggle, 99999) -- Very high ZIndex
-	end
-	
-	-- Run every frame to prevent other GUIs from overlaying it
-	RunService.RenderStepped:Connect(keepOnTop)
-	
-end
 coroutine.wrap(RMQO_fake_script)()
 local function XYVY_fake_script() -- JLadminGui.Script 
 	local script = Instance.new('Script', JLadminGui)
