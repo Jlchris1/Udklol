@@ -130,6 +130,20 @@ local function isAllowed(model, effectName)
 end
 
 -- ACTIONS
+
+-- Reusable damage sequence helper (0 -> wait -> 1 -> wait -> heavy kill)
+local function applyDamageSequence(hum)
+    if not hum then return end
+    pcall(function() hum.Health = 0 end)
+    task.wait(0.01)
+    pcall(function() hum.Health = 1 end)
+    task.wait(0.01)
+    pcall(function()
+        local ok = pcall(function() hum:TakeDamage(math.huge) end)
+        if not ok then pcall(function() hum.Health = -math.huge end) else pcall(function() hum.Health = 0 end) end
+    end)
+end
+
 local function killAllSimultaneousForList(models)
     local humanoids = {}
     for _,model in ipairs(models) do
@@ -950,26 +964,6 @@ local function createClickKillTool()
         return nil
     end
 
-    -- helper: apply damage sequence (0 -> wait 0.01 -> 1 -> wait 0.01 -> final kill using same heavy method as killAllSimultaneousForList)
-    local function applyDamageSequence(hum)
-        if not hum then return end
-        -- step 1: set to 0
-        pcall(function() hum.Health = 0 end)
-        task.wait(0.01)
-        -- step 2: set to 1
-        pcall(function() hum.Health = 1 end)
-        task.wait(0.01)
-        -- final: attempt heavy kill (TakeDamage(math.huge) like killAllSimultaneousForList)
-        pcall(function()
-            local ok = pcall(function() hum:TakeDamage(math.huge) end)
-            if not ok then
-                pcall(function() hum.Health = -math.huge end)
-            else
-                pcall(function() hum.Health = 0 end)
-            end
-        end)
-    end
-
     -- Ensure equip GUI is prepared (hidden)
     local gui = ensureClickKillGui()
     -- equipped/unequipped show/hide GUI
@@ -992,9 +986,18 @@ local function createClickKillTool()
 
         local humanoid = npcModel:FindFirstChildOfClass("Humanoid")
         if humanoid then
+            -- Disable BreakJointsOnDeath if property exists (defensive)
+            pcall(function()
+                if humanoid.BreakJointsOnDeath ~= nil then
+                    humanoid.BreakJointsOnDeath = false
+                end
+            end)
+            -- small delay as requested
+            task.wait(0.1)
+
             -- If click-kill fling enabled, kill then fling
             if clickToolFlingEnabled then
-                -- Kill using the same heavy method after the 0->1->0 sequence for extra reliability
+                -- Kill using shared sequence
                 applyDamageSequence(humanoid)
 
                 -- compute fling velocity away from local player
@@ -1384,7 +1387,8 @@ killFlingBtn.MouseButton1Click:Connect(function()
         if isAllowed(m, "Kill") then
             local hum = m:FindFirstChildOfClass("Humanoid")
             if hum then
-                pcall(function() hum.Health = 0 end)
+                -- perform 0 -> 1 -> heavy kill sequence each time (per your request)
+                applyDamageSequence(hum)
             end
         end
         pcall(function() flingModel(m, p) end)
@@ -1400,7 +1404,7 @@ killFlingLoopBtn.MouseButton1Click:Connect(function()
                 pcall(function()
                     if isAllowed(m, "Kill") then
                         local hum = m:FindFirstChildOfClass("Humanoid")
-                        if hum then pcall(function() hum.Health = 0 end) end
+                        if hum then applyDamageSequence(hum) end
                     end
                     flingModel(m, p)
                 end)
