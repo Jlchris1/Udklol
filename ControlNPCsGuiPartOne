@@ -809,6 +809,7 @@ local clickToolConn = nil
 -- Click-Kill tool state for the equip GUI
 local clickToolFlingEnabled = false
 local clickToolFlingPower = 200
+local breakRestoreDelay = 1 -- seconds (default). adjustable via equip GUI textbox
 
 -- We'll create a GUI that appears when the tool is equipped.
 local function ensureClickKillGui()
@@ -825,9 +826,9 @@ local function ensureClickKillGui()
     sg.Enabled = false
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 220, 0, 80)
+    frame.Size = UDim2.new(0, 220, 0, 110) -- increased height to fit restore-delay box
     -- Start on left side, middle of the screen
-    frame.Position = UDim2.new(0, 8, 0.5, -40)
+    frame.Position = UDim2.new(0, 8, 0.5, -55)
     frame.AnchorPoint = Vector2.new(0, 0)
     frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
     frame.BorderSizePixel = 0
@@ -902,9 +903,32 @@ local function ensureClickKillGui()
     pBox.ClearTextOnFocus = false
     pBox.Parent = frame
 
+    -- NEW: Restore delay label + box
+    local rLabel = Instance.new("TextLabel")
+    rLabel.Size = UDim2.new(0.5, -6, 0, 24)
+    rLabel.Position = UDim2.new(0, 4, 0, 56)
+    rLabel.BackgroundTransparency = 1
+    rLabel.Font = Enum.Font.Gotham
+    rLabel.TextSize = 12
+    rLabel.TextColor3 = Color3.new(1,1,1)
+    rLabel.Text = "Restore Delay (s)"
+    rLabel.Parent = frame
+
+    local rBox = Instance.new("TextBox")
+    rBox.Size = UDim2.new(0.44, 0, 0, 24)
+    rBox.Position = UDim2.new(0.5, 4, 0, 56)
+    rBox.Text = tostring(breakRestoreDelay)
+    rBox.PlaceholderText = "1"
+    rBox.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    rBox.TextColor3 = Color3.new(1,1,1)
+    rBox.Font = Enum.Font.Gotham
+    rBox.TextSize = 12
+    rBox.ClearTextOnFocus = false
+    rBox.Parent = frame
+
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Size = UDim2.new(1, -8, 0, 20)
-    toggleBtn.Position = UDim2.new(0, 4, 0, 56)
+    toggleBtn.Position = UDim2.new(0, 4, 0, 84)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(58,58,58)
     toggleBtn.Font = Enum.Font.Gotham
     toggleBtn.TextSize = 12
@@ -919,6 +943,15 @@ local function ensureClickKillGui()
             clickToolFlingPower = v
         else
             pBox.Text = tostring(clickToolFlingPower or 200)
+        end
+    end)
+
+    rBox.FocusLost:Connect(function()
+        local v = tonumber(rBox.Text)
+        if v and v >= 0 then
+            breakRestoreDelay = v
+        else
+            rBox.Text = tostring(breakRestoreDelay)
         end
     end)
 
@@ -992,13 +1025,20 @@ local function createClickKillTool()
                     humanoid.BreakJointsOnDeath = false
                 end
             end)
-            -- small delay as requested
+            -- small delay as requested before applying kill/fling
             task.wait(0.1)
 
             -- If click-kill fling enabled, kill then fling
             if clickToolFlingEnabled then
                 -- Kill using shared sequence
                 applyDamageSequence(humanoid)
+
+                -- Make NPC massless before fling (defensive)
+                iterateParts(npcModel, function(p)
+                    pcall(function()
+                        if p.Massless ~= nil then p.Massless = true end
+                    end)
+                end)
 
                 -- compute fling velocity away from local player
                 local playerPos = nil
@@ -1028,14 +1068,24 @@ local function createClickKillTool()
                     end
                 end)
 
-                -- Re-enable BreakJointsOnDeath after 1 second (defensive)
+                -- Re-enable BreakJointsOnDeath and restore mass after configured delay (defensive)
                 local humRef = humanoid
-                task.delay(1, function()
+                local modelRef = npcModel
+                local delaySec = tonumber(breakRestoreDelay) or 1
+                task.delay(delaySec, function()
                     pcall(function()
                         if humRef and humRef.Parent and humRef.BreakJointsOnDeath ~= nil then
                             humRef.BreakJointsOnDeath = true
                         end
                     end)
+                    -- restore massless -> false
+                    if modelRef then
+                        iterateParts(modelRef, function(p)
+                            pcall(function()
+                                if p.Massless ~= nil then p.Massless = false end
+                            end)
+                        end)
+                    end
                 end)
             else
                 -- Default sequence: 0 -> wait 0.01 -> 1 -> wait 0.01 -> heavy kill
@@ -1401,16 +1451,32 @@ killFlingBtn.MouseButton1Click:Connect(function()
                 applyDamageSequence(hum)
             end
         end
+
+        -- Make NPC massless before fling (defensive)
+        iterateParts(m, function(p)
+            pcall(function() if p.Massless ~= nil then p.Massless = true end end)
+        end)
+
         pcall(function() flingModel(m, p) end)
-        -- re-enable BreakJointsOnDeath 1 second after fling (if humanoid exists)
+
+        -- re-enable BreakJointsOnDeath and restore mass after configured delay
         local humRef = m and m:FindFirstChildOfClass("Humanoid")
-        if humRef then
-            task.delay(1, function()
+        local modelRef = m
+        local delaySec = tonumber(breakRestoreDelay) or 1
+        if humRef or modelRef then
+            task.delay(delaySec, function()
                 pcall(function()
                     if humRef and humRef.Parent and humRef.BreakJointsOnDeath ~= nil then
                         humRef.BreakJointsOnDeath = true
                     end
                 end)
+                if modelRef then
+                    iterateParts(modelRef, function(p2)
+                        pcall(function()
+                            if p2.Massless ~= nil then p2.Massless = false end
+                        end)
+                    end)
+                end
             end)
         end
     end
@@ -1427,17 +1493,26 @@ killFlingLoopBtn.MouseButton1Click:Connect(function()
                         local hum = m:FindFirstChildOfClass("Humanoid")
                         if hum then applyDamageSequence(hum) end
                     end
+                    -- Make massless defensively
+                    iterateParts(m, function(pp) pcall(function() if pp.Massless ~= nil then pp.Massless = true end end) end)
                     flingModel(m, p)
                 end)
-                -- schedule re-enable for each humanoid instance (capture current hum)
+                -- schedule re-enable for each humanoid instance (capture current hum and model)
                 local humRef = m and m:FindFirstChildOfClass("Humanoid")
-                if humRef then
-                    task.delay(1, function()
+                local modelRef = m
+                local delaySec = tonumber(breakRestoreDelay) or 1
+                if humRef or modelRef then
+                    task.delay(delaySec, function()
                         pcall(function()
                             if humRef and humRef.Parent and humRef.BreakJointsOnDeath ~= nil then
                                 humRef.BreakJointsOnDeath = true
                             end
                         end)
+                        if modelRef then
+                            iterateParts(modelRef, function(pp)
+                                pcall(function() if pp.Massless ~= nil then pp.Massless = false end end)
+                            end)
+                        end
                     end)
                 end
             end
@@ -1531,7 +1606,7 @@ jumpGlobalLoop.MouseButton1Click:Connect(function()
     if loops["jump_global"] then
         startLoop("jump_global", function()
             local v = tonumber(jumpGlobalBox.Text) or 50
-            for _,m in ipairs(getNPCsByName) do setJumpPower(m, v) end
+            for _,m in ipairs(getNPCsArray()) do setJumpPower(m, v) end
         end)
     else
         stopLoop("jump_global")
