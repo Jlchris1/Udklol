@@ -355,7 +355,7 @@ local function addTrackerToModel(model)
     gui.StudsOffset = Vector3.new(0,1.5,0)
     gui.AlwaysOnTop = true
     gui.Adornee = part
-    gui.Parent = pg
+    gui.Parent = pg -- dynamic parent, ensured to be PlayerGui
 
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1,-4,1,-4)
@@ -369,7 +369,7 @@ local function addTrackerToModel(model)
     local highlight = Instance.new("Highlight")
     highlight.Name = "NPCHighlight"
     highlight.Adornee = model
-    highlight.Parent = pg
+    highlight.Parent = pg -- dynamic parent
     highlight.FillTransparency = 1
     highlight.OutlineColor = Color3.fromRGB(80,200,120)
     highlight.OutlineTransparency = 0
@@ -466,6 +466,9 @@ local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "UnifiedNPCGUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
+-- Ensure this ScreenGui always renders above other GUIs
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+ScreenGui.DisplayOrder = 2147483647
 ScreenGui.Parent = getPlayerGui()
 
 local SmallToggle = Instance.new("TextButton")
@@ -480,7 +483,7 @@ SmallToggle.TextSize = 11
 SmallToggle.TextColor3 = Color3.new(1,1,1)
 SmallToggle.Text = "NPC"
 SmallToggle.Parent = ScreenGui
-SmallToggle.ZIndex = 10
+SmallToggle.ZIndex = 100000
 
 -- Small equip toggle: now controls showing/hiding the NPCKillToolGUI (equip GUI)
 local smallEquipToggle = Instance.new("TextButton")
@@ -496,7 +499,7 @@ smallEquipToggle.TextColor3 = Color3.new(1,1,1)
 smallEquipToggle.Text = "+" -- closed by default
 smallEquipToggle.Parent = ScreenGui
 smallEquipToggle.Visible = false -- only visible while tool equipped
-smallEquipToggle.ZIndex = 11
+smallEquipToggle.ZIndex = 100001
 
 -- Clicking this toggles the NPCKillToolGUI (equip GUI) open/close:
 smallEquipToggle.MouseButton1Click:Connect(function()
@@ -525,9 +528,10 @@ MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
+MainFrame.ZIndex = 100000
 
-local TopBar = Instance.new("Frame"); TopBar.Size = UDim2.new(1,0,0,30); TopBar.BackgroundColor3 = Color3.fromRGB(44,44,44); TopBar.Parent = MainFrame
-local Title = Instance.new("TextLabel"); Title.Size = UDim2.new(0.65,0,1,0); Title.BackgroundTransparency = 1; Title.TextColor3 = Color3.new(1,1,1); Title.Font = Enum.Font.GothamBold; Title.TextSize = 14; Title.Text = "Unified NPC"; Title.Position = UDim2.new(0.04,0,0,0); Title.Parent = TopBar
+local TopBar = Instance.new("Frame"); TopBar.Size = UDim2.new(1,0,0,30); TopBar.BackgroundColor3 = Color3.fromRGB(44,44,44); TopBar.Parent = MainFrame; TopBar.ZIndex = 100000
+local Title = Instance.new("TextLabel"); Title.Size = UDim2.new(0.65,0,1,0); Title.BackgroundTransparency = 1; Title.TextColor3 = Color3.new(1,1,1); Title.Font = Enum.Font.GothamBold; Title.TextSize = 14; Title.Text = "Unified NPC"; Title.Position = UDim2.new(0.04,0,0,0); Title.Parent = TopBar; Title.ZIndex = 100000
 
 local TabsBar = Instance.new("Frame"); TabsBar.Size = UDim2.new(1,0,0,26); TabsBar.Position = UDim2.new(0,0,0,30); TabsBar.BackgroundTransparency = 1; TabsBar.Parent = MainFrame
 local function tabButton(x, text)
@@ -541,6 +545,7 @@ local function tabButton(x, text)
     b.TextColor3 = Color3.new(1,1,1)
     b.Text = text
     b.Parent = TabsBar
+    b.ZIndex = 100000
     return b
 end
 local tabControlsBtn = tabButton(0, "Ctrl")
@@ -554,6 +559,7 @@ Content.Position = UDim2.new(0,0,0, 30 + 26)
 Content.BackgroundColor3 = Color3.fromRGB(32,32,32)
 Content.Parent = MainFrame
 Content.Visible = false
+Content.ZIndex = 100000
 
 local CounterLabel = Instance.new("TextLabel")
 CounterLabel.Size = UDim2.new(1, -8, 0, 22)
@@ -566,6 +572,7 @@ CounterLabel.TextSize = SMALL_FONT
 CounterLabel.TextColor3 = Color3.new(1,1,1)
 CounterLabel.Text = "NPCs: 0"
 CounterLabel.Parent = Content
+CounterLabel.ZIndex = 100000
 
 local function makeScroll(parent, yOffset, h)
     local s = Instance.new("ScrollingFrame")
@@ -574,6 +581,7 @@ local function makeScroll(parent, yOffset, h)
     s.BackgroundTransparency = 1
     s.ScrollBarThickness = 6
     s.Parent = parent
+    s.ZIndex = 100000
     local layout = Instance.new("UIListLayout")
     layout.Parent = s
     layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -600,6 +608,7 @@ groupScroll.Position = UDim2.new(0, 146, 0, 36)
 groupScroll.BackgroundTransparency = 1
 groupScroll.ScrollBarThickness = 6
 groupScroll.Parent = whitelistFrame
+groupScroll.ZIndex = 100000
 local groupList = Instance.new("UIListLayout"); groupList.Parent = groupScroll; groupList.SortOrder = Enum.SortOrder.LayoutOrder; groupList.Padding = UDim.new(0,4)
 groupList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() groupScroll.CanvasSize = UDim2.new(0,0,0, groupList.AbsoluteContentSize.Y + 8) end)
 
@@ -611,6 +620,7 @@ leftPanel.BorderSizePixel = 0
 leftPanel.ScrollBarThickness = 6
 leftPanel.Parent = whitelistFrame
 leftPanel.Visible = false
+leftPanel.ZIndex = 100000
 local leftLayout = Instance.new("UIListLayout"); leftLayout.Parent = leftPanel; leftLayout.SortOrder = Enum.SortOrder.LayoutOrder; leftLayout.Padding = UDim.new(0,4)
 
 local leftTitle = Instance.new("TextLabel")
@@ -622,6 +632,7 @@ leftTitle.TextSize = SMALL_FONT
 leftTitle.TextColor3 = Color3.new(1,1,1)
 leftTitle.Text = "Type: (none)"
 leftTitle.Parent = leftPanel
+leftTitle.ZIndex = 100000
 
 local function makeLeftBtnText(text)
     local b = Instance.new("TextButton")
@@ -633,6 +644,7 @@ local function makeLeftBtnText(text)
     b.TextColor3 = Color3.new(1,1,1)
     b.Text = text
     b.Parent = leftPanel
+    b.ZIndex = 100000
     return b
 end
 
@@ -646,6 +658,7 @@ ExclusionPanel.BackgroundColor3 = Color3.fromRGB(30,30,30)
 ExclusionPanel.BorderSizePixel = 0
 ExclusionPanel.Visible = false
 ExclusionPanel.Parent = ScreenGui -- ensure parented to ScreenGui
+ExclusionPanel.ZIndex = 100000
 
 local exclTitle = Instance.new("TextLabel")
 exclTitle.Size = UDim2.new(1, -8, 0, 22)
@@ -656,6 +669,7 @@ exclTitle.TextSize = SMALL_FONT
 exclTitle.TextColor3 = Color3.new(1,1,1)
 exclTitle.Text = "Exclusions (select a type)"
 exclTitle.Parent = ExclusionPanel
+exclTitle.ZIndex = 100000
 
 local exclScroll = Instance.new("ScrollingFrame")
 exclScroll.Size = UDim2.new(1, -12, 1, - 40)
@@ -663,6 +677,7 @@ exclScroll.Position = UDim2.new(0,6,0,36)
 exclScroll.BackgroundTransparency = 1
 exclScroll.ScrollBarThickness = 6
 exclScroll.Parent = ExclusionPanel
+exclScroll.ZIndex = 100000
 local exclList = Instance.new("UIListLayout"); exclList.Parent = exclScroll; exclList.SortOrder = Enum.SortOrder.LayoutOrder; exclList.Padding = UDim.new(0,4)
 exclList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     exclScroll.CanvasSize = UDim2.new(0,0,0, exclList.AbsoluteContentSize.Y + 8)
@@ -678,6 +693,7 @@ FeaturesPanel.BackgroundColor3 = Color3.fromRGB(30,30,30)
 FeaturesPanel.BorderSizePixel = 0
 FeaturesPanel.Visible = false
 FeaturesPanel.Parent = ScreenGui -- ensure parented to ScreenGui
+FeaturesPanel.ZIndex = 100000
 
 local featTitle = Instance.new("TextLabel")
 featTitle.Size = UDim2.new(1, -8, 0, 22)
@@ -688,6 +704,7 @@ featTitle.TextSize = SMALL_FONT
 featTitle.TextColor3 = Color3.new(1,1,1)
 featTitle.Text = "Type Features"
 featTitle.Parent = FeaturesPanel
+featTitle.ZIndex = 100000
 
 -- Make the features scroll smaller on Y so it doesn't block quick adjust controls
 local featScroll = Instance.new("ScrollingFrame")
@@ -696,6 +713,7 @@ featScroll.Position = UDim2.new(0,6,0,36)
 featScroll.BackgroundTransparency = 1
 featScroll.ScrollBarThickness = 6
 featScroll.Parent = FeaturesPanel
+featScroll.ZIndex = 100000
 local featList = Instance.new("UIListLayout"); featList.Parent = featScroll; featList.SortOrder = Enum.SortOrder.LayoutOrder; featList.Padding = UDim.new(0,4)
 featList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     featScroll.CanvasSize = UDim2.new(0,0,0, featList.AbsoluteContentSize.Y + 8)
@@ -712,6 +730,7 @@ local function makeSmallLabel(parent, text, posY)
     lbl.TextColor3 = Color3.new(1,1,1)
     lbl.Text = text
     lbl.Parent = parent
+    lbl.ZIndex = 100000
     return lbl
 end
 local function makeSmallInput(parent, default, posY)
@@ -725,6 +744,7 @@ local function makeSmallInput(parent, default, posY)
     box.Font = Enum.Font.Gotham
     box.TextSize = SMALL_FONT
     box.Parent = parent
+    box.ZIndex = 100000
     return box
 end
 local function makeSmallLoopBtn(parent, posY)
@@ -737,6 +757,7 @@ local function makeSmallLoopBtn(parent, posY)
     btn.TextSize = 11
     btn.TextColor3 = Color3.new(1,1,1)
     btn.Parent = parent
+    btn.ZIndex = 100000
     return btn
 end
 
@@ -763,6 +784,7 @@ local function makeRow(parent, text)
     frame.Size = UDim2.new(1, 0, 0, BTN_H)
     frame.BackgroundTransparency = 1
     frame.Parent = parent
+    frame.ZIndex = 100000
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0.66, 0, 1, 0)
     btn.Position = UDim2.new(0, 0, 0, 0)
@@ -773,6 +795,7 @@ local function makeRow(parent, text)
     btn.TextColor3 = Color3.new(1,1,1)
     btn.Text = text
     btn.Parent = frame
+    btn.ZIndex = 100000
     local small = Instance.new("TextButton")
     small.Size = UDim2.new(0.32, 0, 1, 0)
     small.Position = UDim2.new(0.68, 6, 0, 0)
@@ -783,20 +806,21 @@ local function makeRow(parent, text)
     small.TextColor3 = Color3.new(1,1,1)
     small.Text = "Loop: Off"
     small.Parent = frame
+    small.ZIndex = 100000
     return btn, small
 end
 
 -- Controls & Utilities (compact rows)
 local killBtn, killLoopBtn = makeRow(ctrlScroll, "Kill All")
-local flingBoxRow = Instance.new("Frame"); flingBoxRow.Size = UDim2.new(1,0,0,BTN_H); flingBoxRow.BackgroundTransparency = 1; flingBoxRow.Parent = ctrlScroll
-local flingBox = Instance.new("TextBox"); flingBox.Size = UDim2.new(0.56,0,1,0); flingBox.Position = UDim2.new(0,0,0,0); flingBox.PlaceholderText = "Fling"; flingBox.Text = "200"; flingBox.BackgroundColor3 = Color3.fromRGB(50,50,50); flingBox.TextColor3 = Color3.new(1,1,1); flingBox.BorderSizePixel = 0; flingBox.Font = Enum.Font.Gotham; flingBox.TextSize = SMALL_FONT; flingBox.Parent = flingBoxRow
-local flingBtn = Instance.new("TextButton"); flingBtn.Size = UDim2.new(0.42, -6, 1, 0); flingBtn.Position = UDim2.new(0.56, 6, 0, 0); flingBtn.BackgroundColor3 = Color3.fromRGB(100,50,50); flingBtn.BorderSizePixel = 0; flingBtn.Font = Enum.Font.Gotham; flingBtn.TextSize = SMALL_FONT; flingBtn.TextColor3 = Color3.new(1,1,1); flingBtn.Text = "Fling"; flingBtn.Parent = flingBoxRow
-local flingLoopBtn = Instance.new("TextButton"); flingLoopBtn.Size = UDim2.new(0.32,0,1,0); flingLoopBtn.Position = UDim2.new(0.68, 6, 0, 0); flingLoopBtn.BackgroundColor3 = Color3.fromRGB(40,40,40); flingLoopBtn.BorderSizePixel = 0; flingLoopBtn.Font = Enum.Font.Gotham; flingLoopBtn.TextSize = 11; flingLoopBtn.TextColor3 = Color3.new(1,1,1); flingLoopBtn.Text = "Loop: Off"; flingLoopBtn.Parent = flingBoxRow
+local flingBoxRow = Instance.new("Frame"); flingBoxRow.Size = UDim2.new(1,0,0,BTN_H); flingBoxRow.BackgroundTransparency = 1; flingBoxRow.Parent = ctrlScroll; flingBoxRow.ZIndex = 100000
+local flingBox = Instance.new("TextBox"); flingBox.Size = UDim2.new(0.56,0,1,0); flingBox.Position = UDim2.new(0,0,0,0); flingBox.PlaceholderText = "Fling"; flingBox.Text = "200"; flingBox.BackgroundColor3 = Color3.fromRGB(50,50,50); flingBox.TextColor3 = Color3.new(1,1,1); flingBox.BorderSizePixel = 0; flingBox.Font = Enum.Font.Gotham; flingBox.TextSize = SMALL_FONT; flingBox.Parent = flingBoxRow; flingBox.ZIndex = 100000
+local flingBtn = Instance.new("TextButton"); flingBtn.Size = UDim2.new(0.42, -6, 1, 0); flingBtn.Position = UDim2.new(0.56, 6, 0, 0); flingBtn.BackgroundColor3 = Color3.fromRGB(100,50,50); flingBtn.BorderSizePixel = 0; flingBtn.Font = Enum.Font.Gotham; flingBtn.TextSize = SMALL_FONT; flingBtn.TextColor3 = Color3.new(1,1,1); flingBtn.Text = "Fling"; flingBtn.Parent = flingBoxRow; flingBtn.ZIndex = 100000
+local flingLoopBtn = Instance.new("TextButton"); flingLoopBtn.Size = UDim2.new(0.32,0,1,0); flingLoopBtn.Position = UDim2.new(0.68, 6, 0, 0); flingLoopBtn.BackgroundColor3 = Color3.fromRGB(40,40,40); flingLoopBtn.BorderSizePixel = 0; flingLoopBtn.Font = Enum.Font.Gotham; flingLoopBtn.TextSize = 11; flingLoopBtn.TextColor3 = Color3.new(1,1,1); flingLoopBtn.Text = "Loop: Off"; flingLoopBtn.Parent = flingBoxRow; flingLoopBtn.ZIndex = 100000
 
 -- Kill+Fling controls (new row placed below the fling row)
-local killFlingFrame = Instance.new("Frame"); killFlingFrame.Size = UDim2.new(1,0,0,BTN_H); killFlingFrame.BackgroundTransparency = 1; killFlingFrame.Parent = ctrlScroll
-local killFlingBtn = Instance.new("TextButton"); killFlingBtn.Size = UDim2.new(0.66,0,1,0); killFlingBtn.Position = UDim2.new(0,0,0,0); killFlingBtn.BackgroundColor3 = Color3.fromRGB(70,30,30); killFlingBtn.BorderSizePixel = 0; killFlingBtn.Font = Enum.Font.Gotham; killFlingBtn.TextSize = SMALL_FONT; killFlingBtn.TextColor3 = Color3.new(1,1,1); killFlingBtn.Text = "Kill+Fling"; killFlingBtn.Parent = killFlingFrame
-local killFlingLoopBtn = Instance.new("TextButton"); killFlingLoopBtn.Size = UDim2.new(0.32,0,1,0); killFlingLoopBtn.Position = UDim2.new(0.68, 6, 0, 0); killFlingLoopBtn.BackgroundColor3 = Color3.fromRGB(40,40,40); killFlingLoopBtn.BorderSizePixel = 0; killFlingLoopBtn.Font = Enum.Font.Gotham; killFlingLoopBtn.TextSize = 11; killFlingLoopBtn.TextColor3 = Color3.new(1,1,1); killFlingLoopBtn.Text = "Loop: Off"; killFlingLoopBtn.Parent = killFlingFrame
+local killFlingFrame = Instance.new("Frame"); killFlingFrame.Size = UDim2.new(1,0,0,BTN_H); killFlingFrame.BackgroundTransparency = 1; killFlingFrame.Parent = ctrlScroll; killFlingFrame.ZIndex = 100000
+local killFlingBtn = Instance.new("TextButton"); killFlingBtn.Size = UDim2.new(0.66,0,1,0); killFlingBtn.Position = UDim2.new(0,0,0,0); killFlingBtn.BackgroundColor3 = Color3.fromRGB(70,30,30); killFlingBtn.BorderSizePixel = 0; killFlingBtn.Font = Enum.Font.Gotham; killFlingBtn.TextSize = SMALL_FONT; killFlingBtn.TextColor3 = Color3.new(1,1,1); killFlingBtn.Text = "Kill+Fling"; killFlingBtn.Parent = killFlingFrame; killFlingBtn.ZIndex = 100000
+local killFlingLoopBtn = Instance.new("TextButton"); killFlingLoopBtn.Size = UDim2.new(0.32,0,1,0); killFlingLoopBtn.Position = UDim2.new(0.68, 6, 0, 0); killFlingLoopBtn.BackgroundColor3 = Color3.fromRGB(40,40,40); killFlingLoopBtn.BorderSizePixel = 0; killFlingLoopBtn.Font = Enum.Font.Gotham; killFlingLoopBtn.TextSize = 11; killFlingLoopBtn.TextColor3 = Color3.new(1,1,1); killFlingLoopBtn.Text = "Loop: Off"; killFlingLoopBtn.Parent = killFlingFrame; killFlingLoopBtn.ZIndex = 100000
 
 local psBtn, psLoopBtn = makeRow(ctrlScroll, "PlatformStand")
 local sitBtn, sitLoopBtn = makeRow(ctrlScroll, "Sit")
@@ -812,19 +836,19 @@ local spasmBtn, spasmLoopBtn = makeRow(utilScroll, "Spasm")
 local jumpBtn, jumpLoopBtn = makeRow(utilScroll, "Jump")
 
 -- Advanced global controls (compact)
-local speedGlobalFrame = Instance.new("Frame"); speedGlobalFrame.Size = UDim2.new(1,0,0,BTN_H); speedGlobalFrame.BackgroundTransparency = 1; speedGlobalFrame.Parent = advScroll
-local speedGlobalBox = Instance.new("TextBox"); speedGlobalBox.Size = UDim2.new(0.62,0,1,0); speedGlobalBox.Position = UDim2.new(0,0,0,0); speedGlobalBox.Text = "16"; speedGlobalBox.PlaceholderText = "Global Speed"; speedGlobalBox.BackgroundColor3 = Color3.fromRGB(50,50,50); speedGlobalBox.TextColor3 = Color3.new(1,1,1); speedGlobalBox.BorderSizePixel = 0; speedGlobalBox.Font = Enum.Font.Gotham; speedGlobalBox.TextSize = SMALL_FONT; speedGlobalBox.Parent = speedGlobalFrame
-local speedGlobalLoop = Instance.new("TextButton"); speedGlobalLoop.Size = UDim2.new(0.34,0,1,0); speedGlobalLoop.Position = UDim2.new(0.63,6,0,0); speedGlobalLoop.BackgroundColor3 = Color3.fromRGB(40,40,40); speedGlobalLoop.BorderSizePixel = 0; speedGlobalLoop.Font = Enum.Font.Gotham; speedGlobalLoop.TextSize = 11; speedGlobalLoop.TextColor3 = Color3.new(1,1,1); speedGlobalLoop.Text = "Loop: Off"; speedGlobalLoop.Parent = speedGlobalFrame
+local speedGlobalFrame = Instance.new("Frame"); speedGlobalFrame.Size = UDim2.new(1,0,0,BTN_H); speedGlobalFrame.BackgroundTransparency = 1; speedGlobalFrame.Parent = advScroll; speedGlobalFrame.ZIndex = 100000
+local speedGlobalBox = Instance.new("TextBox"); speedGlobalBox.Size = UDim2.new(0.62,0,1,0); speedGlobalBox.Position = UDim2.new(0,0,0,0); speedGlobalBox.Text = "16"; speedGlobalBox.PlaceholderText = "Global Speed"; speedGlobalBox.BackgroundColor3 = Color3.fromRGB(50,50,50); speedGlobalBox.TextColor3 = Color3.new(1,1,1); speedGlobalBox.BorderSizePixel = 0; speedGlobalBox.Font = Enum.Font.Gotham; speedGlobalBox.TextSize = SMALL_FONT; speedGlobalBox.Parent = speedGlobalFrame; speedGlobalBox.ZIndex = 100000
+local speedGlobalLoop = Instance.new("TextButton"); speedGlobalLoop.Size = UDim2.new(0.34,0,1,0); speedGlobalLoop.Position = UDim2.new(0.63,6,0,0); speedGlobalLoop.BackgroundColor3 = Color3.fromRGB(40,40,40); speedGlobalLoop.BorderSizePixel = 0; speedGlobalLoop.Font = Enum.Font.Gotham; speedGlobalLoop.TextSize = 11; speedGlobalLoop.TextColor3 = Color3.new(1,1,1); speedGlobalLoop.Text = "Loop: Off"; speedGlobalLoop.Parent = speedGlobalFrame; speedGlobalLoop.ZIndex = 100000
 
-local jumpGlobalFrame = Instance.new("Frame"); jumpGlobalFrame.Size = UDim2.new(1,0,0,BTN_H); jumpGlobalFrame.BackgroundTransparency = 1; jumpGlobalFrame.Parent = advScroll
-local jumpGlobalBox = Instance.new("TextBox"); jumpGlobalBox.Size = UDim2.new(0.62,0,1,0); jumpGlobalBox.Position = UDim2.new(0,0,0,0); jumpGlobalBox.Text = "50"; jumpGlobalBox.PlaceholderText = "Global Jump"; jumpGlobalBox.BackgroundColor3 = Color3.fromRGB(50,50,50); jumpGlobalBox.TextColor3 = Color3.new(1,1,1); jumpGlobalBox.BorderSizePixel = 0; jumpGlobalBox.Font = Enum.Font.Gotham; jumpGlobalBox.TextSize = SMALL_FONT; jumpGlobalBox.Parent = jumpGlobalFrame
-local jumpGlobalLoop = Instance.new("TextButton"); jumpGlobalLoop.Size = UDim2.new(0.34,0,1,0); jumpGlobalLoop.Position = UDim2.new(0.63,6,0,0); jumpGlobalLoop.BackgroundColor3 = Color3.fromRGB(40,40,40); jumpGlobalLoop.BorderSizePixel = 0; jumpGlobalLoop.Font = Enum.Font.Gotham; jumpGlobalLoop.TextSize = 11; jumpGlobalLoop.TextColor3 = Color3.new(1,1,1); jumpGlobalLoop.Text = "Loop: Off"; jumpGlobalLoop.Parent = jumpGlobalFrame
+local jumpGlobalFrame = Instance.new("Frame"); jumpGlobalFrame.Size = UDim2.new(1,0,0,BTN_H); jumpGlobalFrame.BackgroundTransparency = 1; jumpGlobalFrame.Parent = advScroll; jumpGlobalFrame.ZIndex = 100000
+local jumpGlobalBox = Instance.new("TextBox"); jumpGlobalBox.Size = UDim2.new(0.62,0,1,0); jumpGlobalBox.Position = UDim2.new(0,0,0,0); jumpGlobalBox.Text = "50"; jumpGlobalBox.PlaceholderText = "Global Jump"; jumpGlobalBox.BackgroundColor3 = Color3.fromRGB(50,50,50); jumpGlobalBox.TextColor3 = Color3.new(1,1,1); jumpGlobalBox.BorderSizePixel = 0; jumpGlobalBox.Font = Enum.Font.Gotham; jumpGlobalBox.TextSize = SMALL_FONT; jumpGlobalBox.Parent = jumpGlobalFrame; jumpGlobalBox.ZIndex = 100000
+local jumpGlobalLoop = Instance.new("TextButton"); jumpGlobalLoop.Size = UDim2.new(0.34,0,1,0); jumpGlobalLoop.Position = UDim2.new(0.63,6,0,0); jumpGlobalLoop.BackgroundColor3 = Color3.fromRGB(40,40,40); jumpGlobalLoop.BorderSizePixel = 0; jumpGlobalLoop.Font = Enum.Font.Gotham; jumpGlobalLoop.TextSize = 11; jumpGlobalLoop.TextColor3 = Color3.new(1,1,1); jumpGlobalLoop.Text = "Loop: Off"; jumpGlobalLoop.Parent = jumpGlobalFrame; jumpGlobalLoop.ZIndex = 100000
 
-local hipFrame = Instance.new("Frame"); hipFrame.Size = UDim2.new(1,0,0,BTN_H); hipFrame.BackgroundTransparency = 1; hipFrame.Parent = advScroll
-local hipBox = Instance.new("TextBox"); hipBox.Size = UDim2.new(0.62,0,1,0); hipBox.Position = UDim2.new(0,0,0,0); hipBox.Text = "2"; hipBox.PlaceholderText = "Hip"; hipBox.BackgroundColor3 = Color3.fromRGB(50,50,50); hipBox.TextColor3 = Color3.new(1,1,1); hipBox.BorderSizePixel = 0; hipBox.Font = Enum.Font.Gotham; hipBox.TextSize = SMALL_FONT; hipBox.Parent = hipFrame
-local hipLoop = Instance.new("TextButton"); hipLoop.Size = UDim2.new(0.34,0,1,0); hipLoop.Position = UDim2.new(0.63,6,0,0); hipLoop.BackgroundColor3 = Color3.fromRGB(40,40,40); hipLoop.BorderSizePixel = 0; hipLoop.Font = Enum.Font.Gotham; hipLoop.TextSize = 11; hipLoop.TextColor3 = Color3.new(1,1,1); hipLoop.Text = "Loop: Off"; hipLoop.Parent = hipFrame
+local hipFrame = Instance.new("Frame"); hipFrame.Size = UDim2.new(1,0,0,BTN_H); hipFrame.BackgroundTransparency = 1; hipFrame.Parent = advScroll; hipFrame.ZIndex = 100000
+local hipBox = Instance.new("TextBox"); hipBox.Size = UDim2.new(0.62,0,1,0); hipBox.Position = UDim2.new(0,0,0,0); hipBox.Text = "2"; hipBox.PlaceholderText = "Hip"; hipBox.BackgroundColor3 = Color3.fromRGB(50,50,50); hipBox.TextColor3 = Color3.new(1,1,1); hipBox.BorderSizePixel = 0; hipBox.Font = Enum.Font.Gotham; hipBox.TextSize = SMALL_FONT; hipBox.Parent = hipFrame; hipBox.ZIndex = 100000
+local hipLoop = Instance.new("TextButton"); hipLoop.Size = UDim2.new(0.34,0,1,0); hipLoop.Position = UDim2.new(0.63,6,0,0); hipLoop.BackgroundColor3 = Color3.fromRGB(40,40,40); hipLoop.BorderSizePixel = 0; hipLoop.Font = Enum.Font.Gotham; hipLoop.TextSize = 11; hipLoop.TextColor3 = Color3.new(1,1,1); hipLoop.Text = "Loop: Off"; hipLoop.Parent = hipFrame; hipLoop.ZIndex = 100000
 
-local trackerFrame = Instance.new("Frame"); trackerFrame.Size = UDim2.new(1,0,0,BTN_H); trackerFrame.BackgroundTransparency = 1; trackerFrame.Parent = advScroll
+local trackerFrame = Instance.new("Frame"); trackerFrame.Size = UDim2.new(1,0,0,BTN_H); trackerFrame.BackgroundTransparency = 1; trackerFrame.Parent = advScroll; trackerFrame.ZIndex = 100000
 local trackerToggleBtn = Instance.new("TextButton")
 trackerToggleBtn.Size = UDim2.new(1,0,1,0)
 trackerToggleBtn.BackgroundColor3 = Color3.fromRGB(58,58,58)
@@ -834,6 +858,7 @@ trackerToggleBtn.TextSize = SMALL_FONT
 trackerToggleBtn.TextColor3 = Color3.new(1,1,1)
 trackerToggleBtn.Text = "Toggle NPC Tracker"
 trackerToggleBtn.Parent = trackerFrame
+trackerToggleBtn.ZIndex = 100000
 
 -- LocalScript click-kill tool integration
 local createClickKillOnRespawn = false
@@ -860,13 +885,21 @@ local function ensureClickKillGui()
     local pg = getPlayerGui()
     if not pg then return nil end
     local existing = pg:FindFirstChild("NPCKillToolGUI")
-    if existing and existing:IsA("ScreenGui") then return existing end
+    if existing and existing:IsA("ScreenGui") then
+        -- ensure overlay settings remain
+        existing.ZIndexBehavior = Enum.ZIndexBehavior.Global
+        existing.DisplayOrder = 2147483647
+        return existing
+    end
 
     local sg = Instance.new("ScreenGui")
     sg.Name = "NPCKillToolGUI"
     sg.ResetOnSpawn = false
     sg.Parent = pg
     sg.Enabled = false
+    -- ensure this ScreenGui also overlays everything
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    sg.DisplayOrder = 2147483647
 
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(0, 220, 0, 152) -- increased height for extra toggles
@@ -876,6 +909,7 @@ local function ensureClickKillGui()
     frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
     frame.BorderSizePixel = 0
     frame.Parent = sg
+    frame.ZIndex = 100002
 
     -- Make frame draggable: manual dragging for cross-platform
     frame.Active = true -- allow input
@@ -923,6 +957,7 @@ local function ensureClickKillGui()
     title.TextColor3 = Color3.new(1,1,1)
     title.Text = "NPCKill Tool - Click Fling"
     title.Parent = frame
+    title.ZIndex = 100002
 
     local pLabel = Instance.new("TextLabel")
     pLabel.Size = UDim2.new(0.5, -6, 0, 24)
@@ -933,6 +968,7 @@ local function ensureClickKillGui()
     pLabel.TextColor3 = Color3.new(1,1,1)
     pLabel.Text = "Fling Power"
     pLabel.Parent = frame
+    pLabel.ZIndex = 100002
 
     local pBox = Instance.new("TextBox")
     pBox.Size = UDim2.new(0.44, 0, 0, 24)
@@ -945,6 +981,7 @@ local function ensureClickKillGui()
     pBox.TextSize = 12
     pBox.ClearTextOnFocus = false
     pBox.Parent = frame
+    pBox.ZIndex = 100002
 
     -- Restore delay label + box
     local rLabel = Instance.new("TextLabel")
@@ -956,6 +993,7 @@ local function ensureClickKillGui()
     rLabel.TextColor3 = Color3.new(1,1,1)
     rLabel.Text = "Restore Delay (s)"
     rLabel.Parent = frame
+    rLabel.ZIndex = 100002
 
     local rBox = Instance.new("TextBox")
     rBox.Size = UDim2.new(0.44, 0, 0, 24)
@@ -968,6 +1006,7 @@ local function ensureClickKillGui()
     rBox.TextSize = 12
     rBox.ClearTextOnFocus = false
     rBox.Parent = frame
+    rBox.ZIndex = 100002
 
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Size = UDim2.new(1, -8, 0, 20)
@@ -978,6 +1017,7 @@ local function ensureClickKillGui()
     toggleBtn.TextColor3 = Color3.new(1,1,1)
     toggleBtn.Text = "Click-Kill Fling: Off"
     toggleBtn.Parent = frame
+    toggleBtn.ZIndex = 100002
 
     -- Kill through walls toggle
     local killWallsBtn = Instance.new("TextButton")
@@ -989,6 +1029,7 @@ local function ensureClickKillGui()
     killWallsBtn.TextColor3 = Color3.new(1,1,1)
     killWallsBtn.Text = "Kill Through Walls: Off"
     killWallsBtn.Parent = frame
+    killWallsBtn.ZIndex = 100002
 
     -- New: Only-Fling (no kill) toggle (placed below the killWallsBtn)
     local onlyFlingBtn = Instance.new("TextButton")
@@ -1000,6 +1041,7 @@ local function ensureClickKillGui()
     onlyFlingBtn.TextColor3 = Color3.new(1,1,1)
     onlyFlingBtn.Text = "Only Fling (no Kill): Off"
     onlyFlingBtn.Parent = frame
+    onlyFlingBtn.ZIndex = 100002
 
     -- Wire up interactions
     pBox.FocusLost:Connect(function()
@@ -1143,6 +1185,9 @@ local function createClickKillTool()
             -- start closed on equip, small toggle shows "+"
             sg.Enabled = false
             smallEquipToggle.Text = "+"
+            -- ensure overlay settings persisted
+            sg.ZIndexBehavior = Enum.ZIndexBehavior.Global
+            sg.DisplayOrder = 2147483647
         end
 
         smallEquipToggle.Visible = true
@@ -1278,7 +1323,6 @@ local function createClickKillTool()
         local model = nil
         -- attempt to get model via the helper that will fallback to killThroughWalls logic
         model = (function()
-            -- use getNPCModelFromMouse helper defined earlier, but it's local in createClickKillTool scope. Recreate minimal call:
             -- try direct target
             local function quickGet()
                 local tp = nil
@@ -1473,6 +1517,7 @@ local function ensureTypeLeftPage(typeName)
     page.BackgroundTransparency = 1
     page.Visible = false
     page.Parent = leftPanel
+    page.ZIndex = 100000
     local layout = Instance.new("UIListLayout"); layout.Parent = page; layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Padding = UDim.new(0,4)
 
     local pad = Instance.new("Frame"); pad.Size = UDim2.new(1,0,0,6); pad.BackgroundTransparency = 1; pad.Parent = page
@@ -1550,12 +1595,15 @@ local function ensureTypeLeftPage(typeName)
             exPage.BackgroundTransparency = 1
             exPage.Visible = true
             exPage.Parent = exclScroll
+            exPage.ZIndex = 100000
             local exLayout = Instance.new("UIListLayout"); exLayout.Parent = exPage; exLayout.SortOrder = Enum.SortOrder.LayoutOrder; exLayout.Padding = UDim.new(0,4)
             for _,eff in ipairs(EFFECTS) do
                 local row = Instance.new("Frame"); row.Size = UDim2.new(1,0,0,BTN_H); row.BackgroundTransparency = 1; row.Parent = exPage
+                row.ZIndex = 100000
                 local btn = Instance.new("TextButton"); btn.Size = UDim2.new(1,0,1,0); btn.Position = UDim2.new(0,0,0,0);
                 btn.BackgroundColor3 = (excluded[selectedType][eff] and Color3.fromRGB(60,180,75) or Color3.fromRGB(58,58,58))
                 btn.BorderSizePixel = 0; btn.Font = Enum.Font.Gotham; btn.TextSize = SMALL_FONT; btn.TextColor3 = Color3.new(1,1,1); btn.Text = eff .. (excluded[selectedType][eff] and " (excluded)" or ""); btn.Parent = row
+                btn.ZIndex = 100000
                 btn.MouseButton1Click:Connect(function()
                     excluded[selectedType][eff] = not excluded[selectedType][eff]
                     btn.BackgroundColor3 = (excluded[selectedType][eff] and Color3.fromRGB(60,180,75) or Color3.fromRGB(58,58,58))
@@ -1588,18 +1636,23 @@ local function ensureTypeFeaturePage(typeName)
     page.BackgroundTransparency = 1
     page.Visible = false
     page.Parent = featScroll
+    page.ZIndex = 100000
     local layout = Instance.new("UIListLayout"); layout.Parent = page; layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Padding = UDim.new(0,4)
 
     for _,eff in ipairs(EFFECTS) do
         local row = Instance.new("Frame"); row.Size = UDim2.new(1,0,0,BTN_H); row.BackgroundTransparency = 1; row.Parent = page
+        row.ZIndex = 100000
         local btn = Instance.new("TextButton"); btn.Size = UDim2.new(0.5,0,1,0); btn.Position = UDim2.new(0,0,0,0); btn.BackgroundColor3 = Color3.fromRGB(58,58,58); btn.BorderSizePixel = 0; btn.Font = Enum.Font.Gotham; btn.TextSize = SMALL_FONT; btn.TextColor3 = Color3.new(1,1,1); btn.Text = eff; btn.Parent = row
+        btn.ZIndex = 100000
         local small
         local input = nil
         local hasTextbox = (eff == "Speed" or eff == "JumpPower" or eff == "HipHeight" or eff == "Fling")
         if eff ~= "Tracker" then
             small = Instance.new("TextButton"); small.Size = UDim2.new(0.48,0,1,0); small.Position = UDim2.new(0.52,6,0,0); small.BackgroundColor3 = Color3.fromRGB(40,40,40); small.BorderSizePixel = 0; small.Font = Enum.Font.Gotham; small.TextSize = 11; small.TextColor3 = Color3.new(1,1,1); small.Text = "Loop: Off"; small.Parent = row
+            small.ZIndex = 100000
         else
             small = Instance.new("TextLabel"); small.Size = UDim2.new(0.48,0,1,0); small.Position = UDim2.new(0.52,6,0,0); small.BackgroundTransparency = 1; small.Font = Enum.Font.Gotham; small.TextSize = 11; small.TextColor3 = Color3.new(1,1,1); small.Text = "(tracker scan)"; small.Parent = row
+            small.ZIndex = 100000
         end
 
         if hasTextbox then
@@ -1610,6 +1663,7 @@ local function ensureTypeFeaturePage(typeName)
             elseif eff == "Fling" then input.Text = tostring(flingBox.Text or "200")
             else input.Text = "" end
             input.Parent = row
+            input.ZIndex = 100000
             if small and small:IsA("TextButton") then small.Position = UDim2.new(0.8,6,0,0) end
         end
 
@@ -1738,6 +1792,7 @@ local function rebuildGroupedList()
         frame.Size = UDim2.new(1,0,0,BTN_H)
         frame.BackgroundTransparency = 1
         frame.Parent = groupScroll
+        frame.ZIndex = 100000
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(0.6,0,1,0)
         btn.Position = UDim2.new(0,0,0,0)
@@ -1748,6 +1803,7 @@ local function rebuildGroupedList()
         btn.TextColor3 = Color3.new(1,1,1)
         btn.Text = string.format("%s [%d]", name, count)
         btn.Parent = frame
+        btn.ZIndex = 100000
         local info = Instance.new("TextLabel")
         info.Size = UDim2.new(0.38, 0, 1, 0)
         info.Position = UDim2.new(0.62, 6, 0, 0)
@@ -1757,6 +1813,7 @@ local function rebuildGroupedList()
         info.TextColor3 = Color3.new(1,1,1)
         info.Text = "Select"
         info.Parent = frame
+        info.ZIndex = 100000
 
         btn.MouseButton1Click:Connect(function()
             showTypeUI(name, count)
@@ -1974,10 +2031,10 @@ jumpGlobalBox.FocusLost:Connect(function()
 end)
 
 -- Click-Kill Tool creation toggle UI (placed in advanced panel)
-local toolToggleFrame = Instance.new("Frame"); toolToggleFrame.Size = UDim2.new(1,0,0,BTN_H); toolToggleFrame.BackgroundTransparency = 1; toolToggleFrame.Parent = advScroll
-local toolToggleBtn = Instance.new("TextButton"); toolToggleBtn.Size = UDim2.new(0.64,0,1,0); toolToggleBtn.Position = UDim2.new(0,0,0,0); toolToggleBtn.BackgroundColor3 = Color3.fromRGB(58,58,58); toolToggleBtn.BorderSizePixel = 0; toolToggleBtn.Font = Enum.Font.Gotham; toolToggleBtn.TextSize = SMALL_FONT; toolToggleBtn.TextColor3 = Color3.new(1,1,1); toolToggleBtn.Text = "Create Click-Kill Tool on Respawn: Off"; toolToggleBtn.Parent = toolToggleFrame
+local toolToggleFrame = Instance.new("Frame"); toolToggleFrame.Size = UDim2.new(1,0,0,BTN_H); toolToggleFrame.BackgroundTransparency = 1; toolToggleFrame.Parent = advScroll; toolToggleFrame.ZIndex = 100000
+local toolToggleBtn = Instance.new("TextButton"); toolToggleBtn.Size = UDim2.new(0.64,0,1,0); toolToggleBtn.Position = UDim2.new(0,0,0,0); toolToggleBtn.BackgroundColor3 = Color3.fromRGB(58,58,58); toolToggleBtn.BorderSizePixel = 0; toolToggleBtn.Font = Enum.Font.Gotham; toolToggleBtn.TextSize = SMALL_FONT; toolToggleBtn.TextColor3 = Color3.new(1,1,1); toolToggleBtn.Text = "Create Click-Kill Tool on Respawn: Off"; toolToggleBtn.Parent = toolToggleFrame; toolToggleBtn.ZIndex = 100000
 toolToggleBtn.TextScaled = true -- ensure label fits
-local toolToggleClear = Instance.new("TextButton"); toolToggleClear.Size = UDim2.new(0.32,0,1,0); toolToggleClear.Position = UDim2.new(0.66,6,0,0); toolToggleClear.BackgroundColor3 = Color3.fromRGB(40,40,40); toolToggleClear.BorderSizePixel = 0; toolToggleClear.Font = Enum.Font.Gotham; toolToggleClear.TextSize = 11; toolToggleClear.TextColor3 = Color3.new(1,1,1); toolToggleClear.Text = "Create Now"; toolToggleClear.Parent = toolToggleFrame
+local toolToggleClear = Instance.new("TextButton"); toolToggleClear.Size = UDim2.new(0.32,0,1,0); toolToggleClear.Position = UDim2.new(0.66,6,0,0); toolToggleClear.BackgroundColor3 = Color3.fromRGB(40,40,40); toolToggleClear.BorderSizePixel = 0; toolToggleClear.Font = Enum.Font.Gotham; toolToggleClear.TextSize = 11; toolToggleClear.TextColor3 = Color3.new(1,1,1); toolToggleClear.Text = "Create Now"; toolToggleClear.Parent = toolToggleFrame; toolToggleClear.ZIndex = 100000
 
 toolToggleBtn.MouseButton1Click:Connect(function()
     setCreateClickKillOnRespawn(not createClickKillOnRespawn)
