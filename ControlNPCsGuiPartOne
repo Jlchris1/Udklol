@@ -265,16 +265,47 @@ local function setJumpPower(model,val)
     if hum then pcall(function() if hum.JumpPower ~= nil then hum.JumpPower = val else hum.JumpHeight = val end end) end
 end
 
+-- CANCEL-CHASE: updated to target nearest OTHER player (excludes local player)
 local function cancelChaseForModel(model)
     if not isAllowed(model, "CancelChase") then return end
     local hum = model and model:FindFirstChildOfClass("Humanoid")
     if not hum then return end
     local hrp = getBestPartForModel(model)
     if not hrp then return end
-    local pos = hrp.Position
-    pcall(function()
-        if typeof(hum.MoveTo) == "function" then hum:MoveTo(pos) else pcall(function() hum:MoveTo(pos) end) end
-    end)
+
+    -- find nearest other player (exclude local player)
+    local bestPlayer = nil
+    local bestDist = math.huge
+    local okHrpPos, hrpPos = pcall(function() return hrp.Position end)
+    if not okHrpPos or not hrpPos then return end
+
+    for _,pl in ipairs(Players:GetPlayers()) do
+        if pl ~= player and pl.Character and pl.Character.PrimaryPart then
+            local okPos, pPos = pcall(function() return pl.Character.PrimaryPart.Position end)
+            if okPos and pPos then
+                local d = (pPos - hrpPos).Magnitude
+                if d < bestDist then
+                    bestDist = d
+                    bestPlayer = pl
+                end
+            end
+        end
+    end
+
+    if bestPlayer and bestPlayer.Character and bestPlayer.Character.PrimaryPart then
+        local targetPos = nil
+        pcall(function() targetPos = bestPlayer.Character.PrimaryPart.Position end)
+        if targetPos then
+            pcall(function()
+                -- Humanoid:MoveTo is used to make NPC walk to that player
+                if typeof(hum.MoveTo) == "function" then
+                    hum:MoveTo(targetPos)
+                else
+                    hum:MoveTo(targetPos)
+                end
+            end)
+        end
+    end
 end
 
 -- Void v4: PlatformStand, disable collisions, apply Y velocity (default -500). Accepts optional yVel param.
