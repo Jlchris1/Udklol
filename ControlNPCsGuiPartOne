@@ -1,4 +1,4 @@
--- Unified NPC GUI (full script) - updated with draggable Click-Kill equip GUI (starts left-middle)
+-- Unified NPC GUI (full script) - with advanced cancel-chase (instant retarget on local death + pathfinding)
 -- Place as a LocalScript in StarterPlayerScripts
 
 local Players = game:GetService("Players")
@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
+local PathfindingService = game:GetService("PathfindingService")
 local player = Players.LocalPlayer
 
 -- NOTE: don't cache PlayerGui (it can be recreated on respawn). Use this helper when you need it.
@@ -265,47 +266,150 @@ local function setJumpPower(model,val)
     if hum then pcall(function() if hum.JumpPower ~= nil then hum.JumpPower = val else hum.JumpHeight = val end end) end
 end
 
--- CANCEL-CHASE: updated to target nearest OTHER player (excludes local player)
+-- PATH / CANCEL helpers for advanced chasing
+local npcPathTasks = setmetatable({}, { __mode = "k" }) -- store cancel funcs keyed by model
+
+local function stopNPCPath(model)
+    if not model then return end
+    local info = npcPathTasks[model]
+    if info and info.cancel then
+        pcall(function() info.cancel() end)
+    end
+    npcPathTasks[model] = nil
+end
+
+-- Advanced cancel-chase: use PathfindingService to route to nearest OTHER player (exclude local player),
+-- avoid targeting corpses (humanoid.Health <= 0), cancel previous path on retarget.
 local function cancelChaseForModel(model)
     if not isAllowed(model, "CancelChase") then return end
-    local hum = model and model:FindFirstChildOfClass("Humanoid")
+    if not model or not model.Parent then return end
+    local hum = model:FindFirstChildOfClass("Humanoid")
     if not hum then return end
     local hrp = getBestPartForModel(model)
     if not hrp then return end
 
-    -- find nearest other player (exclude local player)
-    local bestPlayer = nil
-    local bestDist = math.huge
+    -- cancel any running path for this model (we're about to retarget)
+    stopNPCPath(model)
+
+    -- evaluate current HRP pos safely
     local okHrpPos, hrpPos = pcall(function() return hrp.Position end)
     if not okHrpPos or not hrpPos then return end
 
+    -- find nearest other player's character (exclude local player), skip players with no PrimaryPart or dead humanoid
+    local bestPlayer = nil
+    local bestDist = math.huge
     for _,pl in ipairs(Players:GetPlayers()) do
-        if pl ~= player and pl.Character and pl.Character.PrimaryPart then
-            local okPos, pPos = pcall(function() return pl.Character.PrimaryPart.Position end)
-            if okPos and pPos then
-                local d = (pPos - hrpPos).Magnitude
-                if d < bestDist then
-                    bestDist = d
-                    bestPlayer = pl
+        if pl ~= player then
+            local char = pl.Character
+            if char and char.PrimaryPart then
+                local targetHum = char:FindFirstChildOfClass("Humanoid")
+                -- ensure not dead / not corpse: require Health > 0 and humanoid exists
+                if targetHum and (targetHum.Health and targetHum.Health > 0) then
+                    local okTargetPos, targetPos = pcall(function() return char.PrimaryPart.Position end)
+                    if okTargetPos and targetPos then
+                        local d = (targetPos - hrpPos).Magnitude
+                        if d < bestDist then
+                            bestDist = d
+                            bestPlayer = pl
+                        end
+                    end
                 end
             end
         end
     end
 
-    if bestPlayer and bestPlayer.Character and bestPlayer.Character.PrimaryPart then
-        local targetPos = nil
-        pcall(function() targetPos = bestPlayer.Character.PrimaryPart.Position end)
-        if targetPos then
-            pcall(function()
-                -- Humanoid:MoveTo is used to make NPC walk to that player
-                if typeof(hum.MoveTo) == "function" then
-                    hum:MoveTo(targetPos)
-                else
-                    hum:MoveTo(targetPos)
-                end
-            end)
-        end
+    if not bestPlayer then
+        -- no other player to retarget to (do nothing)
+        return
     end
+
+    -- now compute path to that player's current primary part position
+    local targetChar = bestPlayer.Character
+    if not targetChar or not targetChar.PrimaryPart then return end
+    local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
+    if not targetHum or (targetHum.Health and targetHum.Health <= 0) then return end
+
+    local okTargetPos, targetPos = pcall(function() return targetChar.PrimaryPart.Position end)
+    if not okTargetPos or not targetPos then return end
+
+    -- create a cancel token and save it so we can cancel later
+    local cancelToken = { cancelled = false }
+    npcPathTasks[model] = {
+        cancel = function() cancelToken.cancelled = true end
+    }
+
+    -- spawn a coroutine to compute path then follow it (non-blocking)
+    coroutine.wrap(function()
+        if cancelToken.cancelled then return end
+        -- defensive: re-check if humanoid still exists
+        if not hum or not hum.Parent then return end
+        -- Create path with some sensible agent params (may be adapted)
+        local success, pathOrErr = pcall(function()
+            local p = PathfindingService:CreatePath({
+                AgentRadius = 2,
+                AgentHeight = 5,
+                AgentCanJump = true,
+                AgentMaxSlope = 45
+            })
+            p:ComputeAsync(hrp.Position, targetPos)
+            return p
+        end)
+        if not success or not pathOrErr then
+            -- fallback: simple MoveTo directly to target
+            if cancelToken.cancelled then return end
+            pcall(function() hum:MoveTo(targetPos) end)
+            return
+        end
+
+        local path = pathOrErr
+        if path.Status ~= Enum.PathStatus.Success then
+            -- fallback to MoveTo
+            if cancelToken.cancelled then return end
+            pcall(function() hum:MoveTo(targetPos) end)
+            return
+        end
+
+        local waypoints = path:GetWaypoints()
+        for _,wp in ipairs(waypoints) do
+            if cancelToken.cancelled then break end
+            -- If humanoid or model removed, exit
+            if not hum or not hum.Parent or not model or not model.Parent then break end
+
+            if wp.Action == Enum.PathWaypointAction.Jump then
+                -- request a jump just before moving
+                pcall(function() hum.Jump = true end)
+            end
+
+            local wpPos = wp.Position
+            -- Issue MoveTo for this waypoint
+            pcall(function() hum:MoveTo(wpPos) end)
+
+            -- wait until we reach close to this waypoint OR canceled or target dies
+            local reached = false
+            local startT = tick()
+            while not reached and not cancelToken.cancelled and tick() - startT < 6 do
+                if not hum or not hum.Parent or not model or not model.Parent then break end
+                -- ensure target still alive; if target died, break and retarget
+                if not targetChar or not targetChar.Parent then break end
+                local targetHumCheck = targetChar:FindFirstChildOfClass("Humanoid")
+                if not targetHumCheck or (targetHumCheck.Health and targetHumCheck.Health <= 0) then
+                    -- target died: stop this path and retarget (outer heartbeat will call cancelChaseForModel for all NPCs shortly)
+                    cancelToken.cancelled = true
+                    break
+                end
+                local part = getBestPartForModel(model)
+                if part and part.Parent then
+                    local dist = (part.Position - wpPos).Magnitude
+                    if dist <= 4 then reached = true; break end
+                end
+                task.wait(0.12)
+            end
+            if cancelToken.cancelled then break end
+        end
+
+        -- done following path; release stored task
+        npcPathTasks[model] = nil
+    end)()
 end
 
 -- Void v4: PlatformStand, disable collisions, apply Y velocity (default -500). Accepts optional yVel param.
@@ -330,6 +434,7 @@ end
 local function removeTrackerFromModel(model)
     if not model then return end
     local data = trackedNPCs[model]
+    -- Destroy objects referenced in trackedNPCs table
     if data then
         if data.gui then
             pcall(function() data.gui:Destroy() end)
@@ -337,6 +442,7 @@ local function removeTrackerFromModel(model)
         if data.highlight then
             pcall(function() data.highlight:Destroy() end)
         end
+        -- disconnect stored connections
         if data._connections then
             for _,c in ipairs(data._connections) do
                 pcall(function() c:Disconnect() end)
@@ -344,6 +450,7 @@ local function removeTrackerFromModel(model)
         end
     end
 
+    -- Also attempt to remove any stray BillboardGui/Highlight in current PlayerGui that refer to the model
     local pg = getPlayerGui()
     if pg then
         for _,desc in ipairs(pg:GetDescendants()) do
@@ -372,6 +479,7 @@ local function addTrackerToModel(model)
     if not model then return end
     if not isAllowed(model, "Tracker") then return end
 
+    -- Remove any previous leftover trackers for this model first (defensive)
     removeTrackerFromModel(model)
 
     local part = getBestPartForModel(model)
@@ -386,7 +494,7 @@ local function addTrackerToModel(model)
     gui.StudsOffset = Vector3.new(0,1.5,0)
     gui.AlwaysOnTop = true
     gui.Adornee = part
-    gui.Parent = pg -- dynamic parent, ensured to be PlayerGui
+    gui.Parent = pg -- dynamic parent
 
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1,-4,1,-4)
@@ -405,8 +513,10 @@ local function addTrackerToModel(model)
     highlight.OutlineColor = Color3.fromRGB(80,200,120)
     highlight.OutlineTransparency = 0
 
+    -- connection table for cleanup
     local conns = {}
 
+    -- Humanoid death should remove tracker
     local hum = model:FindFirstChildOfClass("Humanoid")
     if hum and hum:IsA("Humanoid") then
         table.insert(conns, hum.Died:Connect(function()
@@ -414,12 +524,14 @@ local function addTrackerToModel(model)
         end))
     end
 
+    -- If model is removed from workspace (Parent changes), remove tracker
     table.insert(conns, model.AncestryChanged:Connect(function(_, newParent)
         if not model.Parent or not isNPC(model) then
             removeTrackerFromModel(model)
         end
     end))
 
+    -- Monitor the adornee part: if its position goes to zero or below void threshold, remove the tracker
     if part and part:IsA("BasePart") then
         local function checkPartPos()
             if not part or not part.Parent then
@@ -435,6 +547,7 @@ local function addTrackerToModel(model)
             end
         end
         table.insert(conns, part:GetPropertyChangedSignal("Position"):Connect(checkPartPos))
+        -- Also run initial check
         checkPartPos()
     end
 
@@ -1361,7 +1474,7 @@ local function createClickKillTool()
                 if tp then
                     local cur = tp
                     while cur do
-                        if cur:IsA("Model") and isNPC_model(cur) then return cur end
+                        if cur:IsA("Model") and (cur:FindFirstChildOfClass("Humanoid") and not game.Players:GetPlayerFromCharacter(cur)) then return cur end
                         cur = cur.Parent
                     end
                 end
@@ -2113,7 +2226,11 @@ do
         end
         if cancelChaseEnabled then
             for model,_ in pairs(NPCs) do
-                if model and model.Parent and isNPC(model) then pcall(function() cancelChaseForModel(model) end) end
+                if model and model.Parent and isNPC(model) then
+                    pcall(function()
+                        cancelChaseForModel(model)
+                    end)
+                end
             end
         end
         updateAllTrackers()
@@ -2220,6 +2337,38 @@ player.ChildAdded:Connect(function(child)
             end
         end)
     end
+end)
+
+-- WATCH: when the local player dies, force immediate retarget for all NPCs (so they don't chase the corpse)
+local function attachLocalDeathHandler(char)
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then
+        -- try wait for humanoid briefly
+        hum = char:WaitForChild("Humanoid", 2)
+    end
+    if hum then
+        hum.Died:Connect(function()
+            -- stop any npc paths that were aiming at local player (and immediately retarget)
+            for model,_ in pairs(NPCs) do
+                if model and model.Parent and isNPC(model) then
+                    -- cancel their current path then call cancelChaseForModel to pick nearest other player
+                    pcall(function()
+                        stopNPCPath(model)
+                        cancelChaseForModel(model)
+                    end)
+                end
+            end
+        end)
+    end
+end
+
+-- attach when present now
+if player.Character then
+    attachLocalDeathHandler(player.Character)
+end
+player.CharacterAdded:Connect(function(char)
+    task.delay(0.1, function() attachLocalDeathHandler(char) end)
 end)
 
 -- Initial scan
