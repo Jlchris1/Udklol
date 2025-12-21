@@ -1,4 +1,4 @@
--- Unified NPC GUI (full script) - with advanced cancel-chase (pathfinding + door detection + teleport fallback)
+-- Unified NPC GUI (full script) - with advanced cancel-chase (instant retarget on local death + pathfinding)
 -- Place as a LocalScript in StarterPlayerScripts
 
 local Players = game:GetService("Players")
@@ -280,8 +280,6 @@ end
 
 -- Advanced cancel-chase: use PathfindingService to route to nearest OTHER player (exclude local player),
 -- avoid targeting corpses (humanoid.Health <= 0), cancel previous path on retarget.
--- Added: detect non-collidable obstacles (doors) via a straight raycast and treat them as passable;
--- if pathfinding fails and the straight ray is blocked by collidable geometry, teleport NPC close to player.
 local function cancelChaseForModel(model)
     if not isAllowed(model, "CancelChase") then return end
     if not model or not model.Parent then return end
@@ -306,7 +304,7 @@ local function cancelChaseForModel(model)
             if char and char.PrimaryPart then
                 local targetHum = char:FindFirstChildOfClass("Humanoid")
                 -- ensure not dead / not corpse: require Health > 0 and humanoid exists
-                if targetHum and (not targetHum.Health or targetHum.Health > 0) then
+                if targetHum and (targetHum.Health and targetHum.Health > 0) then
                     local okTargetPos, targetPos = pcall(function() return char.PrimaryPart.Position end)
                     if okTargetPos and targetPos then
                         local d = (targetPos - hrpPos).Magnitude
@@ -325,7 +323,7 @@ local function cancelChaseForModel(model)
         return
     end
 
-    -- now compute target position
+    -- now compute path to that player's current primary part position
     local targetChar = bestPlayer.Character
     if not targetChar or not targetChar.PrimaryPart then return end
     local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
@@ -343,8 +341,8 @@ local function cancelChaseForModel(model)
     -- spawn a coroutine to compute path then follow it (non-blocking)
     coroutine.wrap(function()
         if cancelToken.cancelled then return end
+        -- defensive: re-check if humanoid still exists
         if not hum or not hum.Parent then return end
-
         -- Create path with some sensible agent params (may be adapted)
         local success, pathOrErr = pcall(function()
             local p = PathfindingService:CreatePath({
@@ -356,87 +354,46 @@ local function cancelChaseForModel(model)
             p:ComputeAsync(hrp.Position, targetPos)
             return p
         end)
-
         if not success or not pathOrErr then
-            -- path service failed — fall back to direct MoveTo if unobstructed, else teleport
+            -- fallback: simple MoveTo directly to target
             if cancelToken.cancelled then return end
-
-            local okRay, rayRes = pcall(function()
-                local rp = RaycastParams.new()
-                rp.FilterDescendantsInstances = { model }
-                rp.FilterType = Enum.RaycastFilterType.Blacklist
-                return Workspace:Raycast(hrpPos, targetPos - hrpPos, rp)
-            end)
-            local unobstructed = (okRay and not rayRes)
-
-            if unobstructed then
-                pcall(function() hum:MoveTo(targetPos) end)
-                npcPathTasks[model] = nil
-                return
-            else
-                -- teleport onto the isolated player (small offset to avoid exact overlap)
-                local offset = Vector3.new(math.random(-2,2), 2, math.random(-2,2))
-                local bp = getBestPartForModel(model)
-                if bp and bp:IsA("BasePart") then
-                    pcall(function() bp.CFrame = CFrame.new(targetPos + offset) end)
-                end
-                npcPathTasks[model] = nil
-                return
-            end
+            pcall(function() hum:MoveTo(targetPos) end)
+            return
         end
 
         local path = pathOrErr
         if path.Status ~= Enum.PathStatus.Success then
-            -- Path not found: check if straight-line is unobstructed (doors, non-collidable obstacles)
-            local okRay, rayRes = pcall(function()
-                local rp = RaycastParams.new()
-                rp.FilterDescendantsInstances = { model }
-                rp.FilterType = Enum.RaycastFilterType.Blacklist
-                return Workspace:Raycast(hrpPos, targetPos - hrpPos, rp)
-            end)
-            local unobstructed = (okRay and not rayRes)
-
-            if unobstructed then
-                -- Straight line is clear (no collidable obstacles) -> go direct
-                if cancelToken.cancelled then
-                    npcPathTasks[model] = nil
-                    return
-                end
-                pcall(function() hum:MoveTo(targetPos) end)
-                npcPathTasks[model] = nil
-                return
-            else
-                -- blocked by collidable geometry -> teleport close to target (they're isolated)
-                local offset = Vector3.new(math.random(-2,2), 2, math.random(-2,2))
-                local bp = getBestPartForModel(model)
-                if bp and bp:IsA("BasePart") then
-                    pcall(function() bp.CFrame = CFrame.new(targetPos + offset) end)
-                end
-                npcPathTasks[model] = nil
-                return
-            end
+            -- fallback to MoveTo
+            if cancelToken.cancelled then return end
+            pcall(function() hum:MoveTo(targetPos) end)
+            return
         end
 
-        -- Path succeeded: follow waypoints
         local waypoints = path:GetWaypoints()
         for _,wp in ipairs(waypoints) do
             if cancelToken.cancelled then break end
+            -- If humanoid or model removed, exit
             if not hum or not hum.Parent or not model or not model.Parent then break end
 
             if wp.Action == Enum.PathWaypointAction.Jump then
+                -- request a jump just before moving
                 pcall(function() hum.Jump = true end)
             end
 
             local wpPos = wp.Position
+            -- Issue MoveTo for this waypoint
             pcall(function() hum:MoveTo(wpPos) end)
 
+            -- wait until we reach close to this waypoint OR canceled or target dies
             local reached = false
             local startT = tick()
             while not reached and not cancelToken.cancelled and tick() - startT < 6 do
                 if not hum or not hum.Parent or not model or not model.Parent then break end
+                -- ensure target still alive; if target died, break and retarget
                 if not targetChar or not targetChar.Parent then break end
                 local targetHumCheck = targetChar:FindFirstChildOfClass("Humanoid")
                 if not targetHumCheck or (targetHumCheck.Health and targetHumCheck.Health <= 0) then
+                    -- target died: stop this path and retarget (outer heartbeat will call cancelChaseForModel for all NPCs shortly)
                     cancelToken.cancelled = true
                     break
                 end
@@ -450,6 +407,7 @@ local function cancelChaseForModel(model)
             if cancelToken.cancelled then break end
         end
 
+        -- done following path; release stored task
         npcPathTasks[model] = nil
     end)()
 end
