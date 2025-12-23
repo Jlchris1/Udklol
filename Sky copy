@@ -1,0 +1,522 @@
+-- Sky & Effects Inspector
+-- LocalScript. Place under StarterPlayerScripts or StarterGui (LocalScripts only run for players).
+-- Scans workspace for ParticleEmitters and Lighting for sky/visual effects and displays properties with copy buttons.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+local player = Players.LocalPlayer
+if not player then
+    Players.PlayerAdded:Wait()
+    player = Players.LocalPlayer
+end
+
+-- Create GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SkyEffectsInspectorGUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 999
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0.9, 0, 0.75, 0)
+main.Position = UDim2.new(0.05, 0, 0.12, 0)
+main.BackgroundTransparency = 0.06
+main.BackgroundColor3 = Color3.fromRGB(25,25,30)
+main.BorderSizePixel = 0
+main.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner", main)
+uiCorner.CornerRadius = UDim.new(0,8)
+
+-- Title bar
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 40)
+title.Position = UDim2.new(0,10,0,8)
+title.BackgroundTransparency = 1
+title.Text = "Sky & Effects Inspector"
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 20
+title.TextColor3 = Color3.fromRGB(235,235,235)
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = main
+
+-- Tabs container (horizontal scrolling)
+local tabsFrame = Instance.new("ScrollingFrame")
+tabsFrame.Name = "Tabs"
+tabsFrame.Size = UDim2.new(1, -20, 0, 60)
+tabsFrame.Position = UDim2.new(0,10,0,54)
+tabsFrame.BackgroundTransparency = 1
+tabsFrame.ScrollBarThickness = 6
+tabsFrame.AutomaticCanvasSize = Enum.AutomaticSize.X
+
+tabsFrame.Parent = main
+local tabsLayout = Instance.new("UIListLayout")
+tabsLayout.FillDirection = Enum.FillDirection.Horizontal
+tabsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+tabsLayout.Padding = UDim.new(0,8)
+tabsLayout.Parent = tabsFrame
+
+tabsFrame.CanvasSize = UDim2.new(1,0,0,0)
+
+local function makeTabButton(name)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0,160,1,-10)
+    btn.BackgroundTransparency = 0.18
+    btn.BackgroundColor3 = Color3.fromRGB(40,40,45)
+    btn.Font = Enum.Font.SourceSans
+    btn.TextSize = 16
+    btn.TextColor3 = Color3.fromRGB(240,240,240)
+    btn.Text = name
+    btn.AutoButtonColor = true
+    local c = Instance.new("UICorner", btn)
+    c.CornerRadius = UDim.new(0,6)
+    return btn
+end
+
+-- Content area
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, -20, 1, -130)
+content.Position = UDim2.new(0,10,0,120)
+content.BackgroundTransparency = 1
+content.Parent = main
+
+local leftPanel = Instance.new("ScrollingFrame")
+leftPanel.Name = "LeftPanel"
+leftPanel.Size = UDim2.new(0.45, -10, 1, 0)
+leftPanel.Position = UDim2.new(0,0,0,0)
+leftPanel.BackgroundTransparency = 1
+leftPanel.ScrollBarThickness = 8
+leftPanel.Parent = content
+local leftLayout = Instance.new("UIListLayout", leftPanel)
+leftLayout.SortOrder = Enum.SortOrder.LayoutOrder
+leftLayout.Padding = UDim.new(0,6)
+leftPanel:GetPropertyChangedSignal("CanvasSize"):Connect(function() end)
+
+local rightPanel = Instance.new("ScrollingFrame")
+rightPanel.Name = "RightPanel"
+rightPanel.Size = UDim2.new(0.55, 0, 1, 0)
+rightPanel.Position = UDim2.new(0.45, 10, 0, 0)
+rightPanel.BackgroundTransparency = 1
+rightPanel.ScrollBarThickness = 8
+rightPanel.Parent = content
+local rightLayout = Instance.new("UIListLayout", rightPanel)
+rightLayout.SortOrder = Enum.SortOrder.LayoutOrder
+rightLayout.Padding = UDim.new(0,6)
+
+-- Utility: safe property read
+local function safeGet(inst, prop)
+    local ok, val = pcall(function() return inst[prop] end)
+    if ok then return val end
+    return nil
+end
+
+-- Utility: create label row
+local function makeRow(parent, labelText, valueText, allowCopy)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1,0,0,36)
+    row.BackgroundTransparency = 0.12
+    row.BackgroundColor3 = Color3.fromRGB(30,30,35)
+    row.BorderSizePixel = 0
+    row.Parent = parent
+    local corner = Instance.new("UICorner", row)
+    corner.CornerRadius = UDim.new(0,6)
+
+    local lbl = Instance.new("TextLabel", row)
+    lbl.Size = UDim2.new(0.45, -8, 1, 0)
+    lbl.Position = UDim2.new(0,8,0,0)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.SourceSansSemibold
+    lbl.TextSize = 14
+    lbl.TextColor3 = Color3.fromRGB(220,220,220)
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Text = labelText
+
+    local val = Instance.new("TextLabel", row)
+    val.Size = UDim2.new(0.45, -8, 1, 0)
+    val.Position = UDim2.new(0.45,8,0,0)
+    val.BackgroundTransparency = 1
+    val.Font = Enum.Font.SourceSans
+    val.TextSize = 13
+    val.TextColor3 = Color3.fromRGB(200,200,200)
+    val.TextXAlignment = Enum.TextXAlignment.Left
+    val.Text = valueText
+
+    if allowCopy then
+        local btn = Instance.new("TextButton", row)
+        btn.Size = UDim2.new(0,70,0,28)
+        btn.Position = UDim2.new(1, -78, 0.5, -14)
+        btn.BackgroundTransparency = 0.12
+        btn.Text = "Copy"
+        btn.Font = Enum.Font.SourceSansBold
+        btn.TextSize = 13
+        local corner2 = Instance.new("UICorner", btn)
+        corner2.CornerRadius = UDim.new(0,6)
+        btn.MouseButton1Click:Connect(function()
+            local toCopy = valueText
+            -- try setclipboard (works in Studio)
+            local ok = pcall(function() setclipboard(toCopy) end)
+            if not ok then
+                -- fallback: show modal with text box for manual copy
+                local modal = Instance.new("Frame")
+                modal.Size = UDim2.new(0.5,0,0.32,0)
+                modal.Position = UDim2.new(0.25,0,0.34,0)
+                modal.BackgroundColor3 = Color3.fromRGB(18,18,22)
+                modal.Parent = screenGui
+                local c = Instance.new("UICorner", modal)
+                c.CornerRadius = UDim.new(0,8)
+                local tb = Instance.new("TextBox", modal)
+                tb.Size = UDim2.new(0.96,0,0.6,0)
+                tb.Position = UDim2.new(0.02,0,0.06,0)
+                tb.Text = toCopy
+                tb.Font = Enum.Font.SourceSans
+                tb.TextSize = 14
+                tb.ClearTextOnFocus = false
+                tb.MultiLine = true
+                tb.TextWrapped = true
+                local close = Instance.new("TextButton", modal)
+                close.Size = UDim2.new(0.2,0,0,28)
+                close.Position = UDim2.new(0.4,0,0.74,0)
+                close.Text = "Close"
+                close.Font = Enum.Font.SourceSansBold
+                close.MouseButton1Click:Connect(function() modal:Destroy() end)
+            else
+                -- show a brief notice
+                -- create small toast
+                local toast = Instance.new("TextLabel")
+                toast.Size = UDim2.new(0,160,0,30)
+                toast.Position = UDim2.new(0.5,-80,0.9,-35)
+                toast.BackgroundTransparency = 0.12
+                toast.BackgroundColor3 = Color3.fromRGB(40,40,40)
+                toast.TextColor3 = Color3.fromRGB(220,220,220)
+                toast.Text = "Copied to clipboard"
+                toast.Font = Enum.Font.SourceSans
+                toast.Parent = screenGui
+                delay(1.6, function() pcall(function() toast:Destroy() end) end)
+            end
+        end)
+    end
+    return row
+end
+
+-- Build tabs and behavior
+local tabs = {}
+local currentTab = nil
+
+local function clearPanel(panel)
+    for _,c in ipairs(panel:GetChildren()) do
+        if not (c:IsA("UIListLayout") or c:IsA("UIPadding")) then
+            c:Destroy()
+        end
+    end
+end
+
+-- Specific scanners
+local function scanParticleEmitters()
+    local out = {}
+    for _,inst in ipairs(workspace:GetDescendants()) do
+        if inst:IsA("ParticleEmitter") then
+            table.insert(out, inst)
+        end
+    end
+    return out
+end
+
+local function scanLightingEffects()
+    local classes = {
+        Atmosphere = true,
+        Sky = true,
+        ColorCorrectionEffect = true,
+        BloomEffect = true,
+        SunRaysEffect = true,
+        BlurEffect = true,
+        DepthOfFieldEffect = true,
+        SkyBox = true -- note: Sky is the builtin sky class; SkyBox alias retained for safety
+    }
+    local out = {}
+    -- include Lighting as a special entry
+    table.insert(out, Lighting)
+    for _,inst in ipairs(Lighting:GetDescendants()) do
+        if classes[inst.ClassName] then
+            table.insert(out, inst)
+        else
+            -- also include Sky-like objects
+            if inst:IsA("Sky") or inst:IsA("Atmosphere") or inst:IsA("ColorCorrectionEffect") or inst:IsA("BloomEffect") or inst:IsA("SunRaysEffect") or inst:IsA("BlurEffect") or inst:IsA("DepthOfFieldEffect") then
+                table.insert(out, inst)
+            end
+        end
+    end
+    return out
+end
+
+-- known property lists (we can't enumerate *all* properties reliably at runtime, so we target the common ones)
+local knownProps = {
+    ParticleEmitter = {"Texture","EmissionDirection","Rate","Lifetime","Speed","Size","SpreadAngle","Rotation","Color","VelocityInheritance","LightInfluence","Enabled"},
+    Sky = {"SkyboxBk","SkyboxDn","SkyboxFt","SkyboxLf","SkyboxRt","SkyboxUp","MoonTextureId","SunAngularSize","CelestialBodiesShown"},
+    Atmosphere = {"Density","Offset","Color","Decay","Glare","Haze","Enabled"},
+    Lighting = {"TimeOfDay","OutdoorAmbient","Ambient","Brightness","GlobalShadows","FogEnd","FogStart","FogColor","ClockTime"},
+    ColorCorrectionEffect = {"TintColor","Saturation","Contrast","Enabled"},
+    BloomEffect = {"Intensity","Size","Threshold","Enabled"},
+    SunRaysEffect = {"Intensity","Spread","FadeInTime","Enabled"},
+    BlurEffect = {"Size","Enabled"},
+    DepthOfFieldEffect = {"FocusDistance","InFocusRadius","FarIntensity","NearIntensity","Enabled"}
+}
+
+local function collectProperties(inst)
+    local props = {}
+    local className = inst.ClassName
+    local list = knownProps[className] or {}
+    -- include attributes (custom user attributes)
+    local attributes = inst:GetAttributes()
+    if attributes and next(attributes) then
+        props._Attributes = attributes
+    end
+    -- gather the known properties by pcall
+    for _,p in ipairs(list) do
+        local ok, val = pcall(function() return inst[p] end)
+        if ok then
+            props[p] = val
+        end
+    end
+    -- for Sky specifically, also try to read common sky-related properties
+    if className == "Sky" then
+        for _,k in ipairs({"MoonAngularSize","MoonTextureId","SunTextureId"}) do
+            local ok, v = pcall(function() return inst[k] end)
+            if ok and v ~= nil then props[k] = v end
+        end
+    end
+
+    -- If no known properties found, attempt a small fallback reading a handful of potentially present properties
+    if next(props) == nil then
+        local fallback = {"Name","Parent","ClassName"}
+        for _,p in ipairs(fallback) do
+            props[p] = safeGet(inst, p)
+        end
+    end
+
+    return props
+end
+
+local function valueToString(v)
+    local t = typeof(v)
+    if t == "Instance" then return string.format("<Instance> %s (%s)", v.Name, v.ClassName) end
+    if t == "Color3" then return string.format("Color3(%d,%d,%d)", math.floor(v.R*255), math.floor(v.G*255), math.floor(v.B*255)) end
+    if t == "Vector3" then return string.format("Vector3(%.2f,%.2f,%.2f)", v.X, v.Y, v.Z) end
+    if t == "UDim2" or t == "UDim" then return tostring(v) end
+    if t == "table" then
+        local ok, json = pcall(function() return HttpService:JSONEncode(v) end)
+        return ok and json or tostring(v)
+    end
+    return tostring(v)
+end
+
+local function showProperties(inst)
+    clearPanel(rightPanel)
+    local header = Instance.new("TextLabel", rightPanel)
+    header.Size = UDim2.new(1,0,0,30)
+    header.BackgroundTransparency = 1
+    header.Font = Enum.Font.SourceSansBold
+    header.TextSize = 16
+    header.TextColor3 = Color3.fromRGB(240,240,240)
+    header.Text = string.format("%s — %s", inst.Name or "<unnamed>", inst.ClassName or "Instance")
+
+    local props = collectProperties(inst)
+
+    -- copy all button
+    local copyAll = Instance.new("TextButton", rightPanel)
+    copyAll.Size = UDim2.new(0,120,0,30)
+    copyAll.Text = "Copy all (JSON)"
+    copyAll.Font = Enum.Font.SourceSansBold
+    copyAll.TextSize = 14
+    copyAll.BackgroundTransparency = 0.12
+    local corner = Instance.new("UICorner", copyAll)
+    corner.CornerRadius = UDim.new(0,6)
+    copyAll.MouseButton1Click:Connect(function()
+        local payload = { name = inst.Name, class = inst.ClassName, properties = {} }
+        for k,v in pairs(props) do
+            payload.properties[k] = v
+        end
+        local ok, json = pcall(function() return HttpService:JSONEncode(payload) end)
+        if ok then
+            local setOk = pcall(function() setclipboard(json) end)
+            if not setOk then
+                -- show modal with json in text box
+                local modal = Instance.new("Frame")
+                modal.Size = UDim2.new(0.6,0,0.5,0)
+                modal.Position = UDim2.new(0.2,0,0.25,0)
+                modal.BackgroundColor3 = Color3.fromRGB(18,18,22)
+                modal.Parent = screenGui
+                local c = Instance.new("UICorner", modal)
+                c.CornerRadius = UDim.new(0,8)
+                local tb = Instance.new("TextBox", modal)
+                tb.Size = UDim2.new(0.96,0,0.8,0)
+                tb.Position = UDim2.new(0.02,0,0.06,0)
+                tb.Text = json
+                tb.Font = Enum.Font.Code
+                tb.TextSize = 14
+                tb.ClearTextOnFocus = false
+                tb.MultiLine = true
+                tb.TextWrapped = true
+                local close = Instance.new("TextButton", modal)
+                close.Size = UDim2.new(0.2,0,0,28)
+                close.Position = UDim2.new(0.4,0,0.88,0)
+                close.Text = "Close"
+                close.Font = Enum.Font.SourceSansBold
+                close.MouseButton1Click:Connect(function() modal:Destroy() end)
+            else
+                local toast = Instance.new("TextLabel")
+                toast.Size = UDim2.new(0,180,0,30)
+                toast.Position = UDim2.new(0.5,-90,0.9,-35)
+                toast.BackgroundTransparency = 0.12
+                toast.BackgroundColor3 = Color3.fromRGB(40,40,40)
+                toast.TextColor3 = Color3.fromRGB(220,220,220)
+                toast.Text = "Copied JSON to clipboard"
+                toast.Font = Enum.Font.SourceSans
+                toast.Parent = screenGui
+                delay(1.6, function() pcall(function() toast:Destroy() end) end)
+            end
+        else
+            warn("Failed to encode JSON for instance: ", inst, json)
+        end
+    end)
+
+    -- Show each property
+    for k,v in pairs(props) do
+        if k == "_Attributes" then
+            local attrHeader = Instance.new("TextLabel", rightPanel)
+            attrHeader.Size = UDim2.new(1,0,0,20)
+            attrHeader.BackgroundTransparency = 1
+            attrHeader.Font = Enum.Font.SourceSansSemibold
+            attrHeader.TextSize = 13
+            attrHeader.TextColor3 = Color3.fromRGB(220,220,220)
+            attrHeader.Text = "Attributes"
+            for ak,av in pairs(v) do
+                local row = makeRow(rightPanel, tostring(ak), valueToString(av), true)
+            end
+        else
+            local isAsset = false
+            local valStr = valueToString(v)
+            if typeof(v) == "string" and (string.find(valStr, "rbxassetid") or string.find(valStr, "rbxasset://") or string.find(valStr, "://")) then
+                isAsset = true
+            end
+            -- if property is numeric and likely an asset id
+            if typeof(v) == "number" and v > 0 then
+                -- some properties may be numeric numbers (not safe to assume)
+                -- but include copy for numbers as well
+                isAsset = true
+            end
+            local row = makeRow(rightPanel, tostring(k), valStr, isAsset)
+        end
+    end
+end
+
+-- populate left panel with entries
+local function populateLeft(entries)
+    clearPanel(leftPanel)
+    if #entries == 0 then
+        local n = Instance.new("TextLabel", leftPanel)
+        n.Size = UDim2.new(1,0,0,30)
+        n.BackgroundTransparency = 1
+        n.Text = "No entries found."
+        n.Font = Enum.Font.SourceSans
+        n.TextColor3 = Color3.fromRGB(200,200,200)
+        return
+    end
+    for _,inst in ipairs(entries) do
+        local btn = Instance.new("TextButton", leftPanel)
+        btn.Size = UDim2.new(1,0,0,40)
+        btn.BackgroundTransparency = 0.12
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.AutoButtonColor = true
+        btn.Text = string.format("%s — %s", inst.Name or "<unnamed>", inst.ClassName or "Instance")
+        btn.Font = Enum.Font.SourceSans
+        btn.TextSize = 14
+        btn.MouseButton1Click:Connect(function()
+            showProperties(inst)
+        end)
+    end
+end
+
+-- Create Tabs
+local particleTabBtn = makeTabButton("ParticleEmitters")
+particleTabBtn.Parent = tabsFrame
+particleTabBtn.MouseButton1Click:Connect(function()
+    currentTab = "particles"
+    local entries = scanParticleEmitters()
+    populateLeft(entries)
+    clearPanel(rightPanel)
+end)
+
+local lightingTabBtn = makeTabButton("Lighting & Sky")
+lightingTabBtn.Parent = tabsFrame
+lightingTabBtn.MouseButton1Click:Connect(function()
+    currentTab = "lighting"
+    local entries = scanLightingEffects()
+    populateLeft(entries)
+    clearPanel(rightPanel)
+end)
+
+-- Atmosphere-only tab (fog / haze system)
+local atmosphereTabBtn = makeTabButton("Atmosphere")
+atmosphereTabBtn.Parent = tabsFrame
+atmosphereTabBtn.MouseButton1Click:Connect(function()
+    currentTab = "atmosphere"
+    local entries = {}
+    for _,inst in ipairs(Lighting:GetDescendants()) do
+        if inst:IsA("Atmosphere") then
+            table.insert(entries, inst)
+        end
+    end
+    populateLeft(entries)
+    clearPanel(rightPanel)
+end)
+
+local refreshBtn = makeTabButton("Refresh")
+refreshBtn.Parent = tabsFrame
+refreshBtn.MouseButton1Click:Connect(function()
+    if currentTab == "particles" then
+        populateLeft(scanParticleEmitters())
+    elseif currentTab == "lighting" then
+        populateLeft(scanLightingEffects())
+    else
+        -- default: refresh both
+        populateLeft(scanParticleEmitters())
+    end
+end)
+
+-- Default open
+particleTabBtn:Activate()
+particleTabBtn.MouseButton1Click:Connect(function() end)
+
+-- Make draggable
+local dragging, dragStart, startPos
+main.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = main.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+main.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- clean up on character removal if needed
+player.AncestryChanged:Connect(function()
+    if not player:IsDescendantOf(game) then
+        screenGui:Destroy()
+    end
+end)
+
+print("Sky & Effects Inspector loaded. Open the GUI from PlayerGui -> SkyEffectsInspectorGUI")
