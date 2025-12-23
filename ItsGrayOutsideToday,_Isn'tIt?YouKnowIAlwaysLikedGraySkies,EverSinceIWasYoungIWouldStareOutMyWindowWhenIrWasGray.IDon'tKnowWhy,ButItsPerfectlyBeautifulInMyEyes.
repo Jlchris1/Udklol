@@ -1,0 +1,48 @@
+-- Services
+local Lighting = game:GetService("Lighting")
+
+-- Remove existing effects (optional but recommended)
+for _, v in ipairs(Lighting:GetChildren()) do
+	if v:IsA("Sky") or v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect") then
+		v:Destroy()
+	end
+end
+
+-- Sky
+local Sky = Instance.new("Sky")
+Sky.Name = "Sky"
+Sky.SkyboxUp = "http://www.roblox.com/asset/?id=217552044"
+Sky.SkyboxDn = "http://www.roblox.com/asset/?id=217552044"
+Sky.SkyboxLf = "http://www.roblox.com/asset/?id=217552044"
+Sky.SkyboxRt = "http://www.roblox.com/asset/?id=217552044"
+Sky.SkyboxFt = "http://www.roblox.com/asset/?id=217552044"
+Sky.SkyboxBk = "http://www.roblox.com/asset/?id=217552044"
+Sky.MoonTextureId = "rbxasset://sky/moon.jpg"
+Sky.SunTextureId = "rbxasset://sky/sun.jpg"
+Sky.MoonAngularSize = 11
+Sky.SunAngularSize = 21
+Sky.CelestialBodiesShown = false
+Sky.Parent = Lighting
+
+-- Blur Effect
+local Blur = Instance.new("BlurEffect")
+Blur.Name = "Blur"
+Blur.Enabled = true
+Blur.Size = 2
+Blur.Parent = Lighting
+
+-- Color Correction
+local ColorCorrection = Instance.new("ColorCorrectionEffect")
+ColorCorrection.Name = "ColorCorrection"
+ColorCorrection.Enabled = true
+ColorCorrection.Saturation = -0.2
+ColorCorrection.Contrast = 0
+ColorCorrection.Parent = Lighting
+
+-- Lighting properties
+Lighting.ClockTime = 14
+Lighting.TimeOfDay = "14:00:00"
+Lighting.Brightness = 2
+Lighting.GlobalShadows = true
+Lighting.FogStart = 0
+Lighting.FogEnd = 300
