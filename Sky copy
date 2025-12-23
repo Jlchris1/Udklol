@@ -19,6 +19,37 @@ screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 999
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
+-- Toggle button GUI on the left side of the screen (stays visible even when inspector is hidden)
+local toggleGui = Instance.new("ScreenGui")
+toggleGui.Name = "SkyEffectsInspectorToggle"
+toggleGui.ResetOnSpawn = false
+toggleGui.Parent = player:WaitForChild("PlayerGui")
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name = "InspectorToggleBtn"
+toggleBtn.Size = UDim2.new(0,36,0,120)
+toggleBtn.Position = UDim2.new(0,8,0.4, -60)
+toggleBtn.BackgroundTransparency = 0.12
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,35)
+toggleBtn.Text = "⇔"
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 20
+toggleBtn.TextColor3 = Color3.fromRGB(230,230,230)
+toggleBtn.Parent = toggleGui
+local tcorner = Instance.new("UICorner", toggleBtn)
+tcorner.CornerRadius = UDim.new(0,8)
+
+-- Toggle visibility of the main inspector ScreenGui
+toggleBtn.MouseButton1Click:Connect(function()
+    -- if screenGui has already been destroyed, disable the toggle
+    if not screenGui or not screenGui.Parent then
+        toggleBtn.Text = "X"
+        toggleBtn.Active = false
+        return
+    end
+    screenGui.Enabled = not screenGui.Enabled
+end)
+
 local main = Instance.new("Frame")
 main.Name = "Main"
 main.Size = UDim2.new(0.9, 0, 0.75, 0)
@@ -42,6 +73,52 @@ title.TextSize = 20
 title.TextColor3 = Color3.fromRGB(235,235,235)
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = main
+
+-- Destroy button (top-right) to destroy the entire GUI (with confirmation)
+local destroyBtn = Instance.new("TextButton", main)
+destroyBtn.Size = UDim2.new(0,80,0,28)
+destroyBtn.Position = UDim2.new(1, -90, 0, 8)
+destroyBtn.Text = "Destroy"
+destroyBtn.Font = Enum.Font.SourceSansBold
+destroyBtn.TextSize = 12
+destroyBtn.BackgroundTransparency = 0.12
+local destroyCorner = Instance.new("UICorner", destroyBtn)
+destroyCorner.CornerRadius = UDim.new(0,6)
+destroyBtn.MouseButton1Click:Connect(function()
+    -- confirmation modal
+    local modal = Instance.new("Frame", screenGui)
+    modal.Size = UDim2.new(0.36,0,0.18,0)
+    modal.Position = UDim2.new(0.32,0,0.4,0)
+    modal.BackgroundColor3 = Color3.fromRGB(20,20,24)
+    local mc = Instance.new("UICorner", modal)
+    mc.CornerRadius = UDim.new(0,8)
+    local txt = Instance.new("TextLabel", modal)
+    txt.Size = UDim2.new(1, -20, 0.6, 0)
+    txt.Position = UDim2.new(0,10,0,10)
+    txt.BackgroundTransparency = 1
+    txt.Text = "Destroy the inspector GUI? This cannot be undone."
+    txt.Font = Enum.Font.SourceSans
+    txt.TextWrapped = true
+    txt.TextSize = 14
+    txt.TextColor3 = Color3.fromRGB(230,230,230)
+    local yes = Instance.new("TextButton", modal)
+    yes.Size = UDim2.new(0.44, -10, 0,28)
+    yes.Position = UDim2.new(0,10,1,-38)
+    yes.Text = "Yes"
+    yes.Font = Enum.Font.SourceSansBold
+    yes.BackgroundTransparency = 0.12
+    local no = Instance.new("TextButton", modal)
+    no.Size = UDim2.new(0.44, -10, 0,28)
+    no.Position = UDim2.new(0.56, 0,1,-38)
+    no.Text = "No"
+    no.Font = Enum.Font.SourceSansBold
+    no.BackgroundTransparency = 0.12
+    yes.MouseButton1Click:Connect(function()
+        pcall(function() screenGui:Destroy() end)
+        pcall(function() toggleGui:Destroy() end)
+    end)
+    no.MouseButton1Click:Connect(function() modal:Destroy() end)
+end)
 
 -- Tabs container (horizontal scrolling)
 local tabsFrame = Instance.new("ScrollingFrame")
@@ -89,11 +166,16 @@ leftPanel.Size = UDim2.new(0.45, -10, 1, 0)
 leftPanel.Position = UDim2.new(0,0,0,0)
 leftPanel.BackgroundTransparency = 1
 leftPanel.ScrollBarThickness = 8
+-- We'll manage CanvasSize manually so it grows with the number of rows
+leftPanel.CanvasSize = UDim2.new(0,0,0,0)
 leftPanel.Parent = content
 local leftLayout = Instance.new("UIListLayout", leftPanel)
 leftLayout.SortOrder = Enum.SortOrder.LayoutOrder
 leftLayout.Padding = UDim.new(0,6)
-leftPanel:GetPropertyChangedSignal("CanvasSize"):Connect(function() end)
+-- update canvas size whenever content changes
+leftLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    leftPanel.CanvasSize = UDim2.new(0,0,0,leftLayout.AbsoluteContentSize.Y + 12)
+end)
 
 local rightPanel = Instance.new("ScrollingFrame")
 rightPanel.Name = "RightPanel"
@@ -101,8 +183,20 @@ rightPanel.Size = UDim2.new(0.55, 0, 1, 0)
 rightPanel.Position = UDim2.new(0.45, 10, 0, 0)
 rightPanel.BackgroundTransparency = 1
 rightPanel.ScrollBarThickness = 8
+-- Manage canvas size manually for smooth expansion based on properties
+rightPanel.CanvasSize = UDim2.new(0,0,0,0)
 rightPanel.Parent = content
 local rightLayout = Instance.new("UIListLayout", rightPanel)
+rightLayout.SortOrder = Enum.SortOrder.LayoutOrder
+rightLayout.Padding = UDim.new(0,6)
+-- update canvas size when the properties list changes
+rightLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    rightPanel.CanvasSize = UDim2.new(0,0,0,rightLayout.AbsoluteContentSize.Y + 16)
+end)
+
+rightLayout.SortOrder = Enum.SortOrder.LayoutOrder
+rightLayout.Padding = UDim.new(0,6)
+
 rightLayout.SortOrder = Enum.SortOrder.LayoutOrder
 rightLayout.Padding = UDim.new(0,6)
 
