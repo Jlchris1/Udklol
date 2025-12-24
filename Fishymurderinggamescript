@@ -1,0 +1,175 @@
+-- StarterPlayer -> StarterPlayerScripts
+-- TRUE nearest-player targeting (re-evaluated every hit)
+-- Banhammer + Default Slapper
+-- 0.5s delay per hit
+-- Join-safe, respawn-safe, whitelist-safe
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- CONFIG
+local HIT_DELAY = 0.5
+local GUI_NAME = "TrueNearestTargetGUI"
+local BAN_TOOL = "Banhammer"
+local SLAP_TOOL = "Default Slapper"
+
+-- GUI
+local gui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+gui.Name = GUI_NAME
+gui.ResetOnSpawn = false
+
+local toggle = Instance.new("TextButton", gui)
+toggle.Size = UDim2.new(0,120,0,36)
+toggle.Position = UDim2.new(1,-140,0,12)
+toggle.AnchorPoint = Vector2.new(1,0)
+toggle.Text = "Toggle GUI"
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0,320,0,200)
+frame.Position = UDim2.new(0.5,-160,0.5,-100)
+frame.Visible = false
+
+toggle.MouseButton1Click:Connect(function()
+	frame.Visible = not frame.Visible
+end)
+
+local layout = Instance.new("UIListLayout", frame)
+layout.Padding = UDim.new(0,8)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local function btn(txt)
+	local b = Instance.new("TextButton", frame)
+	b.Size = UDim2.new(1,-20,0,42)
+	b.Text = txt
+	return b
+end
+
+-- ORDER: Target All first
+local targetAllBtn = btn("Target All (OFF)")
+local targetSelectedBtn = btn("Target Selected (OFF)")
+local playerListBtn = btn("Player List")
+
+-- UTILITIES
+local function getRemote(toolName)
+	local lp = LocalPlayer
+	local backpack = lp:FindFirstChild("Backpack")
+	if backpack then
+		local tool = backpack:FindFirstChild(toolName)
+		if tool then
+			return tool:FindFirstChild("RemoteEvent")
+		end
+	end
+	if lp.Character then
+		local tool = lp.Character:FindFirstChild(toolName)
+		if tool then
+			return tool:FindFirstChild("RemoteEvent")
+		end
+	end
+end
+
+local function root(char)
+	return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function isWhitelisted(plr)
+	local v = plr:FindFirstChild("Whitelisted")
+	return v and v.Value
+end
+
+local function isSelected(plr)
+	local v = plr:FindFirstChild("Selected")
+	return v and v.Value
+end
+
+local function getNearestPlayer(filterSelected)
+	local lpChar = LocalPlayer.Character
+	local lpRoot = root(lpChar)
+	if not lpRoot then return nil end
+
+	local nearest
+	local shortest = math.huge
+
+	for _,plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer
+		and not isWhitelisted(plr)
+		and plr.Character
+		and root(plr.Character)
+		and (not filterSelected or isSelected(plr)) then
+
+			local dist = (lpRoot.Position - root(plr.Character).Position).Magnitude
+			if dist < shortest then
+				shortest = dist
+				nearest = plr
+			end
+		end
+	end
+
+	return nearest
+end
+
+local function fire(plr)
+	if not plr or not plr.Character then return end
+	local ban = getRemote(BAN_TOOL)
+	local slap = getRemote(SLAP_TOOL)
+
+	if ban then pcall(function() ban:FireServer(plr.Character) end) end
+	if slap then
+		task.wait(0.03)
+		pcall(function() slap:FireServer(plr.Character) end)
+	end
+end
+
+-- STATES
+local targetAll = false
+local targetSelected = false
+
+targetAllBtn.MouseButton1Click:Connect(function()
+	targetSelected = false
+	targetSelectedBtn.Text = "Target Selected (OFF)"
+	targetAll = not targetAll
+	targetAllBtn.Text = targetAll and "Target All (ON)" or "Target All (OFF)"
+end)
+
+targetSelectedBtn.MouseButton1Click:Connect(function()
+	targetAll = false
+	targetAllBtn.Text = "Target All (OFF)"
+	targetSelected = not targetSelected
+	targetSelectedBtn.Text = targetSelected and "Target Selected (ON)" or "Target Selected (OFF)"
+end)
+
+playerListBtn.MouseButton1Click:Connect(function()
+	loadstring(game:HttpGet(
+		"https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Playerlistv6"
+	))()
+end)
+
+-- 🔁 TRUE NEAREST LOOPS
+task.spawn(function()
+	while true do
+		if targetAll then
+			local nearest = getNearestPlayer(false)
+			if nearest then
+				fire(nearest)
+			end
+			task.wait(HIT_DELAY)
+		else
+			task.wait(0.1)
+		end
+	end
+end)
+
+task.spawn(function()
+	while true do
+		if targetSelected then
+			local nearest = getNearestPlayer(true)
+			if nearest then
+				fire(nearest)
+			end
+			task.wait(HIT_DELAY)
+		else
+			task.wait(0.1)
+		end
+	end
+end)
+
+print("[TrueNearestTargetGUI] Loaded — TRUE nearest targeting active")
