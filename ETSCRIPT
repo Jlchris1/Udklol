@@ -1,0 +1,367 @@
+-- LocalScript: Loop-TP player to tycoon parts, auto-rebirth behavior, dynamic tycoon path
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+
+-- =========================
+-- Config / dynamic path
+-- =========================
+local TYCOONS_ROOT = workspace:WaitForChild("Tycoons")
+local desiredTycoonName = player.Name -- use player's name instead of "bamned_alt3"
+local fallbackTycoonName = "bamned_alt3"
+
+local function getTycoonFolder()
+    -- prefer folder named as player's name, otherwise fallback
+    return TYCOONS_ROOT:FindFirstChild(desiredTycoonName) or TYCOONS_ROOT:FindFirstChild(fallbackTycoonName)
+end
+
+local TYCOON = getTycoonFolder()
+if not TYCOON then
+    warn("Tycoon folder not found for '"..tostring(desiredTycoonName).."', and fallback '"..fallbackTycoonName.."' missing.")
+    return
+end
+
+local function refreshPaths()
+    TYCOON = getTycoonFolder()
+    if not TYCOON then return end
+    -- these WaitForChild calls assume structure matches; if not present some features will be disabled safely
+    BUTTONS = TYCOON:FindFirstChild("Buttons")
+    AUX = TYCOON:FindFirstChild("Auxiliary")
+    COLLECTOR = AUX and AUX:FindFirstChild("Collector")
+    REBIRTH_FOLDER = AUX and AUX:FindFirstChild("Rebirth")
+    REBIRTH_BUTTON = REBIRTH_FOLDER and REBIRTH_FOLDER:FindFirstChild("Button")
+end
+
+refreshPaths()
+
+-- =========================
+-- GUI
+-- =========================
+local gui = Instance.new("ScreenGui")
+gui.Name = "LoopTPAndRebirthGUI"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local btn = Instance.new("TextButton")
+btn.Size = UDim2.new(0,240,0,56)
+btn.Position = UDim2.new(0.01,0,0.01,0)
+btn.Font = Enum.Font.SourceSansBold
+btn.TextSize = 18
+btn.Text = "LOOP TP & REBIRTH: OFF"
+btn.Parent = gui
+
+-- =========================
+-- State & helpers
+-- =========================
+local enabled = false
+local trackedPartsList = {} -- array
+local trackedPartsSet = {}  -- map part -> true
+local descendantConns = {}  -- connections to DescendantAdded events
+local heartbeatConn
+
+local function isCollectorDescendant(part)
+    return COLLECTOR and part:IsDescendantOf(COLLECTOR)
+end
+
+local function addPart(part)
+    if not part or not part:IsA("BasePart") then return end
+    if trackedPartsSet[part] then return end
+    trackedPartsSet[part] = true
+    table.insert(trackedPartsList, part)
+end
+
+local function removePart(part)
+    if not part then return end
+    if not trackedPartsSet[part] then return end
+    trackedPartsSet[part] = nil
+    -- remove from list
+    for i = #trackedPartsList, 1, -1 do
+        if trackedPartsList[i] == part then
+            table.remove(trackedPartsList, i)
+        end
+    end
+end
+
+local function scanExisting()
+    -- Guard if structure missing
+    if BUTTONS then
+        for _, v in ipairs(BUTTONS:GetDescendants()) do
+            if v:IsA("BasePart") then addPart(v) end
+        end
+    end
+    if COLLECTOR then
+        for _, v in ipairs(COLLECTOR:GetDescendants()) do
+            if v:IsA("BasePart") then addPart(v) end
+        end
+    end
+end
+
+local function clearAllTracked()
+    trackedPartsList = {}
+    trackedPartsSet = {}
+end
+
+-- =========================
+-- Rebirth utilities
+-- =========================
+-- find a ProximityPrompt inside the rebirth button (if present)
+local function findRebirthPrompt()
+    if not REBIRTH_BUTTON then return nil end
+    -- search children for a ProximityPrompt
+    for _, c in ipairs(REBIRTH_BUTTON:GetDescendants()) do
+        if c:IsA("ProximityPrompt") then
+            return c
+        end
+    end
+    return nil
+end
+
+-- Fire the SelectionUI RemoteEvent with "Darkness" repeatedly for 5 seconds
+local function fireRebirthRemoteLoop()
+    -- find event inside PlayerGui: SelectionUI.RemoteEvent
+    local success, err = pcall(function()
+        local guiRoot = player:WaitForChild("PlayerGui")
+        local selection = guiRoot:FindFirstChild("SelectionUI")
+        if not selection then return end
+        local rem = selection:FindFirstChild("RemoteEvent")
+        if not rem or not rem.FireServer then return end
+
+        local stopAt = tick() + 5
+        while tick() < stopAt do
+            pcall(function() rem:FireServer("Darkness") end)
+            wait(0.18) -- fire ~5 times per second for 5s (adjustable)
+        end
+    end)
+    if not success then
+        warn("Failed firing rebirth remote loop:", err)
+    end
+end
+
+-- Attempt to activate the ProximityPrompt loop (client-side)
+local function loopFireProximityPrompt(prompt)
+    if not prompt then return end
+    -- We'll attempt to call InputHoldBegin/End if available, otherwise call :Trigger if present.
+    -- We wrap in pcall because exploits / ROLLBACK may not allow these
+    local hold = prompt.HoldDuration or 0
+    local worked, err = pcall(function()
+        -- try InputHoldBegin/End (client API may allow these)
+        if prompt.InputHoldBegin then
+            prompt:InputHoldBegin()
+            wait(math.max(hold, 0.15))
+            prompt:InputHoldEnd()
+        elseif prompt.Trigger then
+            -- older/alternate method
+            prompt:Trigger()
+        else
+            -- fallback: try to fire server (not always available)
+            if prompt.Enabled and prompt.Parent then
+                -- attempt to simulate activation: trigger a short loop
+                prompt:InputHoldBegin()
+                wait(0.15)
+                prompt:InputHoldEnd()
+            end
+        end
+    end)
+    return worked
+end
+
+-- =========================
+-- Main loop behavior
+-- =========================
+local tpIndex = 1
+local function startHeartbeat()
+    if heartbeatConn then heartbeatConn:Disconnect() heartbeatConn = nil end
+
+    heartbeatConn = RunService.Heartbeat:Connect(function()
+        -- refresh paths occasionally in case tycoon folder changed
+        if not TYCOON or not TYCOON.Parent then
+            refreshPaths()
+        end
+
+        -- ensure character HRP present
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        -- remove invalid destroyed parts from tracked
+        for i = #trackedPartsList, 1, -1 do
+            local p = trackedPartsList[i]
+            if not p or not p.Parent then
+                removePart(p)
+            end
+        end
+
+        -- If no parts, just return
+        if #trackedPartsList == 0 then return end
+
+        -- Check if ALL remaining tracked parts are collector descendants
+        local onlyCollectorLeft = true
+        for _, p in ipairs(trackedPartsList) do
+            if not isCollectorDescendant(p) then
+                onlyCollectorLeft = false
+                break
+            end
+        end
+
+        if onlyCollectorLeft then
+            -- Switch behavior: go to rebirth button and loop-fire prompt while available
+            refreshPaths() -- ensure REBIRTH_BUTTON/,COLLECTOR exist
+            if REBIRTH_BUTTON and REBIRTH_BUTTON.Parent then
+                local targetPart = REBIRTH_BUTTON:IsA("BasePart") and REBIRTH_BUTTON or REBIRTH_BUTTON:FindFirstChildWhichIsA("BasePart")
+                local tpCFrame
+                if targetPart and targetPart.Parent then
+                    tpCFrame = targetPart.CFrame * CFrame.new(0, 3, 0) -- slightly above the button
+                else
+                    -- if Button is a model, try to use its PrimaryPart or descendant part
+                    local primary = REBIRTH_BUTTON.PrimaryPart
+                    if primary and primary.Parent then
+                        tpCFrame = primary.CFrame * CFrame.new(0, 3, 0)
+                    else
+                        -- try any descendant part
+                        local anyP
+                        for _, d in ipairs(REBIRTH_BUTTON:GetDescendants()) do
+                            if d:IsA("BasePart") then anyP = d; break end
+                        end
+                        if anyP then tpCFrame = anyP.CFrame * CFrame.new(0,3,0) end
+                    end
+                end
+
+                if tpCFrame then
+                    -- teleport player to rebirth button (safe)
+                    pcall(function() hrp.CFrame = tpCFrame end)
+                end
+
+                -- attempt to find and use a prompt
+                local prompt = findRebirthPrompt()
+                if prompt and prompt.Enabled then
+                    -- loop-fire as long as prompt exists & enabled
+                    local promptWorked = pcall(function()
+                        -- repeatedly try to trigger prompt quickly until it becomes disabled/destroyed
+                        -- but don't block the Heartbeat: run a small immediate attempt here
+                        loopFireProximityPrompt(prompt)
+                    end)
+                    -- When prompt activation is successful, also trigger the SelectionUI remote firing for 5s
+                    -- We cannot reliably detect server confirmation of a "rebirth", so we'll attempt the remote loop
+                    -- Note: if you want to only fire when you *know* the rebirth occurred, that requires server feedback
+                    -- Here we attempt remote loop whenever we successfully triggered prompt
+                    if promptWorked then
+                        -- Fire the remote in a short coroutine so we don't block heartbeat
+                        coroutine.wrap(function()
+                            fireRebirthRemoteLoop()
+                        end)()
+                    end
+                end
+            end
+            return
+        end
+
+        -- Normal behavior: loop-TP the player to each tracked part one-by-one rapidly
+        if tpIndex > #trackedPartsList then tpIndex = 1 end
+        local target = trackedPartsList[tpIndex]
+        tpIndex = tpIndex + 1
+        if target and target.Parent then
+            -- teleport above the part to avoid embedding
+            local success, err = pcall(function()
+                local above = target.CFrame * CFrame.new(0, 3, 0)
+                hrp.CFrame = above
+            end)
+            if not success then
+                -- if failed, remove and continue
+                removePart(target)
+            end
+        else
+            removePart(target)
+        end
+    end)
+end
+
+local function stopHeartbeat()
+    if heartbeatConn then heartbeatConn:Disconnect() heartbeatConn = nil end
+end
+
+-- =========================
+-- Watchers to auto-add new parts
+-- =========================
+local function attachDescendantWatchers()
+    -- clear old
+    for _, c in ipairs(descendantConns) do
+        pcall(function() c:Disconnect() end)
+    end
+    descendantConns = {}
+
+    if BUTTONS then
+        table.insert(descendantConns, BUTTONS.DescendantAdded:Connect(function(obj)
+            if obj:IsA("BasePart") then addPart(obj) end
+        end))
+        table.insert(descendantConns, BUTTONS.DescendantRemoving:Connect(function(obj)
+            if obj:IsA("BasePart") then removePart(obj) end
+        end))
+    end
+    if COLLECTOR then
+        table.insert(descendantConns, COLLECTOR.DescendantAdded:Connect(function(obj)
+            if obj:IsA("BasePart") then addPart(obj) end
+        end))
+        table.insert(descendantConns, COLLECTOR.DescendantRemoving:Connect(function(obj)
+            if obj:IsA("BasePart") then removePart(obj) end
+        end))
+    end
+
+    -- watch for Rebirth button appearing/disappearing (to react when only collector left)
+    if REBIRTH_FOLDER then
+        table.insert(descendantConns, REBIRTH_FOLDER.ChildAdded:Connect(function(child)
+            if child.Name == "Button" then
+                REBIRTH_BUTTON = child
+            end
+        end))
+        table.insert(descendantConns, REBIRTH_FOLDER.ChildRemoved:Connect(function(child)
+            if child == REBIRTH_BUTTON then
+                REBIRTH_BUTTON = nil
+            end
+        end))
+    end
+end
+
+-- =========================
+-- Toggle logic
+-- =========================
+local function enable()
+    if enabled then return end
+    enabled = true
+    btn.Text = "LOOP TP & REBIRTH: ON"
+
+    refreshPaths()
+    scanExisting()
+    attachDescendantWatchers()
+    startHeartbeat()
+end
+
+local function disable()
+    if not enabled then return end
+    enabled = false
+    btn.Text = "LOOP TP & REBIRTH: OFF"
+
+    -- cleanup
+    for _, c in ipairs(descendantConns) do pcall(function() c:Disconnect() end) end
+    descendantConns = {}
+    clearAllTracked()
+    stopHeartbeat()
+end
+
+btn.MouseButton1Click:Connect(function() if enabled then disable() else enable() end end)
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.X then
+        if enabled then disable() else enable() end
+    end
+end)
+
+-- clean up if player leaves character (optional)
+player.CharacterRemoving:Connect(function()
+    -- small graceful pause
+    wait(0.05)
+end)
+
+-- final: no auto-start. User clicks GUI or presses X to enable.
+print("Loop TP & Rebirth script loaded for tycoon path: "..tostring(TYCOON and TYCOON.Name or "nil"))
