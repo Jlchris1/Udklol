@@ -1,0 +1,251 @@
+-- LocalScript (StarterPlayer -> StarterPlayerScripts)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local LOCAL_PLAYER = Players.LocalPlayer
+
+-- ===== CONFIG =====
+local TYCOON_NAME = LOCAL_PLAYER.Name
+
+local BUTTON_TP_INTERVAL = 0.01
+local REBIRTH_PROMPT_INTERVAL = 0.1
+local REBIRTH_CHECK_INTERVAL = 0.2
+
+local POST_REBIRTH_TELEPORT = Vector3.new(-335.260009765625, 44.50887680053711, 244.28721618652344)
+local POST_REBIRTH_WAIT_BEFORE_DARKNESS = 3
+local DARKNESS_FIRE_INTERVAL = 1
+
+-- ===== Helpers =====
+local function safeWait(t)
+    if t and t > 0 then
+        local ok = pcall(function() wait(t) end)
+        if not ok then
+            local target = tick() + t
+            while tick() < target do RunService.Heartbeat:Wait() end
+        end
+    else
+        RunService.Heartbeat:Wait()
+    end
+end
+
+local function getTycoonRoot()
+    local tycoons = Workspace:FindFirstChild("Tycoons")
+    if not tycoons then return nil end
+    return tycoons:FindFirstChild(TYCOON_NAME)
+end
+
+local function getCharacterAndRoot(timeout)
+    timeout = timeout or 5
+    local char = LOCAL_PLAYER.Character
+    if not char then
+        char = LOCAL_PLAYER.CharacterAdded:Wait()
+    end
+    local root = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+    if not root then
+        root = char:WaitForChild("HumanoidRootPart", timeout) or char.PrimaryPart
+    end
+    return char, root
+end
+
+local function getPartOfModel(model)
+    if not model then return nil end
+    if model:IsA("BasePart") then return model end
+    if model:IsA("Model") then
+        if model.PrimaryPart then return model.PrimaryPart end
+        for _,d in ipairs(model:GetDescendants()) do
+            if d:IsA("BasePart") then return d end
+        end
+    end
+    return nil
+end
+
+local function teleportPlayerToCFrame(rootPart, targetCFrame)
+    if not rootPart or not targetCFrame then return end
+    pcall(function()
+        rootPart.CFrame = targetCFrame + Vector3.new(0,3,0)
+    end)
+end
+
+local function findButtonsRootParts(buttonsFolder)
+    local found = {}
+    if not buttonsFolder then return found end
+    for _, desc in ipairs(buttonsFolder:GetDescendants()) do
+        if desc.Name == "Button" or desc:IsA("BasePart") then
+            local target = desc:IsA("BasePart") and desc or getPartOfModel(desc)
+            if target then table.insert(found,target) end
+        end
+    end
+    -- dedupe
+    local seen = {}
+    local unique = {}
+    for _, p in ipairs(found) do
+        if p and not seen[p] then
+            seen[p] = true
+            table.insert(unique,p)
+        end
+    end
+    return unique
+end
+
+local function tryFireDarkness()
+    pcall(function()
+        local args = {"Darkness"}
+        local plr = Players.LocalPlayer
+        if not plr then return end
+        local pg = plr:WaitForChild("PlayerGui",5)
+        if not pg then return end
+        local selectionUI = pg:WaitForChild("SelectionUI",5)
+        if not selectionUI then return end
+        local remote = selectionUI:WaitForChild("RemoteEvent",5)
+        if not remote then return end
+        remote:FireServer(unpack(args))
+    end)
+end
+
+-- ===== Player Loops =====
+local playerLoopRunning = true
+
+-- Teleport onto Buttons folder
+local function startPlayerOnButtonsLoop()
+    coroutine.wrap(function()
+        while true do
+            if playerLoopRunning then
+                local tycoon = getTycoonRoot()
+                if tycoon then
+                    local buttonsFolder = tycoon:FindFirstChild("Buttons")
+                    if buttonsFolder then
+                        local buttonParts = findButtonsRootParts(buttonsFolder)
+                        if #buttonParts > 0 then
+                            local ok,char,root = pcall(getCharacterAndRoot)
+                            if ok and root and char then
+                                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                                for _, btnPart in ipairs(buttonParts) do
+                                    if btnPart and btnPart:IsA("BasePart") then
+                                        pcall(function()
+                                            teleportPlayerToCFrame(root,btnPart.CFrame)
+                                            if humanoid then pcall(function() humanoid.Jump=true end) end
+                                        end)
+                                    end
+                                    safeWait(BUTTON_TP_INTERVAL)
+                                end
+                            end
+                        else
+                            safeWait(0.01)
+                        end
+                    else
+                        safeWait(0.01)
+                    end
+                else
+                    safeWait(0.2)
+                end
+            else
+                safeWait(0.05)
+            end
+        end
+    end)()
+end
+
+-- Teleport onto Auxiliary.Collector.Collect
+local function startAuxCollectorLoop()
+    coroutine.wrap(function()
+        while true do
+            local tycoon = getTycoonRoot()
+            if tycoon then
+                local auxPart = tycoon:FindFirstChild("Auxiliary")
+                and tycoon.Auxiliary:FindFirstChild("Collector")
+                and tycoon.Auxiliary.Collector:FindFirstChild("Collect")
+                if auxPart and auxPart:IsA("BasePart") then
+                    local ok,char,root = pcall(getCharacterAndRoot)
+                    if ok and root then
+                        pcall(function() teleportPlayerToCFrame(root, auxPart.CFrame) end)
+                    end
+                end
+            end
+            safeWait(BUTTON_TP_INTERVAL)
+        end
+    end)()
+end
+
+-- ===== Rebirth monitor =====
+local function monitorRebirth()
+    coroutine.wrap(function()
+        while true do
+            local tycoon = getTycoonRoot()
+            if tycoon then
+                local rebButton = nil
+                for _, desc in ipairs(tycoon:GetDescendants()) do
+                    if desc.Name=="Button" and desc.Parent and desc.Parent.Name=="Rebirth" then
+                        rebButton = desc
+                        break
+                    end
+                end
+                if rebButton then
+                    playerLoopRunning=false
+                    local rebPart = getPartOfModel(rebButton) or (rebButton:IsA("BasePart") and rebButton or nil)
+                    local proximityPrompt=nil
+                    if rebButton then
+                        proximityPrompt = rebButton:FindFirstChildOfClass("ProximityPrompt")
+                        if not proximityPrompt then
+                            for _,d in ipairs(rebButton:GetDescendants()) do
+                                if d:IsA("ProximityPrompt") then
+                                    proximityPrompt=d
+                                    break
+                                end
+                            end
+                        end
+                    end
+                    local ok,char,root=pcall(getCharacterAndRoot)
+                    while rebButton and rebButton.Parent do
+                        if not (ok and root and root.Parent) then ok,char,root=pcall(getCharacterAndRoot) end
+                        if ok and root and rebPart then
+                            pcall(function() teleportPlayerToCFrame(root,rebPart.CFrame) end)
+                        end
+                        if proximityPrompt and proximityPrompt.Parent then
+                            pcall(function()
+                                if proximityPrompt.HoldDuration~=0 then pcall(function() proximityPrompt.HoldDuration=0 end) end
+                                if proximityPrompt.InputHoldBegin then
+                                    proximityPrompt:InputHoldBegin()
+                                    safeWait(0.02)
+                                    proximityPrompt:InputHoldEnd()
+                                elseif proximityPrompt.Trigger then
+                                    proximityPrompt:Trigger()
+                                end
+                            end)
+                        end
+                        safeWait(REBIRTH_PROMPT_INTERVAL)
+                    end
+                    playerLoopRunning=true
+                    local ok2,char2,root2=pcall(getCharacterAndRoot)
+                    if ok2 and root2 then
+                        pcall(function() root2.CFrame=CFrame.new(POST_REBIRTH_TELEPORT) end)
+                    end
+                    safeWait(POST_REBIRTH_WAIT_BEFORE_DARKNESS)
+                    while true do
+                        local ty = getTycoonRoot()
+                        local buttonsExist=false
+                        if ty then
+                            local bf = ty:FindFirstChild("Buttons")
+                            if bf then
+                                local parts=findButtonsRootParts(bf)
+                                if #parts>0 then buttonsExist=true end
+                            end
+                        end
+                        if buttonsExist then break end
+                        tryFireDarkness()
+                        safeWait(DARKNESS_FIRE_INTERVAL)
+                    end
+                end
+            end
+            safeWait(REBIRTH_CHECK_INTERVAL)
+        end
+    end)()
+end
+
+-- ===== Start Loops =====
+startPlayerOnButtonsLoop()
+startAuxCollectorLoop()
+monitorRebirth()
+
+-- End of Script
