@@ -1,0 +1,288 @@
+-- LocalScript (place in StarterPlayer -> StarterPlayerScripts)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local LOCAL_PLAYER = Players.LocalPlayer
+
+-- ===== CONFIG =====
+-- Use the local player's username as the tycoon name
+local TYCOON_NAME = LOCAL_PLAYER.Name
+
+local BUTTON_TP_INTERVAL = 0.01            -- teleport player onto each button every 0.01s
+local REBIRTH_PROMPT_INTERVAL = 0.1        -- how often to try to trigger the rebirth prompt / re-tp onto it
+local REBIRTH_CHECK_INTERVAL = 0.2         -- how often to scan for rebirth button
+
+-- After rebirth button destroyed, immediate teleport coords:
+local POST_REBIRTH_TELEPORT = Vector3.new(-335.260009765625, 44.50887680053711, 244.28721618652344)
+
+-- Wait before starting to fire Darkness (seconds)
+local POST_REBIRTH_WAIT_BEFORE_DARKNESS = 0.5
+
+-- Interval between Darkness fires while waiting for Buttons to show (seconds)
+local DARKNESS_FIRE_INTERVAL = 1
+
+-- ===== helpers =====
+local function safeWait(t)
+    if t and t > 0 then
+        local ok = pcall(function() wait(t) end)
+        if not ok then
+            local target = tick() + t
+            while tick() < target do RunService.Heartbeat:Wait() end
+        end
+    else
+        RunService.Heartbeat:Wait()
+    end
+end
+
+local function getTycoonRoot()
+    local tycoons = Workspace:FindFirstChild("Tycoons")
+    if not tycoons then return nil end
+    return tycoons:FindFirstChild(TYCOON_NAME)
+end
+
+local function getCharacterAndRoot(timeout)
+    timeout = timeout or 5
+    local char = LOCAL_PLAYER.Character
+    if not char then
+        char = LOCAL_PLAYER.CharacterAdded:Wait()
+    end
+    local root = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+    if not root then
+        root = char:WaitForChild("HumanoidRootPart", timeout) or char.PrimaryPart
+    end
+    return char, root
+end
+
+local function getPartOfModel(model)
+    if not model then return nil end
+    if model:IsA("BasePart") then return model end
+    if model:IsA("Model") then
+        if model.PrimaryPart then return model.PrimaryPart end
+        for _,d in ipairs(model:GetDescendants()) do
+            if d:IsA("BasePart") then return d end
+        end
+    end
+    return nil
+end
+
+local function teleportPlayerToCFrame(rootPart, targetCFrame)
+    if not rootPart or not targetCFrame then return end
+    pcall(function()
+        -- place player slightly above so touches/prompts register
+        rootPart.CFrame = targetCFrame + Vector3.new(0, 3, 0)
+    end)
+end
+
+-- Only search inside Buttons folder (deep)
+local function findButtonsRootParts(buttonsFolder)
+    local found = {}
+    if not buttonsFolder then return found end
+    for _, desc in ipairs(buttonsFolder:GetDescendants()) do
+        if desc.Name == "Button" then
+            local target = nil
+            if desc:IsA("BasePart") then
+                target = desc
+            elseif desc:IsA("Model") then
+                target = getPartOfModel(desc)
+            end
+            if target then table.insert(found, target) end
+        else
+            -- also include BaseParts that live inside Buttons (in case of different tycoon structure)
+            if desc:IsA("BasePart") then
+                table.insert(found, desc)
+            end
+        end
+    end
+
+    -- dedupe
+    local seen = {}
+    local unique = {}
+    for _, p in ipairs(found) do
+        if p and not seen[p] then
+            seen[p] = true
+            table.insert(unique, p)
+        end
+    end
+    return unique
+end
+
+-- ===== Player-on-buttons loop =====
+local playerLoopRunning = true
+
+local function startPlayerOnButtonsLoop()
+    coroutine.wrap(function()
+        while true do
+            if playerLoopRunning then
+                local tycoon = getTycoonRoot()
+                if tycoon then
+                    local buttonsFolder = tycoon:FindFirstChild("Buttons")
+                    if buttonsFolder then
+                        local buttonParts = findButtonsRootParts(buttonsFolder)
+                        if #buttonParts > 0 then
+                            local ok, char, root = pcall(getCharacterAndRoot)
+                            if ok and root and char then
+                                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                                for _, btnPart in ipairs(buttonParts) do
+                                    if btnPart and btnPart:IsA("BasePart") then
+                                        pcall(function()
+                                            teleportPlayerToCFrame(root, btnPart.CFrame)
+                                            if humanoid then pcall(function() humanoid.Jump = true end) end
+                                        end)
+                                    end
+                                    safeWait(BUTTON_TP_INTERVAL)
+                                end
+                            end
+                        else
+                            safeWait(0.01)
+                        end
+                    else
+                        safeWait(0.01)
+                    end
+                else
+                    safeWait(0.2)
+                end
+            else
+                safeWait(0.05)
+            end
+        end
+    end)()
+end
+
+-- ===== helper: fire SelectionUI RemoteEvent safely =====
+local function tryFireDarkness()
+    pcall(function()
+        local args = {"Darkness"}
+        local plr = Players.LocalPlayer
+        if not plr then return end
+        local pg = plr:WaitForChild("PlayerGui", 5)
+        if not pg then return end
+        local selectionUI = pg:WaitForChild("SelectionUI", 5)
+        if not selectionUI then return end
+        local remote = selectionUI:WaitForChild("RemoteEvent", 5)
+        if not remote then return end
+        remote:FireServer(unpack(args))
+    end)
+end
+
+-- ===== Rebirth monitor & handler =====
+local function monitorRebirth()
+    coroutine.wrap(function()
+        while true do
+            local tycoon = getTycoonRoot()
+            if tycoon then
+                local foundButton = nil
+                for _, desc in ipairs(tycoon:GetDescendants()) do
+                    if desc.Name == "Button" then
+                        local parent = desc.Parent
+                        if parent and parent.Name == "Rebirth" then
+                            foundButton = desc
+                            break
+                        end
+                    end
+                end
+
+                if foundButton then
+                    -- pause normal player loop while focusing on rebirth
+                    playerLoopRunning = false
+
+                    -- identify a usable basepart for the rebirth button
+                    local rebPart = getPartOfModel(foundButton)
+                    if foundButton:IsA("BasePart") then rebPart = foundButton end
+
+                    -- locate proximity prompt if present
+                    local proximityPrompt = nil
+                    if foundButton then
+                        proximityPrompt = foundButton:FindFirstChildOfClass("ProximityPrompt")
+                        if not proximityPrompt then
+                            for _, d in ipairs(foundButton:GetDescendants()) do
+                                if d:IsA("ProximityPrompt") then
+                                    proximityPrompt = d
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    -- repeatedly teleport player onto the rebirth button AND try to trigger prompt
+                    local ok, char, root = pcall(getCharacterAndRoot)
+                    while foundButton and foundButton.Parent do
+                        -- update character/root if needed
+                        if not (ok and root and root.Parent) then
+                            ok, char, root = pcall(getCharacterAndRoot)
+                        end
+
+                        if ok and root and rebPart then
+                            pcall(function() teleportPlayerToCFrame(root, rebPart.CFrame) end)
+                        end
+
+                        if proximityPrompt and proximityPrompt.Parent then
+                            pcall(function()
+                                -- set hold to zero if possible
+                                if proximityPrompt.HoldDuration ~= 0 then
+                                    pcall(function() proximityPrompt.HoldDuration = 0 end)
+                                end
+                                -- try InputHoldBegin/End or Trigger
+                                if proximityPrompt.InputHoldBegin then
+                                    proximityPrompt:InputHoldBegin()
+                                    safeWait(0.02)
+                                    proximityPrompt:InputHoldEnd()
+                                elseif proximityPrompt.Trigger then
+                                    proximityPrompt:Trigger()
+                                end
+                            end)
+                        end
+
+                        safeWait(REBIRTH_PROMPT_INTERVAL)
+                    end
+
+                    -- rebirth button destroyed -> immediately teleport to the post-rebirth location
+                    playerLoopRunning = true
+
+                    local ok2, char2, root2 = pcall(getCharacterAndRoot)
+                    if ok2 and root2 then
+                        pcall(function() root2.CFrame = CFrame.new(POST_REBIRTH_TELEPORT) end)
+                    end
+
+                    -- wait configured seconds before starting to fire Darkness
+                    safeWait(POST_REBIRTH_WAIT_BEFORE_DARKNESS)
+
+                    -- loop firing Darkness until Buttons show up in this player's tycoon
+                    while true do
+                        -- check if tycoon buttons exist
+                        local ty = getTycoonRoot()
+                        local buttonsExist = false
+                        if ty then
+                            local bf = ty:FindFirstChild("Buttons")
+                            if bf then
+                                -- also consider if Buttons folder has any button parts
+                                local parts = findButtonsRootParts(bf)
+                                if #parts > 0 then
+                                    buttonsExist = true
+                                end
+                            end
+                        end
+
+                        if buttonsExist then
+                            break -- stop firing once Buttons are present
+                        end
+
+                        -- fire Darkness remote safely
+                        tryFireDarkness()
+
+                        -- wait a bit before trying again
+                        safeWait(DARKNESS_FIRE_INTERVAL)
+                    end
+                end
+            end
+            safeWait(REBIRTH_CHECK_INTERVAL)
+        end
+    end)()
+end
+
+-- ===== Start loops =====
+startPlayerOnButtonsLoop()
+monitorRebirth()
+
+-- End of script
