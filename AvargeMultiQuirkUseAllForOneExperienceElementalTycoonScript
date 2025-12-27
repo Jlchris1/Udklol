@@ -1,0 +1,298 @@
+-- Place as a LocalScript in StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- State
+local LOOP_ENABLED = false
+local AUTO_RECREATE = true
+local whitelist = {}
+
+local TriggerTool
+local WLGui
+local refreshWhitelist
+
+-- Utils
+local function getBackpack()
+    return player:WaitForChild("Backpack")
+end
+
+local function getHumanoid()
+    local char = player.Character
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function collectTools()
+    local tools = {}
+    for _, t in ipairs(getBackpack():GetChildren()) do
+        if t:IsA("Tool") then table.insert(tools, t) end
+    end
+    local char = player.Character
+    if char then
+        for _, t in ipairs(char:GetChildren()) do
+            if t:IsA("Tool") then table.insert(tools, t) end
+        end
+    end
+    table.sort(tools, function(a,b) return a.Name:lower() < b.Name:lower() end)
+    return tools
+end
+
+local function toolAllowed(tool)
+    if whitelist[tool.Name] == nil then whitelist[tool.Name] = true end
+    return whitelist[tool.Name]
+end
+
+-- Trigger all tools (fixed: unequip all tools including TriggerTool, then re-equip TriggerTool)
+local function triggerAllTools()
+    local humanoid = getHumanoid()
+    if not humanoid then return end
+
+    -- Equip & activate all allowed tools
+    for _, tool in ipairs(collectTools()) do
+        if toolAllowed(tool) then
+            humanoid:EquipTool(tool)
+            tool:Activate()
+            tool:Deactivate()
+        end
+    end
+
+    -- Unequip ALL tools (including TriggerTool)
+    for _, tool in ipairs(collectTools()) do
+        if tool.Parent == player.Character then
+            tool.Parent = getBackpack()
+        end
+    end
+
+    -- Re-equip TriggerTool only
+    if TriggerTool and TriggerTool.Parent then
+        humanoid:EquipTool(TriggerTool)
+    end
+end
+
+-- Loop
+local function startLoop()
+    task.spawn(function()
+        while LOOP_ENABLED do
+            triggerAllTools()
+            RunService.Heartbeat:Wait()
+        end
+    end)
+end
+
+-- Trigger Tool
+local function createTriggerTool(force)
+    if TriggerTool and not force then return end
+    if TriggerTool then TriggerTool:Destroy() end
+
+    local tool = Instance.new("Tool")
+    tool.Name = "TriggerTool"
+    tool.CanBeDropped = false
+
+    local handle = Instance.new("Part")
+    handle.Name = "Handle"
+    handle.Size = Vector3.new(1,1,1)
+    handle.Transparency = 1
+    handle.CanCollide = false
+    handle.Parent = tool
+
+    tool.Activated:Connect(triggerAllTools)
+    tool.Parent = getBackpack()
+    TriggerTool = tool
+end
+
+local function toggleEquipTool()
+    local humanoid = getHumanoid()
+    if not humanoid or not TriggerTool then return end
+    if TriggerTool.Parent == getBackpack() then
+        humanoid:EquipTool(TriggerTool)
+    else
+        TriggerTool.Parent = getBackpack()
+    end
+end
+
+-- Whitelist GUI
+local function toggleWhitelistGui()
+    if WLGui then
+        WLGui.Enabled = not WLGui.Enabled
+        return
+    end
+
+    WLGui = Instance.new("ScreenGui")
+    WLGui.Name = "WhitelistGui"
+    WLGui.ResetOnSpawn = false
+    WLGui.Enabled = true
+    WLGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    WLGui.Parent = playerGui
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.fromScale(0.35,0.55)
+    frame.Position = UDim2.fromScale(0.325,0.22)
+    frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    frame.BorderSizePixel = 2
+    frame.Parent = WLGui
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1,0,0,36)
+    title.Text = "Whitelist"
+    title.TextScaled = true
+    title.BackgroundTransparency = 1
+    title.TextColor3 = Color3.new(1,1,1)
+    title.Parent = frame
+
+    local search = Instance.new("TextBox")
+    search.PlaceholderText = "Search tools..."
+    search.Size = UDim2.new(1,-10,0,28)
+    search.Position = UDim2.new(0,5,0,36)
+    search.ClearTextOnFocus = false
+    search.Text = ""
+    search.Parent = frame
+
+    local onAllBtn = Instance.new("TextButton")
+    onAllBtn.Size = UDim2.new(0.48,0,0,28)
+    onAllBtn.Position = UDim2.new(0,5,0,64)
+    onAllBtn.Text = "ON ALL"
+    onAllBtn.Parent = frame
+
+    local offAllBtn = Instance.new("TextButton")
+    offAllBtn.Size = UDim2.new(0.48,0,0,28)
+    offAllBtn.Position = UDim2.new(0.52,0,0,64)
+    offAllBtn.Text = "OFF ALL"
+    offAllBtn.Parent = frame
+
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Position = UDim2.new(0,0,0,96)
+    scroll.Size = UDim2.new(1,0,1,-96)
+    scroll.CanvasSize = UDim2.new(0,0,0,0)
+    scroll.ScrollBarImageTransparency = 0
+    scroll.Parent = frame
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0,6)
+    layout.SortOrder = Enum.SortOrder.Name
+    layout.Parent = scroll
+
+    refreshWhitelist = function()
+        if not scroll then return end
+        for _, c in ipairs(scroll:GetChildren()) do if not c:IsA("UIListLayout") then c:Destroy() end end
+
+        local tools = collectTools()
+        table.sort(tools,function(a,b) return a.Name:lower() < b.Name:lower() end)
+
+        local filter = search.Text:lower()
+
+        for _, tool in ipairs(tools) do
+            if whitelist[tool.Name] == nil then whitelist[tool.Name]=true end
+            if tool.Name:lower():find(filter) then
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.new(1,-8,0,36)
+                btn.Text = tool.Name .. (whitelist[tool.Name] and " : ON" or " : OFF")
+                btn.Parent = scroll
+
+                btn.MouseButton1Click:Connect(function()
+                    whitelist[tool.Name] = not whitelist[tool.Name]
+                    btn.Text = tool.Name .. (whitelist[tool.Name] and " : ON" or " : OFF")
+                end)
+            end
+        end
+
+        scroll.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y+10)
+    end
+
+    task.spawn(function()
+        while WLGui and WLGui.Parent do
+            refreshWhitelist()
+            task.wait(1)
+        end
+    end)
+
+    search:GetPropertyChangedSignal("Text"):Connect(refreshWhitelist)
+
+    onAllBtn.MouseButton1Click:Connect(function()
+        for _, t in ipairs(collectTools()) do whitelist[t.Name]=true end
+        refreshWhitelist()
+    end)
+
+    offAllBtn.MouseButton1Click:Connect(function()
+        for _, t in ipairs(collectTools()) do whitelist[t.Name]=false end
+        refreshWhitelist()
+    end)
+
+    local backpack = getBackpack()
+    backpack.ChildAdded:Connect(refreshWhitelist)
+    backpack.ChildRemoved:Connect(refreshWhitelist)
+    player.CharacterAdded:Connect(function() task.wait(0.3); refreshWhitelist() end)
+
+    refreshWhitelist()
+end
+
+-- Main GUI
+local function createGui()
+    task.wait(0.1)
+    local screen = Instance.new("ScreenGui")
+    screen.ResetOnSpawn = false
+    screen.Enabled = true
+    screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screen.Parent = playerGui
+
+    local mini = Instance.new("TextButton")
+    mini.Size = UDim2.new(0,40,0,40)
+    mini.Position = UDim2.new(0,5,0,5)
+    mini.Text = "≡"
+    mini.BackgroundColor3 = Color3.fromRGB(45,45,45)
+    mini.TextColor3 = Color3.new(1,1,1)
+    mini.Parent = screen
+
+    local panel = Instance.new("Frame")
+    panel.Size = UDim2.new(0,260,0,300)
+    panel.Position = UDim2.new(0,50,0,60)
+    panel.BackgroundColor3 = Color3.fromRGB(25,25,25)
+    panel.Visible = true
+    panel.Parent = screen
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0,6)
+    layout.Parent = panel
+
+    local function makeButton(text)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1,0,0,36)
+        b.Text = text
+        b.Parent = panel
+        return b
+    end
+
+    local loopBtn = makeButton("Loop: OFF")
+    local equipBtn = makeButton("Equip / Unequip Tool")
+    local createBtn = makeButton("Create Trigger Tool")
+    local autoBtn = makeButton("Auto-Recreate: ON")
+    local wlBtn = makeButton("Open Whitelist GUI")
+
+    loopBtn.MouseButton1Click:Connect(function()
+        LOOP_ENABLED = not LOOP_ENABLED
+        loopBtn.Text = LOOP_ENABLED and "Loop: ON" or "Loop: OFF"
+        if LOOP_ENABLED then startLoop() end
+    end)
+
+    equipBtn.MouseButton1Click:Connect(toggleEquipTool)
+    createBtn.MouseButton1Click:Connect(function() createTriggerTool(true) end)
+    autoBtn.MouseButton1Click:Connect(function()
+        AUTO_RECREATE = not AUTO_RECREATE
+        autoBtn.Text = AUTO_RECREATE and "Auto-Recreate: ON" or "Auto-Recreate: OFF"
+    end)
+    wlBtn.MouseButton1Click:Connect(toggleWhitelistGui)
+
+    mini.MouseButton1Click:Connect(function() panel.Visible = not panel.Visible end)
+end
+
+-- Respawn handling
+player.CharacterAdded:Connect(function()
+    task.wait(0.3)
+    if AUTO_RECREATE then createTriggerTool(true) end
+end)
+
+-- Init
+createTriggerTool()
+createGui()
