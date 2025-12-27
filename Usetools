@@ -1,0 +1,62 @@
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+local function getCharacter()
+	return player.Character or player.CharacterAdded:Wait()
+end
+
+local function triggerAllTools()
+	local character = getCharacter()
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
+
+	local backpack = player:WaitForChild("Backpack")
+
+	-- Save currently equipped tool
+	local previousTool = humanoid:FindFirstChildOfClass("Tool")
+
+	-- Collect all tools
+	local tools = {}
+
+	for _, tool in ipairs(backpack:GetChildren()) do
+		if tool:IsA("Tool") then
+			table.insert(tools, tool)
+		end
+	end
+
+	for _, tool in ipairs(character:GetChildren()) do
+		if tool:IsA("Tool") then
+			table.insert(tools, tool)
+		end
+	end
+
+	-- Activate each tool
+	for _, tool in ipairs(tools) do
+		if tool and tool.Parent then
+			-- Equip
+			humanoid:EquipTool(tool)
+
+			-- Small yield so Roblox registers equip
+			task.wait()
+
+			-- Activate
+			pcall(function()
+				tool:Activate()
+			end)
+
+			-- Optional deactivate
+			task.wait()
+			pcall(function()
+				tool:Deactivate()
+			end)
+		end
+	end
+
+	-- Re-equip previous tool if there was one
+	if previousTool and previousTool.Parent then
+		humanoid:EquipTool(previousTool)
+	end
+end
+
+-- Run
+triggerAllTools()
