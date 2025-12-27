@@ -45,29 +45,35 @@ local function toolAllowed(tool)
     return whitelist[tool.Name]
 end
 
--- Trigger all tools (fixed: unequip all tools including TriggerTool, then re-equip TriggerTool)
+-- Trigger all tools safely and unequip others
 local function triggerAllTools()
     local humanoid = getHumanoid()
     if not humanoid then return end
 
-    -- Equip & activate all allowed tools
+    -- Activate all allowed tools except TriggerTool
     for _, tool in ipairs(collectTools()) do
-        if toolAllowed(tool) then
-            humanoid:EquipTool(tool)
-            tool:Activate()
-            tool:Deactivate()
+        if toolAllowed(tool) and tool ~= TriggerTool then
+            if tool.Parent ~= player.Character then
+                tool.Parent = player.Character
+            end
+            task.spawn(function()
+                pcall(function()
+                    tool:Activate()
+                end)
+            end)
         end
     end
 
-    -- Unequip ALL tools (including TriggerTool)
+    -- Unequip all tools except TriggerTool
     for _, tool in ipairs(collectTools()) do
-        if tool.Parent == player.Character then
+        if tool ~= TriggerTool and tool.Parent == player.Character then
             tool.Parent = getBackpack()
         end
     end
 
-    -- Re-equip TriggerTool only
-    if TriggerTool and TriggerTool.Parent then
+    -- Ensure TriggerTool stays equipped
+    if TriggerTool and TriggerTool.Parent ~= player.Character then
+        TriggerTool.Parent = player.Character
         humanoid:EquipTool(TriggerTool)
     end
 end
@@ -82,7 +88,7 @@ local function startLoop()
     end)
 end
 
--- Trigger Tool
+-- Create TriggerTool
 local function createTriggerTool(force)
     if TriggerTool and not force then return end
     if TriggerTool then TriggerTool:Destroy() end
@@ -90,19 +96,31 @@ local function createTriggerTool(force)
     local tool = Instance.new("Tool")
     tool.Name = "TriggerTool"
     tool.CanBeDropped = false
+    tool.RequiresHandle = true
 
     local handle = Instance.new("Part")
     handle.Name = "Handle"
     handle.Size = Vector3.new(1,1,1)
     handle.Transparency = 1
     handle.CanCollide = false
+    handle.Anchored = false
     handle.Parent = tool
 
-    tool.Activated:Connect(triggerAllTools)
+    tool.Activated:Connect(function()
+        task.spawn(triggerAllTools)
+    end)
+
     tool.Parent = getBackpack()
     TriggerTool = tool
+
+    -- Auto-equip
+    local humanoid = getHumanoid()
+    if humanoid then
+        humanoid:EquipTool(tool)
+    end
 end
 
+-- Equip/Unequip TriggerTool
 local function toggleEquipTool()
     local humanoid = getHumanoid()
     if not humanoid or not TriggerTool then return end
@@ -230,7 +248,7 @@ end
 
 -- Main GUI
 local function createGui()
-    task.wait(0.1)
+    task.wait(0.1) -- wait for PlayerGui
     local screen = Instance.new("ScreenGui")
     screen.ResetOnSpawn = false
     screen.Enabled = true
