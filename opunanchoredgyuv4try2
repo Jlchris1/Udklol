@@ -1,6 +1,7 @@
--- Full updated script (client)
--- Handles: Selected/Whitelisted bools, PAA, CMD blackholes, Life Cycle Mode, Reset Cycle button
--- ROTATE_INTERVAL = 0.2 (swap cooldown)
+-- Full updated script (client) - modified per user request:
+--  * FLING_MULT = 12000 applied to torque/velocity-producing stats
+--  * PULL_MULT = 90000 applied to pull (AlignPosition.MaxForce & Responsiveness)
+--  * Blackholes will NOT roam to the local player when no targets remain
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -39,20 +40,14 @@ local paaConnections = {}
 -- Rebalancer
 local rebalancerRunning = false
 local rebalancerFreq = 0.10
-
--- Multipliers requested by user
-local FLING_MULT = 9e37        -- multiply fling/velocity-causing stats by this
-local PULL_MULT = math.huge         -- make pulling forces this many times stronger
-
--- align responsiveness baseline (will be scaled by PULL_MULT)
-local alignResponsiveness = 1500 * PULL_MULT
+local alignResponsiveness = 1500
 
 -- BH motion
 local BH_SWAP_INTERVAL = 0.01
 local BH_OSC_FREQUENCY = 1 / (BH_SWAP_INTERVAL * 2)
-local BH_AMPLITUDE_FACTOR = 0.22 * FLING_MULT
-local BH_MIN_AMPLITUDE = 0.6 * FLING_MULT
-local BH_MAX_AMPLITUDE = 80 * FLING_MULT
+local BH_AMPLITUDE_FACTOR = 0.22
+local BH_MIN_AMPLITUDE = 0.6
+local BH_MAX_AMPLITUDE = 80
 local TARGET_SMOOTHNESS = 6.0
 
 -- ROTATION settings for extra BH remainder (swap cooldown set to 0.2)
@@ -65,6 +60,10 @@ local cyclePlayers = {}        -- snapshot players for the current cycle (Player
 local cycleDead = {}           -- set: player -> true if died this cycle
 local cycleConns = {}          -- for Humanoid.Died & CharacterAdded/AncestryChanged connections
 local cycleRestartPending = false
+
+-- Multipliers requested by user
+local FLING_MULT = 12000     -- violent velocities / fling-on-touch multiplier
+local PULL_MULT  = 90000     -- pull strength multiplier
 
 -- Setup folder & primary attachment
 local function setupPlayer()
@@ -191,29 +190,6 @@ local function getSelectedPlayers(allowWhitelisted)
     return res
 end
 
--- helper to check if there are ANY valid targets under the current primary mode
-local function hasAnyActiveTargets()
-    if targetSelectedActive then
-        local sel = getSelectedPlayers(true)
-        for _, pl in ipairs(sel) do
-            if pl ~= localPlayer and not isWhitelisted(pl) and isPlayerAlive(pl) then
-                return true
-            end
-        end
-        return false
-    elseif targetAllActive then
-        local all = getAllNonLocalPlayers()
-        for _, pl in ipairs(all) do
-            if pl ~= localPlayer and not isWhitelisted(pl) and isPlayerAlive(pl) then
-                return true
-            end
-        end
-        return false
-    else
-        return false
-    end
-end
-
 -- Separate BH lists helper
 local function getBHsBySource(source)
     local out = {}
@@ -249,18 +225,18 @@ local function ForcePart(v)
         stripBodyForces(v)
         v.CanCollide = false
 
+        -- APPLY FLING MULTIPLIER
         local Torque = Instance.new("Torque", v)
-        -- fling multiplier applied here
-        Torque.Torque = Vector3.new(1e6 * FLING_MULT, 1e6 * FLING_MULT, 1e6 * FLING_MULT)
+        Torque.Torque = Vector3.new(1e6, 1e6, 1e6) * FLING_MULT
         local AlignPosition = Instance.new("AlignPosition", v)
         local Attachment2 = Instance.new("Attachment", v)
         pcall(function() Attachment2.WorldCFrame = v.CFrame end)
         Torque.Attachment0 = Attachment2
 
-        -- pull multiplier applied to MaxForce & Responsiveness
+        -- APPLY PULL MULTIPLIER (MaxForce and Responsiveness)
         AlignPosition.MaxForce = 1e9 * PULL_MULT
         AlignPosition.MaxVelocity = math.huge
-        AlignPosition.Responsiveness = alignResponsiveness
+        AlignPosition.Responsiveness = alignResponsiveness * PULL_MULT
         AlignPosition.Attachment0 = Attachment2
 
         local bh = getLeastLoadedBlackHole()
@@ -382,7 +358,11 @@ local function setBlackHoleActiveState(bh, active)
             if p and p.Parent then
                 p.CanCollide = true
                 local ap = p:FindFirstChildOfClass("AlignPosition")
-                if ap then ap.Attachment1 = Attachment1 end
+                if ap then
+                    ap.Attachment1 = Attachment1
+                    -- ensure inactive ap doesn't keep huge force
+                    ap.MaxForce = 1e9 * (PULL_MULT) -- leave but still anchored to center
+                end
             end
         end
     else
@@ -464,27 +444,40 @@ local function createExtraBlackHole(initialTarget, source)
                     end
                 end
             else
-                -- If there are any active targets under the current primary mode, the rotating/distribute logic
-                -- will assign targets; but if there are NO targets while TargetAll/TargetSelected is active,
-                -- do NOT roam on the local player: mark BH inactive and skip roaming.
-                local hasTargets = hasAnyActiveTargets()
-                if not hasTargets then
-                    -- deactivate BH so it won't cling to local player
+                -- If there are no valid targets, DO NOT roam to the local player.
+                -- Instead: deactivate the BH (no pulling) or gently stay near central Attachment1.
+                local hasValidTargets = false
+                for _, pl in ipairs(Players:GetPlayers()) do
+                    if pl ~= localPlayer and pl.Parent and not isWhitelisted(pl) and isPlayerAlive(pl) then
+                        hasValidTargets = true
+                        break
+                    end
+                end
+
+                if not hasValidTargets then
+                    -- deactivate so it won't target local player or fling anything
                     setBlackHoleActiveState(bh, false)
-                    bh.TargetPlayer = nil
-                    -- optionally leave attachment where it is (do not set to local)
-                else
-                    -- roam near local only if there ARE valid targets in the world (this mostly handles non-primary assignment cases)
-                    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                        local hrp = localPlayer.Character.HumanoidRootPart
-                        local phase = t * (BH_OSC_FREQUENCY * 0.45)
-                        local roamOffset = Vector3.new(math.sin(phase*1.11)*4, math.sin(phase*1.3)*1.6, math.cos(phase*0.9)*4)
-                        if att then
-                            local success, cur = pcall(function() return att.WorldCFrame end)
-                            local curCF = success and cur or att.WorldCFrame or part.CFrame
-                            local targetCF = hrp.CFrame * CFrame.new(roamOffset + Vector3.new(math.random(-2,2), math.random(-1,1), math.random(-2,2)))
+                    -- gently move toward the central Attachment1 (if present) or stay where it is
+                    if Attachment1 and Attachment1.Parent and att then
+                        local success, cur = pcall(function() return att.WorldCFrame end)
+                        local curCF = success and cur or att.WorldCFrame or part.CFrame
+                        local centerCF
+                        pcall(function()
+                            centerCF = Attachment1.WorldCFrame
+                        end)
+                        if centerCF then
+                            local targetCF = centerCF * CFrame.new(math.random(-2,2), math.random(-1,1), math.random(-2,2))
                             att.WorldCFrame = smoothLerpCFrame(curCF, targetCF, dt)
                         end
+                    end
+                    -- wait a shorter time while idle
+                    wait(0.1)
+                else
+                    -- If we do have other players, but this BH hasn't been assigned, keep it idle until assigned by distributor
+                    if att then
+                        local success, cur = pcall(function() return att.WorldCFrame end)
+                        local curCF = success and cur or att.WorldCFrame or part.CFrame
+                        att.WorldCFrame = smoothLerpCFrame(curCF, curCF, dt)
                     end
                 end
             end
@@ -543,9 +536,9 @@ local function distributeBHListEvenly(bhList, players)
     end
 
     if #players == 0 then
+        -- When there are no players, deactivate BHs and do NOT roam to local player.
         for _, bh in ipairs(bhList) do
             bh.TargetPlayer = nil
-            -- No players to target: deactivate BHs so they won't roam onto local player
             setBlackHoleActiveState(bh, false)
         end
         stopRotatingCoroutine()
@@ -603,7 +596,7 @@ local function distributeBHListEvenly(bhList, players)
             if #curPlayers == 0 then
                 for _, rb in ipairs(rotatingBHs) do
                     rb.TargetPlayer = nil
-                    setBlackHoleActiveState(rb, false)
+                    setBlackHoleActiveState(rb, false) -- ensure it does not roam to local
                 end
                 break
             end
@@ -612,6 +605,7 @@ local function distributeBHListEvenly(bhList, players)
                 local pick = curPlayers[((posIndex - 1) % #curPlayers) + 1]
                 if pick and not isWhitelisted(pick) and pick ~= localPlayer and isPlayerAlive(pick) then
                     rb.TargetPlayer = pick
+                    setBlackHoleActiveState(rb, true)
                     if pick.Character and pick.Character:FindFirstChild("HumanoidRootPart") and rb.Attachment then
                         pcall(function() rb.Attachment.WorldCFrame = pick.Character.HumanoidRootPart.CFrame end)
                     end
@@ -933,11 +927,16 @@ function startRebalancer()
                 if p and p.Parent then
                     local ap = p:FindFirstChildOfClass("AlignPosition")
                     if ap then
+                        -- ensure ap has the amplified MaxForce (in case created earlier)
+                        pcall(function() ap.MaxForce = 1e9 * PULL_MULT end)
                         table.insert(parts, p)
                     else
                         ForcePart(p)
                         local ap2 = p:FindFirstChildOfClass("AlignPosition")
-                        if ap2 then table.insert(parts, p) end
+                        if ap2 then
+                            pcall(function() ap2.MaxForce = 1e9 * PULL_MULT end)
+                            table.insert(parts, p)
+                        end
                     end
                 end
             end
