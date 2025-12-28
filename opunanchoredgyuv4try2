@@ -62,8 +62,8 @@ local cycleConns = {}          -- for Humanoid.Died & CharacterAdded/AncestryCha
 local cycleRestartPending = false
 
 -- Multipliers requested by user
-local FLING_MULT = 1e7     -- violent velocities / fling-on-touch multiplier
-local PULL_MULT  = 9e37     -- pull strength multiplier
+local FLING_MULT = 1000000     -- violent velocities / fling-on-touch multiplier
+local PULL_MULT  = 100000000     -- pull strength multiplier
 
 -- Setup folder & primary attachment
 local function setupPlayer()
