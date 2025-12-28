@@ -1,8 +1,9 @@
--- Full updated script (client) - user's requested tweaks:
---  * FALLEN_PARTS_DESTROY_HEIGHT = 0/0 (NaN)
---  * FLING_POWER = 1e6
---  * PULL_POWER  = 1e8
---  * Blackholes sweep 360° (including above/below) around moving targets
+-- Full updated script (client) - user requested tweaks:
+--  * fallenpartsdestroyheight set to NaN (0/0)
+--  * Fling torque set to 1,000,000 (per-axis)
+--  * Pull MaxForce set to 100,000,000
+--  * BHs: aggressive 3D back-and-forth over full 360° sphere, amplitude & frequency scale with target speed
+--  * BHs will not roam to local player when no valid targets remain
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -41,7 +42,7 @@ local paaConnections = {}
 -- Rebalancer
 local rebalancerRunning = false
 local rebalancerFreq = 0.10
-local alignResponsiveness = 1500
+local alignResponsiveness_base = 1500
 
 -- BH motion
 local BH_SWAP_INTERVAL = 0.01
@@ -62,10 +63,13 @@ local cycleDead = {}           -- set: player -> true if died this cycle
 local cycleConns = {}          -- for Humanoid.Died & CharacterAdded/AncestryChanged connections
 local cycleRestartPending = false
 
--- User-requested numeric knobs
-local FALLEN_PARTS_DESTROY_HEIGHT = 0/0  -- NaN as requested
-local FLING_POWER = 1e6                  -- absolute fling torque per-axis
-local PULL_POWER  = 1e8                  -- AlignPosition.MaxForce absolute
+-- USER-REQUESTED VALUES
+local fallenpartsdestroyheight = 0/0    -- NaN intentionally (user requested 0/0)
+
+-- Absolute fling/pull values requested:
+local FLING_TORQUE = Vector3.new(1e6, 1e6, 1e6) -- fling power: 1,000,000 per axis
+local PULL_MAX_FORCE = 1e8                      -- pull force: 100,000,000
+local PULL_RESPONSIVENESS = 1e6                 -- responsiveness for AlignPosition (very high)
 
 -- Setup folder & primary attachment
 local function setupPlayer()
@@ -227,18 +231,18 @@ local function ForcePart(v)
         stripBodyForces(v)
         v.CanCollide = false
 
-        -- APPLY FLING POWER (absolute)
+        -- APPLY FLING TORQUE (absolute value requested)
         local Torque = Instance.new("Torque", v)
-        Torque.Torque = Vector3.new(FLING_POWER, FLING_POWER, FLING_POWER)
+        Torque.Torque = FLING_TORQUE
         local AlignPosition = Instance.new("AlignPosition", v)
         local Attachment2 = Instance.new("Attachment", v)
         pcall(function() Attachment2.WorldCFrame = v.CFrame end)
         Torque.Attachment0 = Attachment2
 
-        -- APPLY PULL POWER (absolute)
-        AlignPosition.MaxForce = PULL_POWER
+        -- APPLY PULL MAX FORCE & RESPONSIVENESS (absolute values requested)
+        AlignPosition.MaxForce = PULL_MAX_FORCE
         AlignPosition.MaxVelocity = math.huge
-        AlignPosition.Responsiveness = alignResponsiveness
+        AlignPosition.Responsiveness = PULL_RESPONSIVENESS
         AlignPosition.Attachment0 = Attachment2
 
         local bh = getLeastLoadedBlackHole()
@@ -362,8 +366,8 @@ local function setBlackHoleActiveState(bh, active)
                 local ap = p:FindFirstChildOfClass("AlignPosition")
                 if ap then
                     ap.Attachment1 = Attachment1
-                    -- ensure MaxForce remains the high PULL_POWER in case it was reduced earlier
-                    pcall(function() ap.MaxForce = PULL_POWER end)
+                    pcall(function() ap.MaxForce = PULL_MAX_FORCE end)
+                    pcall(function() ap.Responsiveness = PULL_RESPONSIVENESS end)
                 end
             end
         end
@@ -404,9 +408,7 @@ local function createExtraBlackHole(initialTarget, source)
         _running = true,
         _active = true,
         source = source or "CMD",
-        rotating = false, -- set true for rotating leftovers
-        _thetaOff = math.random() * math.pi * 2,
-        _phiOff = (math.random() - 0.5) * math.pi
+        rotating = false -- set true for rotating leftovers
     }
 
     local function isPlayerDisabled(pl)
@@ -417,9 +419,11 @@ local function createExtraBlackHole(initialTarget, source)
         return false
     end
 
+    -- BH behavior thread:
+    -- When a target exists: aggressive predictive targeting + 3D back-and-forth oscillation over full sphere.
+    -- Amplitude and frequency scale with target speed. When no targets exist, BHs deactivate and move near Attachment1.
     bh._thread = spawn(function()
         local t = 0
-        local sweepSpeed = 1.2  -- speed of sweep around target
         while bh._running do
             local dt = RunService.Heartbeat:Wait()
             t = t + dt
@@ -429,35 +433,74 @@ local function createExtraBlackHole(initialTarget, source)
                     setBlackHoleActiveState(bh, false)
                 else
                     setBlackHoleActiveState(bh, true)
+
                     local char = bh.TargetPlayer.Character
                     if char and char:FindFirstChild("HumanoidRootPart") then
                         local hrp = char.HumanoidRootPart
+                        local pos = hrp.Position
                         local vel = hrp.Velocity or Vector3.new(0,0,0)
                         local speed = vel.Magnitude
-                        -- base radius (dependent on speed but clamped)
-                        local radius = clamp(speed * BH_AMPLITUDE_FACTOR + 2, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
-                        -- spherical sweep (theta rotates around horizontal plane, phi covers vertical)
-                        local theta = (t * sweepSpeed) + bh._thetaOff
-                        local phi = math.sin(t * sweepSpeed * 0.6 + bh._phiOff) * (math.pi * 0.45) -- up/down swing up to ~81 degrees
-                        local x = math.cos(theta) * math.cos(phi)
-                        local y = math.sin(phi)
-                        local z = math.sin(theta) * math.cos(phi)
-                        local sweepOffset = Vector3.new(x, y, z) * radius
 
-                        -- bias sweep toward motion direction for better hits: add small forward component
-                        local forwardBias = (speed > 0.5) and vel.Unit * (radius * 0.25) or hrp.CFrame.LookVector * (radius * 0.15)
-                        local targetCFrame = hrp.CFrame * CFrame.new(sweepOffset + forwardBias)
+                        -- PREDICTION: lead the target by velocity scaled factor. scaleLead grows with speed
+                        local leadFactor = clamp(0.2 + (speed * 0.06), 0.2, 1.5) -- tuned: faster -> longer lead
+                        local predictedPos = pos + vel * leadFactor
 
+                        -- AMPLITUDE & FREQUENCY scaling
+                        local baseAmp = 2.0
+                        local ampFromSpeed = clamp(speed * 0.45, 0, 120) -- big scaling for very fast players
+                        local amplitude = clamp(baseAmp + ampFromSpeed, 0.5, 400) -- allow large radius at high speed
+
+                        -- frequency: high so BH motion can't be simply outrun/skid around
+                        local baseFreq = 6.0
+                        local freq = baseFreq + (speed * 1.6) -- faster players -> faster oscillation
+                        if freq < 6 then freq = 6 end
+
+                        -- spherical oscillation (360°): create a back-and-forth vector spread across full sphere,
+                        -- using three sinusoidal components at different phase multipliers so combined motion covers 3D space.
+                        local phase = t * (2 * math.pi * freq)
+                        local sin1 = math.sin(phase)
+                        local sin2 = math.sin(phase * 1.27)
+                        local sin3 = math.cos(phase * 0.73)
+
+                        local right = hrp.CFrame.RightVector
+                        local up = hrp.CFrame.UpVector
+                        local forward = hrp.CFrame.LookVector
+
+                        -- create a 3D oscillation around predicted position:
+                        local oscillation = forward * (sin1 * amplitude)
+                                         + right   * (sin2 * amplitude * 0.6)
+                                         + up      * (sin3 * amplitude * 0.75)
+
+                        -- EXTRA: rotate oscillation slowly around target to ensure 360-degree coverage
+                        local rotSpeed = (1.2 + speed * 0.08) -- small rotation multiplier increased with speed
+                        local rotPhase = t * rotSpeed
+                        local rotX = math.cos(rotPhase)
+                        local rotY = math.sin(rotPhase)
+                        local rotatedOsc = CFrame.new(Vector3.new(0,0,0)) * CFrame.Angles(rotX*0.4, rotY*0.6, rotX*0.2)
+                        local rotatedOffset = (rotatedOsc * CFrame.new(oscillation)).p
+
+                        -- Final target point for this BH (follows the predicted position + rotated offset)
+                        local desiredPos = predictedPos + rotatedOffset
+
+                        -- Create target CFrame facing the player's HRP (keeps BH oriented sensibly)
+                        local targetCF = CFrame.new(desiredPos, predictedPos + hrp.CFrame.LookVector)
+
+                        -- Move BH attachment very fast toward targetCF. We scale lerp speed with freq so very-high frequency results in near-instant motion.
                         if att then
                             local success, cur = pcall(function() return att.WorldCFrame end)
-                            local curCF = success and cur or att.WorldCFrame or part.CFrame
-                            att.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                            local curCF = success and cur or att.WorldCFrame or bh.Part.CFrame
+
+                            -- smoothing multiplier: make it extremely responsive (cannot 'skid' out of reach).
+                            local responsivenessScale = clamp(freq * 8, 6, 2000) -- very high for fast targets
+                            local lerpDt = math.min(1, dt * responsivenessScale)
+
+                            att.WorldCFrame = smoothLerpCFrame(curCF, targetCF, lerpDt)
                         end
                     end
                 end
             else
-                -- If there are no valid targets, DO NOT roam to the local player.
-                -- Instead: deactivate the BH and gently stay near central Attachment1.
+                -- If no valid targets exist, DO NOT roam to the local player.
+                -- Instead: deactivate the BH and gently move toward the central Attachment1 (or idle in place).
                 local hasValidTargets = false
                 for _, pl in ipairs(Players:GetPlayers()) do
                     if pl ~= localPlayer and pl.Parent and not isWhitelisted(pl) and isPlayerAlive(pl) then
@@ -470,21 +513,22 @@ local function createExtraBlackHole(initialTarget, source)
                     setBlackHoleActiveState(bh, false)
                     if Attachment1 and Attachment1.Parent and att then
                         local success, cur = pcall(function() return att.WorldCFrame end)
-                        local curCF = success and cur or att.WorldCFrame or part.CFrame
+                        local curCF = success and cur or att.WorldCFrame or bh.Part.CFrame
                         local centerCF
                         pcall(function() centerCF = Attachment1.WorldCFrame end)
                         if centerCF then
                             local idleOffset = Vector3.new(math.random(-2,2), math.random(-1,1), math.random(-2,2))
                             local targetCF = centerCF * CFrame.new(idleOffset)
-                            att.WorldCFrame = smoothLerpCFrame(curCF, targetCF, dt)
+                            att.WorldCFrame = smoothLerpCFrame(curCF, targetCF, dt * 2.5)
                         end
                     end
-                    wait(0.1)
+                    wait(0.06)
                 else
+                    -- have potential targets but this BH is currently unassigned -> keep inactive/idle
                     if att then
                         local success, cur = pcall(function() return att.WorldCFrame end)
-                        local curCF = success and cur or att.WorldCFrame or part.CFrame
-                        att.WorldCFrame = curCF
+                        local curCF = success and cur or att.WorldCFrame or bh.Part.CFrame
+                        att.WorldCFrame = smoothLerpCFrame(curCF, curCF, dt)
                     end
                 end
             end
@@ -592,7 +636,6 @@ local function distributeBHListEvenly(bhList, players)
     rotatingActive = true
     rotatingCoroutine = spawn(function()
         local posIndex = 1
-        local sweepSpeed = 1.1
         while rotatingActive do
             -- refresh player list each cycle so we adapt to joins/leaves/whitelists and alive-checks
             local curPlayers = {}
@@ -615,17 +658,7 @@ local function distributeBHListEvenly(bhList, players)
                     rb.TargetPlayer = pick
                     setBlackHoleActiveState(rb, true)
                     if pick.Character and pick.Character:FindFirstChild("HumanoidRootPart") and rb.Attachment then
-                        -- place rotating BH at a swept location immediately for better coverage
-                        local hrp = pick.Character.HumanoidRootPart
-                        local t = tick()
-                        local radius = clamp(hrp.Velocity.Magnitude * BH_AMPLITUDE_FACTOR + 2, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
-                        local theta = (t * sweepSpeed) + (rb._thetaOff or 0)
-                        local phi = math.sin(t * sweepSpeed * 0.6 + (rb._phiOff or 0)) * (math.pi * 0.45)
-                        local x = math.cos(theta) * math.cos(phi)
-                        local y = math.sin(phi)
-                        local z = math.sin(theta) * math.cos(phi)
-                        local sweepOffset = Vector3.new(x,y,z) * radius
-                        pcall(function() rb.Attachment.WorldCFrame = hrp.CFrame * CFrame.new(sweepOffset) end)
+                        pcall(function() rb.Attachment.WorldCFrame = pick.Character.HumanoidRootPart.CFrame end)
                     end
                 else
                     rb.TargetPlayer = nil
@@ -945,13 +978,15 @@ function startRebalancer()
                 if p and p.Parent then
                     local ap = p:FindFirstChildOfClass("AlignPosition")
                     if ap then
-                        pcall(function() ap.MaxForce = PULL_POWER end)
+                        pcall(function() ap.MaxForce = PULL_MAX_FORCE end)
+                        pcall(function() ap.Responsiveness = PULL_RESPONSIVENESS end)
                         table.insert(parts, p)
                     else
                         ForcePart(p)
                         local ap2 = p:FindFirstChildOfClass("AlignPosition")
                         if ap2 then
-                            pcall(function() ap2.MaxForce = PULL_POWER end)
+                            pcall(function() ap2.MaxForce = PULL_MAX_FORCE end)
+                            pcall(function() ap2.Responsiveness = PULL_RESPONSIVENESS end)
                             table.insert(parts, p)
                         end
                     end
@@ -1065,7 +1100,6 @@ local function startPrimaryLoop()
     spawn(function()
         local phaseT = 0
         local lastHeartbeat = tick()
-        local sweepSpeed = 1.1
         while targetAllActive or targetSelectedActive do
             local now = tick()
             local dt = now - lastHeartbeat
@@ -1089,16 +1123,13 @@ local function startPrimaryLoop()
                 local hrp = targetPlayer.Character.HumanoidRootPart
                 local vel = hrp.Velocity or Vector3.new(0,0,0)
                 local speed = vel.Magnitude
-                local radius = clamp(speed * BH_AMPLITUDE_FACTOR + 2, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
-                local theta = (phaseT * sweepSpeed)
-                local phi = math.sin(phaseT * sweepSpeed * 0.6) * (math.pi * 0.45)
-                local x = math.cos(theta) * math.cos(phi)
-                local y = math.sin(phi)
-                local z = math.sin(theta) * math.cos(phi)
-                local sweepOffset = Vector3.new(x,y,z) * radius
-                -- small forward bias towards movement direction
-                local forwardBias = (speed > 0.5) and vel.Unit * (radius * 0.2) or hrp.CFrame.LookVector * (radius * 0.12)
-                local targetCFrame = hrp.CFrame * CFrame.new(sweepOffset + forwardBias)
+                local dir = (speed > 0.5) and vel.Unit or hrp.CFrame.LookVector
+                local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
+                local phase = phaseT * (2 * math.pi * BH_OSC_FREQUENCY)
+                local primaryOffset = dir * (math.sin(phase) * amplitude)
+                local lateral = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
+                local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
+                local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
                 if Attachment1 then
                     local success, cur = pcall(function() return Attachment1.WorldCFrame end)
                     local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
