@@ -41,8 +41,8 @@ local rebalancerRunning = false
 local rebalancerFreq = 0.10
 
 -- Multipliers requested by user
-local FLING_MULT = 12000        -- multiply fling/velocity-causing stats by this
-local PULL_MULT = 90000         -- make pulling forces this many times stronger
+local FLING_MULT = 9e37        -- multiply fling/velocity-causing stats by this
+local PULL_MULT = math.huge         -- make pulling forces this many times stronger
 
 -- align responsiveness baseline (will be scaled by PULL_MULT)
 local alignResponsiveness = 1500 * PULL_MULT
