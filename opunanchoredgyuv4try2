@@ -1,0 +1,1311 @@
+-- Full updated script (client)
+-- Handles: Selected/Whitelisted bools, PAA, CMD blackholes, Life Cycle Mode, Reset Cycle button
+-- ROTATE_INTERVAL = 0.2 (swap cooldown)
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+local localPlayer = Players.LocalPlayer
+
+local function clamp(val, a, b)
+    if val < a then return a end
+    if val > b then return b end
+    return val
+end
+
+-- ====== CONFIG / STATE ======
+local targetAllActive = false
+local targetSelectedActive = false
+local primaryLoopRunning = false
+
+local switchDelay = 0.13
+local processedParts = {}
+local initiallyAnchoredParts = {}
+local anchoredOnce = false
+local unanchorTimerRunning = false
+local unanchorCoroutine
+
+local Attachment1 = nil
+
+-- All extra BHs (both PAA and CMD). Each BH table has bh.source = "PAA" or "CMD"
+local extraBlackHoles = {}
+
+-- PAA state
+local PAAEnabled = false
+local PAA_isUsingSelected = false
+local paaConnections = {}
+
+-- Rebalancer
+local rebalancerRunning = false
+local rebalancerFreq = 0.10
+
+-- Multipliers requested by user
+local FLING_MULT = 12000        -- multiply fling/velocity-causing stats by this
+local PULL_MULT = 90000         -- make pulling forces this many times stronger
+
+-- align responsiveness baseline (will be scaled by PULL_MULT)
+local alignResponsiveness = 1500 * PULL_MULT
+
+-- BH motion
+local BH_SWAP_INTERVAL = 0.01
+local BH_OSC_FREQUENCY = 1 / (BH_SWAP_INTERVAL * 2)
+local BH_AMPLITUDE_FACTOR = 0.22 * FLING_MULT
+local BH_MIN_AMPLITUDE = 0.6 * FLING_MULT
+local BH_MAX_AMPLITUDE = 80 * FLING_MULT
+local TARGET_SMOOTHNESS = 6.0
+
+-- ROTATION settings for extra BH remainder (swap cooldown set to 0.2)
+local ROTATE_INTERVAL = 0.2 -- seconds between rotating reassigns for leftover BHs
+
+-- Life Cycle Mode state
+local LifeCycleMode = false
+local cycleActive = false
+local cyclePlayers = {}        -- snapshot players for the current cycle (Player instances)
+local cycleDead = {}           -- set: player -> true if died this cycle
+local cycleConns = {}          -- for Humanoid.Died & CharacterAdded/AncestryChanged connections
+local cycleRestartPending = false
+
+-- Setup folder & primary attachment
+local function setupPlayer()
+    local Folder = Workspace:FindFirstChild("ÆS_BlackHole_Folder")
+    if not Folder then
+        Folder = Instance.new("Folder", Workspace)
+        Folder.Name = "ÆS_BlackHole_Folder"
+    end
+    local existing = Folder:FindFirstChild("BH_Center_Part")
+    if existing and existing:IsA("BasePart") then
+        local att = existing:FindFirstChildOfClass("Attachment")
+        if att then return att end
+        local newAtt = Instance.new("Attachment", existing)
+        return newAtt
+    end
+    local Part = Instance.new("Part", Folder)
+    Part.Name = "BH_Center_Part"
+    Part.Anchored = true
+    Part.CanCollide = false
+    Part.Transparency = 1
+    Part.Size = Vector3.new(1,1,1)
+    local Attachment = Instance.new("Attachment", Part)
+    return Attachment
+end
+
+Attachment1 = setupPlayer()
+
+-- helpers
+local function isNPC(character)
+    if not character or not character:IsA("Model") then return false end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid and not Players:GetPlayerFromCharacter(character) then return true end
+    return false
+end
+
+local function isPartPlayerCharacter(part)
+    if not part then return false end
+    for _, pl in ipairs(Players:GetPlayers()) do
+        local char = pl.Character
+        if char and part:IsDescendantOf(char) then
+            return true
+        end
+    end
+    return false
+end
+
+local function enableLocalPlayerNoclip(enable) return end
+
+local function stripBodyForces(part)
+    for _, x in next, part:GetChildren() do
+        if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro")
+        or x:IsA("BodyPosition") or x:IsA("BodyThrust") or x:IsA("BodyVelocity")
+        or x:IsA("RocketPropulsion") then
+            x:Destroy()
+        end
+    end
+    if part:FindFirstChild("Attachment") then part:FindFirstChild("Attachment"):Destroy() end
+    if part:FindFirstChild("AlignPosition") then part:FindFirstChild("AlignPosition"):Destroy() end
+    if part:FindFirstChild("Torque") then part:FindFirstChild("Torque"):Destroy() end
+end
+
+local function shuffle(t)
+    for i = #t, 2, -1 do
+        local j = math.random(1, i)
+        t[i], t[j] = t[j], t[i]
+    end
+end
+
+local function smoothLerpCFrame(curCF, targetCF, dt)
+    local alpha = 1 - math.exp(-TARGET_SMOOTHNESS * dt)
+    if alpha < 0.001 then alpha = 0.001 end
+    if alpha > 1 then alpha = 1 end
+    return curCF:Lerp(targetCF, alpha)
+end
+
+-- Whitelist check: returns true if player has BoolValue "Whitelisted" == true
+local function isWhitelisted(player)
+    if not player then return false end
+    local v = player:FindFirstChild("Whitelisted")
+    if v and typeof(v.Value) == "boolean" then
+        return v.Value
+    end
+    return false
+end
+
+-- Player alive check
+local function isPlayerAlive(player)
+    if not player then return false end
+    local char = player.Character
+    if not char then return false end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    if humanoid.Health and humanoid.Health > 0 then return true end
+    return false
+end
+
+-- Return players excluding local & whitelisted. Use when we want "target all" semantics.
+local function getAllNonLocalPlayers()
+    local res = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p and p ~= localPlayer and p.Parent and not isWhitelisted(p) then
+            table.insert(res, p)
+        end
+    end
+    return res
+end
+
+-- Return selected players; allowWhitelisted = true will include whitelisted selected players
+-- (use allowWhitelisted=false when building Life Cycle snapshot so whitelist never participates in cycles)
+local function getSelectedPlayers(allowWhitelisted)
+    local res = {}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player and player ~= localPlayer and player.Parent then
+            local sel = player:FindFirstChild("Selected")
+            if sel and typeof(sel.Value) == "boolean" and sel.Value == true then
+                if allowWhitelisted then
+                    table.insert(res, player)
+                else
+                    if not isWhitelisted(player) then table.insert(res, player) end
+                end
+            end
+        end
+    end
+    return res
+end
+
+-- helper to check if there are ANY valid targets under the current primary mode
+local function hasAnyActiveTargets()
+    if targetSelectedActive then
+        local sel = getSelectedPlayers(true)
+        for _, pl in ipairs(sel) do
+            if pl ~= localPlayer and not isWhitelisted(pl) and isPlayerAlive(pl) then
+                return true
+            end
+        end
+        return false
+    elseif targetAllActive then
+        local all = getAllNonLocalPlayers()
+        for _, pl in ipairs(all) do
+            if pl ~= localPlayer and not isWhitelisted(pl) and isPlayerAlive(pl) then
+                return true
+            end
+        end
+        return false
+    else
+        return false
+    end
+end
+
+-- Separate BH lists helper
+local function getBHsBySource(source)
+    local out = {}
+    for _, bh in ipairs(extraBlackHoles) do
+        if bh.source == source then table.insert(out, bh) end
+    end
+    return out
+end
+
+local function getLeastLoadedBlackHole()
+    if #extraBlackHoles == 0 then return nil end
+    table.sort(extraBlackHoles, function(a,b) return (#a.AssignedParts) < (#b.AssignedParts) end)
+    return extraBlackHoles[1]
+end
+
+-- ForcePart: assigned to least loaded BH or primary Attachment1; never assign to player's character nor local
+local function ForcePart(v)
+    if not v or not v:IsA("BasePart") then return end
+    if isPartPlayerCharacter(v) then return end
+    if localPlayer.Character and v:IsDescendantOf(localPlayer.Character) then return end
+
+    if v:IsA("BasePart")
+        and not v.Anchored
+        and v.Name ~= "Handle"
+        and (
+            (v.Parent:FindFirstChildOfClass("Humanoid") and isNPC(v.Parent))
+            or (not v.Parent:FindFirstChildOfClass("Humanoid") and not v.Parent:FindFirstChild("Head"))
+        ) then
+
+        if processedParts[v] then return end
+        processedParts[v] = true
+
+        stripBodyForces(v)
+        v.CanCollide = false
+
+        local Torque = Instance.new("Torque", v)
+        -- fling multiplier applied here
+        Torque.Torque = Vector3.new(1e6 * FLING_MULT, 1e6 * FLING_MULT, 1e6 * FLING_MULT)
+        local AlignPosition = Instance.new("AlignPosition", v)
+        local Attachment2 = Instance.new("Attachment", v)
+        pcall(function() Attachment2.WorldCFrame = v.CFrame end)
+        Torque.Attachment0 = Attachment2
+
+        -- pull multiplier applied to MaxForce & Responsiveness
+        AlignPosition.MaxForce = 1e9 * PULL_MULT
+        AlignPosition.MaxVelocity = math.huge
+        AlignPosition.Responsiveness = alignResponsiveness
+        AlignPosition.Attachment0 = Attachment2
+
+        local bh = getLeastLoadedBlackHole()
+        if bh and bh.Attachment and bh._active then
+            AlignPosition.Attachment1 = bh.Attachment
+            table.insert(bh.AssignedParts, v)
+        else
+            AlignPosition.Attachment1 = Attachment1
+        end
+    end
+end
+
+local function clearProcessedParts()
+    for part, _ in pairs(processedParts) do
+        if part and part.Parent then
+            stripBodyForces(part)
+            part.CanCollide = true
+            if not initiallyAnchoredParts[part] then
+                part.Anchored = false
+            else
+                part.Anchored = true
+            end
+        end
+    end
+    processedParts = {}
+    initiallyAnchoredParts = {}
+    anchoredOnce = false
+end
+
+local function anchorAndDelayedUnanchorParts()
+    unanchorTimerRunning = true
+
+    local candidateParts = {}
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart")
+            and not v.Anchored
+            and v.Name ~= "Handle"
+            and not isPartPlayerCharacter(v)
+            and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character))
+            and (
+                (v.Parent:FindFirstChildOfClass("Humanoid") and isNPC(v.Parent))
+                or (not v.Parent:FindFirstChildOfClass("Humanoid") and not v.Parent:FindFirstChild("Head"))
+            ) then
+            table.insert(candidateParts, v)
+        end
+    end
+
+    initiallyAnchoredParts = {}
+    for _, part in ipairs(candidateParts) do
+        initiallyAnchoredParts[part] = false
+        part.Anchored = true
+        part.CanCollide = false
+    end
+
+    for _, npcCandidate in ipairs(Workspace:GetChildren()) do
+        if isNPC(npcCandidate) then
+            for _, p in ipairs(npcCandidate:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = true end
+            end
+        end
+    end
+
+    local startTime = tick()
+    while (targetAllActive or targetSelectedActive) and tick() - startTime < 1 do
+        wait(0.05)
+    end
+
+    for _, part in ipairs(candidateParts) do
+        if part and part.Parent and initiallyAnchoredParts[part] == false then
+            part.Anchored = false
+            ForcePart(part)
+        end
+    end
+
+    unanchorTimerRunning = false
+    anchoredOnce = true
+end
+
+local descendantAddedConn
+local function processWorkspaceParts()
+    if descendantAddedConn then
+        descendantAddedConn:Disconnect()
+        descendantAddedConn = nil
+    end
+
+    if (targetAllActive or targetSelectedActive) then
+        if not unanchorTimerRunning and not anchoredOnce then
+            unanchorCoroutine = coroutine.create(anchorAndDelayedUnanchorParts)
+            coroutine.resume(unanchorCoroutine)
+        end
+
+        descendantAddedConn = Workspace.DescendantAdded:Connect(function(v)
+            if (targetAllActive or targetSelectedActive) then
+                if v:IsA("BasePart")
+                    and not v.Anchored
+                    and not processedParts[v]
+                    and not isPartPlayerCharacter(v)
+                    and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character)) then
+                    ForcePart(v)
+                end
+            end
+        end)
+    end
+end
+
+local function getRandomPlayer()
+    local players = getAllNonLocalPlayers()
+    if #players == 0 then return nil end
+    return players[math.random(1, #players)]
+end
+
+-- set BH active/inactive
+local function setBlackHoleActiveState(bh, active)
+    if not bh then return end
+    if bh._active == active then return end
+    bh._active = active
+    if not active then
+        for _, p in ipairs(bh.AssignedParts) do
+            if p and p.Parent then
+                p.CanCollide = true
+                local ap = p:FindFirstChildOfClass("AlignPosition")
+                if ap then ap.Attachment1 = Attachment1 end
+            end
+        end
+    else
+        for _, p in ipairs(bh.AssignedParts) do
+            if p and p.Parent then
+                local ap = p:FindFirstChildOfClass("AlignPosition")
+                if ap then ap.Attachment1 = bh.Attachment; p.CanCollide = false end
+            end
+        end
+    end
+end
+
+-- create extra BH helper
+local function createExtraBlackHole(initialTarget, source)
+    if initialTarget == localPlayer then initialTarget = nil end
+    if initialTarget and isWhitelisted(initialTarget) and source ~= "CMD_ALLOW_WHITELISTED" then
+        initialTarget = nil
+    end
+
+    local folder = Workspace:FindFirstChild("ÆS_BlackHole_Folder") or Instance.new("Folder", Workspace)
+    folder.Name = "ÆS_BlackHole_Folder"
+    local part = Instance.new("Part", folder)
+    part.Anchored = true
+    part.CanCollide = false
+    part.Transparency = 1
+    part.Size = Vector3.new(1,1,1)
+    part.Name = "ExtraBH_Center"
+
+    local att = Instance.new("Attachment", part)
+
+    local bh = {
+        Part = part,
+        Attachment = att,
+        AssignedParts = {},
+        TargetPlayer = initialTarget,
+        LastTarget = nil,
+        _running = true,
+        _active = true,
+        source = source or "CMD",
+        rotating = false -- set true for rotating leftovers
+    }
+
+    local function isPlayerDisabled(pl)
+        if not pl then return false end
+        if pl:FindFirstChild("Disabled") and typeof(pl.Disabled.Value) == "boolean" then
+            return pl.Disabled.Value
+        end
+        return false
+    end
+
+    bh._thread = spawn(function()
+        local t = 0
+        while bh._running do
+            local dt = RunService.Heartbeat:Wait()
+            t = t + dt
+
+            if bh.TargetPlayer and bh.TargetPlayer ~= localPlayer and not isWhitelisted(bh.TargetPlayer) and isPlayerAlive(bh.TargetPlayer) then
+                if isPlayerDisabled(bh.TargetPlayer) then
+                    setBlackHoleActiveState(bh, false)
+                else
+                    setBlackHoleActiveState(bh, true)
+                    local char = bh.TargetPlayer.Character
+                    if char and char:FindFirstChild("HumanoidRootPart") then
+                        local hrp = char.HumanoidRootPart
+                        local vel = hrp.Velocity or Vector3.new(0,0,0)
+                        local speed = vel.Magnitude
+                        local dir = (speed > 0.5) and vel.Unit or (hrp.CFrame.LookVector + hrp.CFrame.UpVector * 0.3).Unit
+                        local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
+                        local phase = t * (2 * math.pi * BH_OSC_FREQUENCY)
+                        local primaryOffset = dir * (math.sin(phase) * amplitude)
+                        local verticalOffset = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
+                        local lateralOffset = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
+                        local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateralOffset + verticalOffset)
+                        if att then
+                            local success, cur = pcall(function() return att.WorldCFrame end)
+                            local curCF = success and cur or att.WorldCFrame or part.CFrame
+                            att.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                        end
+                    end
+                end
+            else
+                -- If there are any active targets under the current primary mode, the rotating/distribute logic
+                -- will assign targets; but if there are NO targets while TargetAll/TargetSelected is active,
+                -- do NOT roam on the local player: mark BH inactive and skip roaming.
+                local hasTargets = hasAnyActiveTargets()
+                if not hasTargets then
+                    -- deactivate BH so it won't cling to local player
+                    setBlackHoleActiveState(bh, false)
+                    bh.TargetPlayer = nil
+                    -- optionally leave attachment where it is (do not set to local)
+                else
+                    -- roam near local only if there ARE valid targets in the world (this mostly handles non-primary assignment cases)
+                    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local hrp = localPlayer.Character.HumanoidRootPart
+                        local phase = t * (BH_OSC_FREQUENCY * 0.45)
+                        local roamOffset = Vector3.new(math.sin(phase*1.11)*4, math.sin(phase*1.3)*1.6, math.cos(phase*0.9)*4)
+                        if att then
+                            local success, cur = pcall(function() return att.WorldCFrame end)
+                            local curCF = success and cur or att.WorldCFrame or part.CFrame
+                            local targetCF = hrp.CFrame * CFrame.new(roamOffset + Vector3.new(math.random(-2,2), math.random(-1,1), math.random(-2,2)))
+                            att.WorldCFrame = smoothLerpCFrame(curCF, targetCF, dt)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    table.insert(extraBlackHoles, bh)
+    return bh
+end
+
+local function destroyExtraBlackHole(bh)
+    if not bh then return end
+    bh._running = false
+    if bh.Part and bh.Part.Parent then bh.Part:Destroy() end
+    for _, p in ipairs(bh.AssignedParts) do
+        if p and p.Parent then
+            local ap = p:FindFirstChildOfClass("AlignPosition")
+            if ap then ap.Attachment1 = Attachment1 end
+            p.CanCollide = false
+        end
+    end
+end
+
+local function deleteBHsBySource(source)
+    for i = #extraBlackHoles, 1, -1 do
+        local bh = extraBlackHoles[i]
+        if bh and bh.source == source then
+            destroyExtraBlackHole(bh)
+            table.remove(extraBlackHoles, i)
+        end
+    end
+end
+
+local function deleteAllExtraBlackHoles()
+    for _, bh in ipairs(extraBlackHoles) do destroyExtraBlackHole(bh) end
+    extraBlackHoles = {}
+    if not Attachment1 or not Attachment1.Parent then Attachment1 = setupPlayer() end
+    stopRebalancer()
+end
+
+-- ---------- Even distribution + rotating leftovers ----------
+local rotatingCoroutine = nil
+local rotatingActive = false
+
+local function stopRotatingCoroutine()
+    rotatingActive = false
+    rotatingCoroutine = nil
+end
+
+local function distributeBHListEvenly(bhList, players)
+    -- reset rotating flags for BHs in bhList
+    for _, bh in ipairs(bhList) do
+        bh.rotating = false
+        bh.TargetPlayer = nil
+        bh.AssignedParts = {}
+    end
+
+    if #players == 0 then
+        for _, bh in ipairs(bhList) do
+            bh.TargetPlayer = nil
+            -- No players to target: deactivate BHs so they won't roam onto local player
+            setBlackHoleActiveState(bh, false)
+        end
+        stopRotatingCoroutine()
+        return
+    end
+
+    local totalBH = #bhList
+    local playerCount = #players
+    local base = math.floor(totalBH / playerCount)
+    local remainder = totalBH - (base * playerCount)
+
+    -- assign base BHs to each player
+    local idx = 1
+    for pi = 1, playerCount do
+        local pl = players[pi]
+        for k = 1, base do
+            if bhList[idx] then
+                bhList[idx].TargetPlayer = pl
+                bhList[idx].rotating = false
+                setBlackHoleActiveState(bhList[idx], true)
+                if pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
+                    pcall(function() bhList[idx].Attachment.WorldCFrame = pl.Character.HumanoidRootPart.CFrame end)
+                end
+                idx = idx + 1
+            end
+        end
+    end
+
+    -- remainder: assign these BHs as rotating extras
+    local rotatingBHs = {}
+    for r = 1, remainder do
+        if bhList[idx] then
+            bhList[idx].rotating = true
+            bhList[idx].TargetPlayer = nil -- will be assigned by rotating coroutine
+            setBlackHoleActiveState(bhList[idx], true)
+            table.insert(rotatingBHs, bhList[idx])
+            idx = idx + 1
+        end
+    end
+
+    stopRotatingCoroutine()
+    if #rotatingBHs == 0 then return end
+
+    rotatingActive = true
+    rotatingCoroutine = spawn(function()
+        local posIndex = 1
+        while rotatingActive do
+            -- refresh player list each cycle so we adapt to joins/leaves/whitelists and alive-checks
+            local curPlayers = {}
+            for _, pl in ipairs(players) do
+                if pl and pl.Parent and isPlayerAlive(pl) and not isWhitelisted(pl) and pl ~= localPlayer then
+                    table.insert(curPlayers, pl)
+                end
+            end
+            if #curPlayers == 0 then
+                for _, rb in ipairs(rotatingBHs) do
+                    rb.TargetPlayer = nil
+                    setBlackHoleActiveState(rb, false)
+                end
+                break
+            end
+
+            for _, rb in ipairs(rotatingBHs) do
+                local pick = curPlayers[((posIndex - 1) % #curPlayers) + 1]
+                if pick and not isWhitelisted(pick) and pick ~= localPlayer and isPlayerAlive(pick) then
+                    rb.TargetPlayer = pick
+                    if pick.Character and pick.Character:FindFirstChild("HumanoidRootPart") and rb.Attachment then
+                        pcall(function() rb.Attachment.WorldCFrame = pick.Character.HumanoidRootPart.CFrame end)
+                    end
+                else
+                    rb.TargetPlayer = nil
+                    setBlackHoleActiveState(rb, false)
+                end
+                posIndex = posIndex + 1
+            end
+
+            wait(ROTATE_INTERVAL)
+        end
+    end)
+end
+
+-- wrapper: distribute PAA BHs (PAA BHs should be distributed across valid players depending on PAA mode and LifeCycle)
+local function assignTargetsForPAA()
+    local paaBHs = getBHsBySource("PAA")
+    if #paaBHs == 0 then return end
+
+    local players = {}
+    if LifeCycleMode and cycleActive then
+        -- use LifeCycle snapshot players (explicitly excludes whitelisted during snapshot)
+        for _, pl in ipairs(cyclePlayers) do
+            if pl and pl.Parent and not cycleDead[pl] and isPlayerAlive(pl) then
+                table.insert(players, pl)
+            end
+        end
+    else
+        if PAA_isUsingSelected then
+            -- PAA+Selected uses selected players and should include whitelisted selected players
+            players = getSelectedPlayers(true)
+        else
+            players = getAllNonLocalPlayers()
+        end
+    end
+
+    shuffle(paaBHs)
+    distributeBHListEvenly(paaBHs, players)
+end
+
+-- distribute CMD BHs across players (honoring LifeCycle if active)
+local function assignTargetsForCMD()
+    local cmdBHs = getBHsBySource("CMD")
+    if #cmdBHs == 0 then return end
+
+    local players = {}
+    if LifeCycleMode and cycleActive then
+        for _, pl in ipairs(cyclePlayers) do
+            if pl and pl.Parent and not cycleDead[pl] and isPlayerAlive(pl) then
+                table.insert(players, pl)
+            end
+        end
+    else
+        players = getAllNonLocalPlayers()
+    end
+
+    shuffle(cmdBHs)
+    distributeBHListEvenly(cmdBHs, players)
+end
+
+-- create N command BHs (CMD) - stacks with existing PAA BHs
+local function createNCommandBlackHoles(n)
+    if n <= 0 then return end
+    for i = 1, n do createExtraBlackHole(nil, "CMD") end
+    assignTargetsForCMD()
+    if PAAEnabled then assignTargetsForPAA() end
+    if #extraBlackHoles > 0 then startRebalancer() end
+end
+
+local function deleteCommandBlackHoles()
+    deleteBHsBySource("CMD")
+    stopRotatingCoroutine()
+end
+
+-- PAA refresh: remove only PAA BHs and re-create them; do NOT touch CMD BHs (stack)
+local function refreshPAA()
+    deleteBHsBySource("PAA")
+    local targets = {}
+    if LifeCycleMode and cycleActive then
+        for _, pl in ipairs(cyclePlayers) do
+            if pl and pl.Parent and not cycleDead[pl] and isPlayerAlive(pl) then
+                table.insert(targets, pl)
+            end
+        end
+    else
+        if PAA_isUsingSelected then
+            targets = getSelectedPlayers(true) -- include whitelisted selected here
+        else
+            targets = getAllNonLocalPlayers()
+        end
+    end
+
+    for _, tgt in ipairs(targets) do
+        if tgt and tgt ~= localPlayer and not isWhitelisted(tgt) then
+            local bh = createExtraBlackHole(tgt, "PAA")
+            bh.TargetPlayer = tgt
+            bh.LastTarget = nil
+            setBlackHoleActiveState(bh, true)
+            if tgt.Character and tgt.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
+                pcall(function() bh.Attachment.WorldCFrame = tgt.Character.HumanoidRootPart.CFrame end)
+            end
+        end
+    end
+
+    assignTargetsForPAA()
+    if #extraBlackHoles > 0 then startRebalancer() end
+end
+
+-- Player join/leave handlers for PAA live updates (only affects PAA BHs)
+local function onPlayerAddedForPAA(pl)
+    if PAAEnabled and not PAA_isUsingSelected and pl ~= localPlayer and not isWhitelisted(pl) then
+        -- Only add live mid-cycle if LifeCycleMode is off; if LifeCycle active we do NOT add mid-cycle
+        if LifeCycleMode and cycleActive then
+            return
+        end
+        local bh = createExtraBlackHole(pl, "PAA")
+        bh.TargetPlayer = pl
+        bh.LastTarget = nil
+        assignTargetsForPAA()
+    end
+end
+
+local function onPlayerRemovingForPAA(pl)
+    if PAAEnabled then
+        for i = #extraBlackHoles, 1, -1 do
+            local bh = extraBlackHoles[i]
+            if bh and bh.source == "PAA" and bh.TargetPlayer == pl then
+                destroyExtraBlackHole(bh)
+                table.remove(extraBlackHoles, i)
+                break
+            end
+        end
+        assignTargetsForPAA()
+    end
+end
+
+-- ---- Life Cycle Mode handling ----
+local function clearCycleConnections()
+    for _, conn in ipairs(cycleConns) do
+        if conn and conn.Disconnect then
+            pcall(function() conn:Disconnect() end)
+        end
+    end
+    cycleConns = {}
+end
+
+local function stopCycle()
+    cycleActive = false
+    cyclePlayers = {}
+    cycleDead = {}
+    clearCycleConnections()
+    cycleRestartPending = false
+end
+
+local function checkCycleCompletionAndMaybeRestart()
+    if not cycleActive then return end
+    if #cyclePlayers == 0 then
+        cycleRestartPending = true
+        return
+    end
+    for _, pl in ipairs(cyclePlayers) do
+        if not cycleDead[pl] then
+            return
+        end
+    end
+    cycleRestartPending = true
+end
+
+local function scheduleCycleRestart()
+    if cycleRestartPending then
+        cycleRestartPending = false
+        spawn(function()
+            wait(0.12)
+            local newSnapshot = {}
+            if targetSelectedActive then
+                -- snapshot for the new cycle excludes whitelisted players (by design)
+                newSnapshot = getSelectedPlayers(false)
+            else
+                newSnapshot = getAllNonLocalPlayers()
+            end
+            cyclePlayers = {}
+            cycleDead = {}
+            for _, pl in ipairs(newSnapshot) do
+                if pl and pl.Parent and pl ~= localPlayer then
+                    cyclePlayers[#cyclePlayers+1] = pl
+                    cycleDead[pl] = false
+                end
+            end
+            clearCycleConnections()
+            for _, pl in ipairs(cyclePlayers) do
+                if pl and pl.Parent then
+                    local function onHumanoidAdded(char)
+                        local hum = char:FindFirstChildOfClass("Humanoid")
+                        if hum then
+                            local dconn = hum.Died:Connect(function()
+                                cycleDead[pl] = true
+                                assignTargetsForPAA()
+                                assignTargetsForCMD()
+                                checkCycleCompletionAndMaybeRestart()
+                            end)
+                            table.insert(cycleConns, dconn)
+                        end
+                    end
+                    if pl.Character then
+                        onHumanoidAdded(pl.Character)
+                    end
+                    local cconn = pl.CharacterAdded:Connect(onHumanoidAdded)
+                    table.insert(cycleConns, cconn)
+                    local rconn = pl.AncestryChanged:Connect(function()
+                        if not pl.Parent then
+                            for i = #cyclePlayers, 1, -1 do
+                                if cyclePlayers[i] == pl then table.remove(cyclePlayers, i) end
+                            end
+                            cycleDead[pl] = true
+                            assignTargetsForPAA()
+                            assignTargetsForCMD()
+                            checkCycleCompletionAndMaybeRestart()
+                        end
+                    end)
+                    table.insert(cycleConns, rconn)
+                end
+            end
+            assignTargetsForPAA()
+            assignTargetsForCMD()
+        end)
+    end
+end
+
+local function startCycleSnapshot()
+    stopCycle()
+    cycleActive = true
+    cyclePlayers = {}
+    cycleDead = {}
+
+    -- Life Cycle snapshot: intentionally exclude whitelisted players
+    local snapshot = {}
+    if targetSelectedActive then
+        snapshot = getSelectedPlayers(false) -- exclude whitelisted from cycle
+    else
+        snapshot = getAllNonLocalPlayers()
+    end
+
+    for _, pl in ipairs(snapshot) do
+        if pl and pl.Parent and pl ~= localPlayer then
+            cyclePlayers[#cyclePlayers+1] = pl
+            cycleDead[pl] = false
+        end
+    end
+
+    clearCycleConnections()
+    for _, pl in ipairs(cyclePlayers) do
+        if pl and pl.Parent then
+            local function attachHumanoidWatcher(char)
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    local dconn = hum.Died:Connect(function()
+                        cycleDead[pl] = true
+                        assignTargetsForPAA()
+                        assignTargetsForCMD()
+                        checkCycleCompletionAndMaybeRestart()
+                        scheduleCycleRestart()
+                    end)
+                    table.insert(cycleConns, dconn)
+                end
+            end
+            if pl.Character then attachHumanoidWatcher(pl.Character) end
+            local cconn = pl.CharacterAdded:Connect(attachHumanoidWatcher)
+            table.insert(cycleConns, cconn)
+            local rconn = pl.AncestryChanged:Connect(function()
+                if not pl.Parent then
+                    for i = #cyclePlayers, 1, -1 do
+                        if cyclePlayers[i] == pl then table.remove(cyclePlayers, i) end
+                    end
+                    cycleDead[pl] = true
+                    assignTargetsForPAA()
+                    assignTargetsForCMD()
+                    checkCycleCompletionAndMaybeRestart()
+                    scheduleCycleRestart()
+                end
+            end)
+            table.insert(cycleConns, rconn)
+        end
+    end
+
+    assignTargetsForPAA()
+    assignTargetsForCMD()
+end
+
+-- Immediate cycle reset function (used by Reset Cycle button)
+local function resetCycleNow()
+    if not LifeCycleMode then return end
+    if not (targetAllActive or targetSelectedActive) then return end
+    startCycleSnapshot()
+end
+
+local function tryStartCycleIfNeeded()
+    if not LifeCycleMode then return end
+    if (targetAllActive or targetSelectedActive) and not cycleActive then
+        startCycleSnapshot()
+    end
+end
+
+local function endCycleMode()
+    stopCycle()
+    assignTargetsForPAA()
+    assignTargetsForCMD()
+end
+
+-- ---- Rebalancer: distributes processed parts per-BH; still used for part-to-BH assignment
+function startRebalancer()
+    if rebalancerRunning then return end
+    rebalancerRunning = true
+    spawn(function()
+        while rebalancerRunning do
+            local bhCount = #extraBlackHoles
+            local parts = {}
+            for p, _ in pairs(processedParts) do
+                if p and p.Parent then
+                    local ap = p:FindFirstChildOfClass("AlignPosition")
+                    if ap then
+                        table.insert(parts, p)
+                    else
+                        ForcePart(p)
+                        local ap2 = p:FindFirstChildOfClass("AlignPosition")
+                        if ap2 then table.insert(parts, p) end
+                    end
+                end
+            end
+
+            if bhCount > 0 and #parts > 0 then
+                local total = #parts
+                local base = math.floor(total / bhCount)
+                local rem = total - (base * bhCount)
+                local counts = {}
+                for i = 1, bhCount do counts[i] = base + (i <= rem and 1 or 0) end
+
+                local partIndex = 1
+                for i = 1, bhCount do
+                    local bh = extraBlackHoles[i]
+                    local need = counts[i]
+                    for c = 1, need do
+                        local p = parts[partIndex]
+                        if not p then break end
+                        local ap = p:FindFirstChildOfClass("AlignPosition")
+                        if ap then
+                            if bh and bh.Attachment and bh._active then
+                                ap.Attachment1 = bh.Attachment
+                                p.CanCollide = false
+                                table.insert(bh.AssignedParts, p)
+                            else
+                                ap.Attachment1 = Attachment1
+                                p.CanCollide = false
+                            end
+                        end
+                        partIndex = partIndex + 1
+                    end
+                end
+            else
+                for _, p in ipairs(parts) do
+                    local ap = p:FindFirstChildOfClass("AlignPosition")
+                    if ap then ap.Attachment1 = Attachment1; p.CanCollide = false end
+                end
+            end
+
+            if PAAEnabled then assignTargetsForPAA() end
+            assignTargetsForCMD()
+
+            if cycleRestartPending then
+                scheduleCycleRestart()
+            end
+
+            wait(rebalancerFreq)
+        end
+    end)
+end
+
+function stopRebalancer() rebalancerRunning = false end
+
+-- Commands (chat)
+local enableCommands = true
+local function onLocalPlayerChatted(msg)
+    if not enableCommands then return end
+    if not msg then return end
+    local raw = msg
+    msg = msg:lower()
+
+    local bhArg = string.match(msg, "^/e%s+blackholes%s+(%d+)")
+    if bhArg then
+        local n = tonumber(bhArg)
+        if n and n > 0 then createNCommandBlackHoles(n) end
+        return
+    end
+
+    if string.match(msg, "^/e%s+dbh") then
+        deleteCommandBlackHoles()
+        return
+    end
+
+    if string.match(msg, "^/e%s+paa") then
+        PAAEnabled = true
+        PAA_isUsingSelected = false
+        refreshPAA()
+        paaConnections[#paaConnections+1] = Players.PlayerAdded:Connect(onPlayerAddedForPAA)
+        paaConnections[#paaConnections+1] = Players.PlayerRemoving:Connect(onPlayerRemovingForPAA)
+        return
+    end
+
+    if string.match(msg, "^/e%s+unpaa") then
+        PAAEnabled = false
+        for _, c in ipairs(paaConnections) do pcall(function() c:Disconnect() end) end
+        paaConnections = {}
+        deleteBHsBySource("PAA")
+        return
+    end
+
+    if string.match(msg, "^/e%s+psel") then
+        PAAEnabled = true
+        PAA_isUsingSelected = true
+        refreshPAA()
+        return
+    end
+end
+
+localPlayer.Chatted:Connect(onLocalPlayerChatted)
+
+-- Primary loop (handles both Target All and Target Selected)
+local function startPrimaryLoop()
+    if primaryLoopRunning then return end
+    primaryLoopRunning = true
+    if not Attachment1 or not Attachment1.Parent then Attachment1 = setupPlayer() end
+    anchoredOnce = false
+    processWorkspaceParts()
+
+    spawn(function()
+        local phaseT = 0
+        local lastHeartbeat = tick()
+        while targetAllActive or targetSelectedActive do
+            local now = tick()
+            local dt = now - lastHeartbeat
+            lastHeartbeat = now
+            phaseT = phaseT + dt
+
+            if targetSelectedActive then
+                local selectedPlayers = getSelectedPlayers(true) -- allow whitelisted selected when not LifeCycle
+                if #selectedPlayers > 0 then
+                    targetPlayer = selectedPlayers[math.random(1, #selectedPlayers)]
+                else
+                    targetPlayer = nil
+                end
+            elseif targetAllActive then
+                targetPlayer = getRandomPlayer()
+            else
+                targetPlayer = nil
+            end
+
+            if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") and isPlayerAlive(targetPlayer) then
+                local hrp = targetPlayer.Character.HumanoidRootPart
+                local vel = hrp.Velocity or Vector3.new(0,0,0)
+                local speed = vel.Magnitude
+                local dir = (speed > 0.5) and vel.Unit or hrp.CFrame.LookVector
+                local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
+                local phase = phaseT * (2 * math.pi * BH_OSC_FREQUENCY)
+                local primaryOffset = dir * (math.sin(phase) * amplitude)
+                local lateral = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
+                local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
+                local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
+                if Attachment1 then
+                    local success, cur = pcall(function() return Attachment1.WorldCFrame end)
+                    local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
+                    Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                end
+            end
+
+            wait(switchDelay)
+        end
+
+        primaryLoopRunning = false
+        if unanchorTimerRunning and unanchorCoroutine then
+            unanchorTimerRunning = false
+            for part, anchored in pairs(initiallyAnchoredParts) do
+                if part and part.Parent and anchored == false then
+                    part.Anchored = false
+                    ForcePart(part)
+                end
+            end
+        end
+        clearProcessedParts()
+
+        if PAAEnabled then deleteBHsBySource("PAA") end
+    end)
+end
+
+local function setTargetAll(value)
+    targetAllActive = value
+    if (targetAllActive or targetSelectedActive) then startPrimaryLoop() end
+
+    -- If LifeCycleMode is enabled we may need to start or stop the cycle
+    if LifeCycleMode then
+        if targetAllActive then
+            tryStartCycleIfNeeded()
+        else
+            stopCycle()
+        end
+    end
+
+    if PAAEnabled then
+        if targetAllActive then
+            PAA_isUsingSelected = false
+            refreshPAA()
+            if #paaConnections == 0 then
+                paaConnections[#paaConnections+1] = Players.PlayerAdded:Connect(onPlayerAddedForPAA)
+                paaConnections[#paaConnections+1] = Players.PlayerRemoving:Connect(onPlayerRemovingForPAA)
+            end
+        else
+            deleteBHsBySource("PAA")
+        end
+    end
+end
+
+local function setTargetSelected(value)
+    targetSelectedActive = value
+    if (targetAllActive or targetSelectedActive) then startPrimaryLoop() end
+
+    if LifeCycleMode then
+        if targetSelectedActive then
+            tryStartCycleIfNeeded()
+        else
+            stopCycle()
+        end
+    end
+
+    if PAAEnabled then
+        if targetSelectedActive then
+            PAA_isUsingSelected = true
+            refreshPAA()
+            if #paaConnections == 0 then
+                paaConnections[#paaConnections+1] = Players.PlayerAdded:Connect(onPlayerAddedForPAA)
+                paaConnections[#paaConnections+1] = Players.PlayerRemoving:Connect(onPlayerRemovingForPAA)
+            end
+        else
+            deleteBHsBySource("PAA")
+        end
+    end
+end
+
+local function onCharacterAdded(character)
+    if (targetAllActive or targetSelectedActive) then
+        processedParts = {}
+        processWorkspaceParts()
+    end
+end
+
+Players.LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+-- GUI (TurtleLib)
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/miroeramaa/TurtleLib/main/TurtleUiLib.lua"))()
+local window = library:Window("Fix it you panis negor🗣🔥")
+
+window:Toggle("Unanchored Target All", false, function(Value) setTargetAll(Value) end)
+window:Toggle("Target Selected Players", false, function(Value) setTargetSelected(Value) end)
+
+-- Life Cycle Mode toggle
+window:Toggle("Life Cycle Mode", false, function(Value)
+    LifeCycleMode = Value
+    if LifeCycleMode then
+        tryStartCycleIfNeeded()
+    else
+        endCycleMode()
+    end
+end)
+
+-- Reset Cycle button (instant reset while Life Cycle Mode is ON)
+window:Button("Reset Cycle", function()
+    resetCycleNow()
+end)
+
+window:Button("Load Player List Script", function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Playerlistv6"))()
+end)
+window:Button("telekinesis/fix target", function()
+    loadstring(game:HttpGet(('https://raw.githubusercontent.com/SAZXHUB/Control-update/main/README.md'), true))()
+end)
+
+local loopCheckActive = false
+window:Toggle("Continuous Loop Check", false, function(Value)
+    loopCheckActive = Value
+    if loopCheckActive then
+        spawn(function()
+            while loopCheckActive do
+                if targetAllActive or targetSelectedActive then
+                    for _, v in ipairs(Workspace:GetDescendants()) do
+                        if v:IsA("BasePart") and not v.Anchored and not processedParts[v] and not isPartPlayerCharacter(v) and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character)) then
+                            ForcePart(v)
+                        end
+                    end
+                end
+                wait(0.5)
+            end
+        end)
+    end
+end)
+
+-- PAA toggle
+window:Toggle("PAA/unPAA (player amount BHs)", false, function(Value)
+    PAAEnabled = Value
+    if PAAEnabled then
+        PAA_isUsingSelected = false
+        refreshPAA()
+        paaConnections[#paaConnections+1] = Players.PlayerAdded:Connect(onPlayerAddedForPAA)
+        paaConnections[#paaConnections+1] = Players.PlayerRemoving:Connect(onPlayerRemovingForPAA)
+    else
+        for _, c in ipairs(paaConnections) do pcall(function() c:Disconnect() end) end
+        paaConnections = {}
+        deleteBHsBySource("PAA")
+    end
+end)
+
+window:Button("Create 3 Blackholes (quick)", function() createNCommandBlackHoles(3) end)
+window:Button("Delete Extra Blackholes (DBH)", function() deleteCommandBlackHoles() end)
+
+-- continuous refresh for PAA depending on matching primary mode:
+spawn(function()
+    while true do
+        if PAAEnabled then
+            if PAA_isUsingSelected then
+                if targetSelectedActive then refreshPAA() end
+            else
+                if targetAllActive then refreshPAA() end
+            end
+        end
+        wait(2)
+    end
+end)
+
+-- start/stop rebalancer
+spawn(function()
+    while true do
+        if #extraBlackHoles > 0 and not rebalancerRunning then startRebalancer()
+        elseif #extraBlackHoles == 0 and rebalancerRunning then stopRebalancer() end
+        if cycleRestartPending then scheduleCycleRestart() end
+        wait(0.5)
+    end
+end)
+
+-- HUD: BH count
+do
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "ÆS_BHCountGui"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+    local txt = Instance.new("TextLabel")
+    txt.Name = "BlackHoleCount"
+    txt.AnchorPoint = Vector2.new(0.5, 0)
+    txt.Position = UDim2.new(0.5, 0, 0, 6)
+    txt.Size = UDim2.new(0, 220, 0, 24)
+    txt.BackgroundTransparency = 1
+    txt.TextTransparency = 0
+    txt.Text = "BlackHoles: 0"
+    txt.TextScaled = false
+    txt.TextSize = 18
+    txt.Font = Enum.Font.SourceSansSemibold
+    txt.TextColor3 = Color3.new(1,1,1)
+    txt.Parent = screenGui
+
+    local function countBlackHolePartsInFolders()
+        local count = 0
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj:IsA("Folder") then
+                local lname = obj.Name:lower()
+                if string.find(lname, "blackhole") or string.find(lname, "bh") or string.find(lname, "aes_blackhole") or string.find(lname, "æs_blackhole") then
+                    for _, child in ipairs(obj:GetDescendants()) do
+                        if child:IsA("BasePart") then
+                            local cname = child.Name:lower()
+                            if string.find(cname, "extrabh_center") or string.find(cname, "bh_center") or string.find(cname, "bh_center_part") or string.find(cname, "extra") then
+                                count = count + 1
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return count
+    end
+
+    spawn(function()
+        while true do
+            local count = 0
+            pcall(function() count = countBlackHolePartsInFolders() end)
+            txt.Text = "BlackHoles: "..tostring(count)
+            wait(0.5)
+        end
+    end)
+end
+
+-- End of script
