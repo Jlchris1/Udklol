@@ -1,0 +1,832 @@
+-- Sky & Effects Inspector (updated)
+-- LocalScript. Place under StarterPlayerScripts or StarterGui (LocalScripts only run for players).
+-- Adds: when copying ParticleEmitter data it also drops the stats of the part/attachment it's connected to.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+local workspace = game:GetService("Workspace")
+local player = Players.LocalPlayer
+if not player then
+    Players.PlayerAdded:Wait()
+    player = Players.LocalPlayer
+end
+
+-- Helpers
+local function safeGet(inst, prop)
+    local ok, val = pcall(function() return inst[prop] end)
+    if ok then return val end
+    return nil
+end
+
+local function getFullPath(inst)
+    if not inst then return "<nil>" end
+    local parts = {}
+    local cur = inst
+    while cur do
+        table.insert(parts, 1, cur.Name or "<unnamed>")
+        cur = cur.Parent
+    end
+    return table.concat(parts, "/")
+end
+
+local function valueToString(v)
+    local t = typeof(v)
+    if t == "Instance" then return string.format("%s (%s)", v.Name or "<unnamed>", v.ClassName or "Instance") end
+    if t == "Color3" then return string.format("%d,%d,%d", math.floor(v.R*255), math.floor(v.G*255), math.floor(v.B*255)) end
+    if t == "Vector3" then return string.format("Vector3(%.2f,%.2f,%.2f)", v.X, v.Y, v.Z) end
+    if t == "UDim2" or t == "UDim" then return tostring(v) end
+    if t == "table" then
+        local ok, json = pcall(function() return HttpService:JSONEncode(v) end)
+        return ok and json or tostring(v)
+    end
+    return tostring(v)
+end
+
+-- Find the linked part/attachment for a ParticleEmitter instance
+local function findLinkedPart(inst)
+    if not inst then return nil end
+    -- Check immediate parent
+    local parent = inst.Parent
+    if not parent then return nil end
+
+    -- If parent is Attachment -> its parent may be a BasePart
+    if parent:IsA("Attachment") then
+        local holder = parent.Parent
+        if holder and holder:IsA("BasePart") then
+            return holder, parent -- return base part and the attachment
+        else
+            return parent, nil -- return the attachment (no basepart found)
+        end
+    end
+
+    -- If parent is BasePart return it
+    if parent:IsA("BasePart") then
+        return parent, nil
+    end
+
+    -- Otherwise climb ancestors looking for BasePart or Attachment
+    local cur = parent
+    while cur do
+        if cur:IsA("BasePart") then
+            return cur, nil
+        elseif cur:IsA("Attachment") then
+            local holder = cur.Parent
+            if holder and holder:IsA("BasePart") then
+                return holder, cur
+            else
+                return cur, nil
+            end
+        end
+        cur = cur.Parent
+    end
+
+    return nil
+end
+
+-- Collect a small set of readable properties for BasePart/Attachment (human-friendly)
+local function collectPartProperties(part)
+    if not part then return {} end
+    local props = {}
+    local typ = part.ClassName
+
+    if part:IsA("BasePart") then
+        props["Anchored"] = safeGet(part, "Anchored")
+        props["CanCollide"] = safeGet(part, "CanCollide")
+        props["Transparency"] = safeGet(part, "Transparency")
+        props["Size"] = safeGet(part, "Size")
+        props["Position"] = safeGet(part, "Position")
+        props["Orientation"] = safeGet(part, "Orientation")
+        props["Material"] = safeGet(part, "Material")
+        props["Color"] = safeGet(part, "Color")
+        -- Velocity might not be present for static parts but include if available
+        local vel = safeGet(part, "Velocity")
+        if vel then props["Velocity"] = vel end
+        local shape = safeGet(part, "Shape")
+        if shape then props["Shape"] = shape end
+    elseif part:IsA("Attachment") then
+        props["Position"] = safeGet(part, "Position")
+        props["Rotation"] = safeGet(part, "Rotation")
+        props["Axis"] = safeGet(part, "Axis")
+        props["Visible"] = safeGet(part, "Visible")
+    else
+        -- Generic fallback for other classes
+        props["ClassName"] = part.ClassName
+        props["Name"] = part.Name
+    end
+
+    -- Include attributes if any
+    local attributes = part:GetAttributes()
+    if attributes and next(attributes) then
+        props["_Attributes"] = attributes
+    end
+
+    return props
+end
+
+-- Format linked part info into lines (human readable)
+local function buildLinkedPartLines(inst)
+    local lines = {}
+    local linkedPart, viaAttachment = findLinkedPart(inst)
+    if not linkedPart then return lines end
+
+    local function safeVal(v)
+        if typeof(v) == "Color3" then
+            return string.format("%d,%d,%d", math.floor(v.R*255), math.floor(v.G*255), math.floor(v.B*255))
+        elseif typeof(v) == "Vector3" then
+            return string.format("%.2f,%.2f,%.2f", v.X, v.Y, v.Z)
+        elseif typeof(v) == "Instance" then
+            return string.format("%s (%s)", v.Name or "<unnamed>", v.ClassName or "Instance")
+        else
+            return tostring(v)
+        end
+    end
+
+    table.insert(lines, "")
+    table.insert(lines, "Linked Part:")
+    table.insert(lines, string.format("  Class: %s", linkedPart.ClassName or "<unknown>"))
+    table.insert(lines, string.format("  Name: %s", linkedPart.Name or "<unnamed>"))
+    table.insert(lines, string.format("  Path: %s", getFullPath(linkedPart)))
+
+    if viaAttachment and viaAttachment:IsA("Attachment") then
+        table.insert(lines, string.format("  Via Attachment: %s (%s)", viaAttachment.Name or "<unnamed>", getFullPath(viaAttachment)))
+    end
+
+    table.insert(lines, "")
+    table.insert(lines, "Linked Part Properties:")
+    local pprops = collectPartProperties(linkedPart)
+    -- Print base part props in a readable order
+    local order = {"Anchored","CanCollide","Transparency","Size","Position","Orientation","Material","Color","Velocity","Shape","Position","Rotation","Axis","Visible"}
+    local printed = {}
+    for _,k in ipairs(order) do
+        if pprops[k] ~= nil then
+            table.insert(lines, string.format("  - %s = %s", tostring(k), safeVal(pprops[k])))
+            printed[k] = true
+        end
+    end
+    -- attributes
+    if pprops["_Attributes"] then
+        for ak,av in pairs(pprops["_Attributes"]) do
+            table.insert(lines, string.format("  - Attribute:%s = %s", tostring(ak), tostring(av)))
+            printed[ak] = true
+        end
+    end
+    -- any remaining properties
+    for k,v in pairs(pprops) do
+        if not printed[k] and k ~= "_Attributes" then
+            table.insert(lines, string.format("  - %s = %s", tostring(k), safeVal(v)))
+        end
+    end
+
+    return lines
+end
+
+-- UI creation
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SkyEffectsInspectorGUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 999
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Toggle button GUI on the left side of the screen (stays visible even when inspector is hidden)
+local toggleGui = Instance.new("ScreenGui")
+toggleGui.Name = "SkyEffectsInspectorToggle"
+toggleGui.ResetOnSpawn = false
+toggleGui.DisplayOrder = 1001
+toggleGui.Parent = player:WaitForChild("PlayerGui")
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name = "InspectorToggleBtn"
+toggleBtn.Size = UDim2.new(0,36,0,120)
+toggleBtn.Position = UDim2.new(0,8,0.4, -60)
+toggleBtn.BackgroundTransparency = 0.12
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,35)
+toggleBtn.Text = "Hide"
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 16
+toggleBtn.TextColor3 = Color3.fromRGB(230,230,230)
+toggleBtn.Parent = toggleGui
+toggleBtn.AutoButtonColor = true
+local tcorner = Instance.new("UICorner", toggleBtn)
+tcorner.CornerRadius = UDim.new(0,8)
+
+local function updateToggleText()
+    if screenGui and screenGui:IsDescendantOf(player:WaitForChild("PlayerGui")) and screenGui.Enabled then
+        toggleBtn.Text = "Hide"
+    else
+        toggleBtn.Text = "Show"
+    end
+end
+
+updateToggleText()
+
+-- Main container
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0.9, 0, 0.75, 0)
+main.Position = UDim2.new(0.05, 0, 0.12, 0)
+main.BackgroundTransparency = 0.06
+main.BackgroundColor3 = Color3.fromRGB(25,25,30)
+main.BorderSizePixel = 0
+main.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner", main)
+uiCorner.CornerRadius = UDim.new(0,8)
+
+-- Title bar
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 40)
+title.Position = UDim2.new(0,10,0,8)
+title.BackgroundTransparency = 1
+title.Text = "Sky & Effects Inspector"
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 20
+title.TextColor3 = Color3.fromRGB(235,235,235)
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = main
+
+-- Destroy button (top-right)
+local destroyBtn = Instance.new("TextButton", main)
+destroyBtn.Size = UDim2.new(0,80,0,28)
+destroyBtn.Position = UDim2.new(1, -90, 0, 8)
+destroyBtn.Text = "Destroy"
+destroyBtn.Font = Enum.Font.SourceSansBold
+destroyBtn.TextSize = 12
+destroyBtn.BackgroundTransparency = 0.12
+local destroyCorner = Instance.new("UICorner", destroyBtn)
+destroyCorner.CornerRadius = UDim.new(0,6)
+
+destroyBtn.MouseButton1Click:Connect(function()
+    local modal = Instance.new("Frame", screenGui)
+    modal.Size = UDim2.new(0.36,0,0.18,0)
+    modal.Position = UDim2.new(0.32,0,0.4,0)
+    modal.BackgroundColor3 = Color3.fromRGB(20,20,24)
+    local mc = Instance.new("UICorner", modal)
+    mc.CornerRadius = UDim.new(0,8)
+    local txt = Instance.new("TextLabel", modal)
+    txt.Size = UDim2.new(1, -20, 0.6, 0)
+    txt.Position = UDim2.new(0,10,0,10)
+    txt.BackgroundTransparency = 1
+    txt.Text = "Destroy the inspector GUI? This cannot be undone."
+    txt.Font = Enum.Font.SourceSans
+    txt.TextWrapped = true
+    txt.TextSize = 14
+    txt.TextColor3 = Color3.fromRGB(230,230,230)
+    local yes = Instance.new("TextButton", modal)
+    yes.Size = UDim2.new(0.44, -10, 0,28)
+    yes.Position = UDim2.new(0,10,1,-38)
+    yes.Text = "Yes"
+    yes.Font = Enum.Font.SourceSansBold
+    yes.BackgroundTransparency = 0.12
+    local no = Instance.new("TextButton", modal)
+    no.Size = UDim2.new(0.44, -10, 0,28)
+    no.Position = UDim2.new(0.56, 0,1,-38)
+    no.Text = "No"
+    no.Font = Enum.Font.SourceSansBold
+    no.BackgroundTransparency = 0.12
+    yes.MouseButton1Click:Connect(function()
+        pcall(function() screenGui:Destroy() end)
+        pcall(function() toggleGui:Destroy() end)
+    end)
+    no.MouseButton1Click:Connect(function() modal:Destroy() end)
+end)
+
+-- Tabs container (horizontal scrolling)
+local tabsFrame = Instance.new("ScrollingFrame")
+tabsFrame.Name = "Tabs"
+tabsFrame.Size = UDim2.new(1, -20, 0, 60)
+tabsFrame.Position = UDim2.new(0,10,0,54)
+tabsFrame.BackgroundTransparency = 1
+tabsFrame.ScrollBarThickness = 6
+tabsFrame.AutomaticCanvasSize = Enum.AutomaticSize.X
+
+tabsFrame.Parent = main
+local tabsLayout = Instance.new("UIListLayout")
+tabsLayout.FillDirection = Enum.FillDirection.Horizontal
+tabsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+tabsLayout.Padding = UDim.new(0,8)
+tabsLayout.Parent = tabsFrame
+
+tabsFrame.CanvasSize = UDim2.new(1,0,0,0)
+
+local function makeTabButton(name)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0,160,1,-10)
+    btn.BackgroundTransparency = 0.18
+    btn.BackgroundColor3 = Color3.fromRGB(40,40,45)
+    btn.Font = Enum.Font.SourceSans
+    btn.TextSize = 16
+    btn.TextColor3 = Color3.fromRGB(240,240,240)
+    btn.Text = name
+    btn.AutoButtonColor = true
+    local c = Instance.new("UICorner", btn)
+    c.CornerRadius = UDim.new(0,6)
+    return btn
+end
+
+-- Content area
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, -20, 1, -130)
+content.Position = UDim2.new(0,10,0,120)
+content.BackgroundTransparency = 1
+content.Parent = main
+
+local leftPanel = Instance.new("ScrollingFrame")
+leftPanel.Name = "LeftPanel"
+leftPanel.Size = UDim2.new(0.45, -10, 1, 0)
+leftPanel.Position = UDim2.new(0,0,0,0)
+leftPanel.BackgroundTransparency = 1
+leftPanel.ScrollBarThickness = 8
+leftPanel.CanvasSize = UDim2.new(0,0,0,0)
+leftPanel.Parent = content
+local leftLayout = Instance.new("UIListLayout", leftPanel)
+leftLayout.SortOrder = Enum.SortOrder.LayoutOrder
+leftLayout.Padding = UDim.new(0,6)
+leftLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    leftPanel.CanvasSize = UDim2.new(0,0,0,leftLayout.AbsoluteContentSize.Y + 12)
+end)
+
+local rightPanel = Instance.new("ScrollingFrame")
+rightPanel.Name = "RightPanel"
+rightPanel.Size = UDim2.new(0.55, 0, 1, 0)
+rightPanel.Position = UDim2.new(0.45, 10, 0, 0)
+rightPanel.BackgroundTransparency = 1
+rightPanel.ScrollBarThickness = 8
+rightPanel.CanvasSize = UDim2.new(0,0,0,0)
+rightPanel.Parent = content
+local rightLayout = Instance.new("UIListLayout", rightPanel)
+rightLayout.SortOrder = Enum.SortOrder.LayoutOrder
+rightLayout.Padding = UDim.new(0,6)
+rightLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    rightPanel.CanvasSize = UDim2.new(0,0,0,rightLayout.AbsoluteContentSize.Y + 16)
+end)
+
+-- Utility: create label row with copy behavior
+local function showCopyFallback(text)
+    local modal = Instance.new("Frame", screenGui)
+    modal.Size = UDim2.new(0.6,0,0.5,0)
+    modal.Position = UDim2.new(0.2,0,0.25,0)
+    modal.BackgroundColor3 = Color3.fromRGB(18,18,22)
+    local c = Instance.new("UICorner", modal)
+    c.CornerRadius = UDim.new(0,8)
+    local tb = Instance.new("TextBox", modal)
+    tb.Size = UDim2.new(0.96,0,0.8,0)
+    tb.Position = UDim2.new(0.02,0,0.06,0)
+    tb.Text = text
+    tb.Font = Enum.Font.Code
+    tb.TextSize = 14
+    tb.ClearTextOnFocus = false
+    tb.MultiLine = true
+    tb.TextWrapped = true
+    local close = Instance.new("TextButton", modal)
+    close.Size = UDim2.new(0.2,0,0,28)
+    close.Position = UDim2.new(0.4,0,0.88,0)
+    close.Text = "Close"
+    close.Font = Enum.Font.SourceSansBold
+    close.MouseButton1Click:Connect(function() modal:Destroy() end)
+end
+
+local function makeRow(guiParent, labelText, valueText, allowCopy, instance)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1,0,0,36)
+    row.BackgroundTransparency = 0.12
+    row.BackgroundColor3 = Color3.fromRGB(30,30,35)
+    row.BorderSizePixel = 0
+    row.Parent = guiParent
+    local corner = Instance.new("UICorner", row)
+    corner.CornerRadius = UDim.new(0,6)
+
+    local lbl = Instance.new("TextLabel", row)
+    lbl.Size = UDim2.new(0.45, -8, 1, 0)
+    lbl.Position = UDim2.new(0,8,0,0)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.SourceSansSemibold
+    lbl.TextSize = 14
+    lbl.TextColor3 = Color3.fromRGB(220,220,220)
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Text = labelText
+
+    local val = Instance.new("TextLabel", row)
+    val.Size = UDim2.new(0.45, -8, 1, 0)
+    val.Position = UDim2.new(0.45,8,0,0)
+    val.BackgroundTransparency = 1
+    val.Font = Enum.Font.SourceSans
+    val.TextSize = 13
+    val.TextColor3 = Color3.fromRGB(200,200,200)
+    val.TextXAlignment = Enum.TextXAlignment.Left
+    val.Text = valueText
+
+    if allowCopy then
+        local btn = Instance.new("TextButton", row)
+        btn.Size = UDim2.new(0,70,0,28)
+        btn.Position = UDim2.new(1, -78, 0.5, -14)
+        btn.BackgroundTransparency = 0.12
+        btn.Text = "Copy"
+        btn.Font = Enum.Font.SourceSansBold
+        btn.TextSize = 13
+        local corner2 = Instance.new("UICorner", btn)
+        corner2.CornerRadius = UDim.new(0,6)
+
+        btn.MouseButton1Click:Connect(function()
+            -- Build a human-readable snapshot focused on this single property, including parent and paths
+            local function safeFormat(v)
+                if typeof(v) == "Color3" then
+                    return string.format("%d,%d,%d", math.floor(v.R*255), math.floor(v.G*255), math.floor(v.B*255))
+                elseif typeof(v) == "Vector3" then
+                    return string.format("%.2f,%.2f,%.2f", v.X, v.Y, v.Z)
+                elseif typeof(v) == "Instance" then
+                    return string.format("%s (%s)", v.Name or "<unnamed>", v.ClassName or "Instance")
+                else
+                    return tostring(v)
+                end
+            end
+
+            local inst = instance
+            local propName = labelText
+            local propVal = valueText
+
+            local lines = {}
+            table.insert(lines, string.format("Class: %s", inst and inst.ClassName or "<unknown>"))
+            table.insert(lines, string.format("Name: %s", inst and inst.Name or "<unknown>"))
+            table.insert(lines, string.format("Path: %s", inst and getFullPath(inst) or "<unknown>"))
+            table.insert(lines, "")
+            if inst and inst.Parent then
+                table.insert(lines, string.format("Parent: %s (%s)", inst.Parent.Name or "<unnamed>", inst.Parent.ClassName or "<unknown>"))
+                table.insert(lines, string.format("Parent Path: %s", getFullPath(inst.Parent)))
+                table.insert(lines, "")
+            end
+            table.insert(lines, "Properties:")
+            table.insert(lines, string.format("  - %s = %s", propName, propVal))
+
+            -- include attributes if present
+            local attrs = inst and inst:GetAttributes() or {}
+            for k,v in pairs(attrs) do
+                table.insert(lines, string.format("  - Attribute:%s = %s", tostring(k), tostring(v)))
+            end
+
+            -- Children:
+            local children = inst and inst:GetChildren() or {}
+            table.insert(lines, "")
+            table.insert(lines, "Children:")
+            if #children == 0 then
+                table.insert(lines, "  (none)")
+            else
+                for _,c in ipairs(children) do
+                    table.insert(lines, string.format("  - %s (%s)", c.Name or "<unnamed>", c.ClassName or "<unknown>"))
+                end
+            end
+
+            -- If instance is a ParticleEmitter, append linked part info
+            if inst and inst:IsA("ParticleEmitter") then
+                local extra = buildLinkedPartLines(inst)
+                for _,ln in ipairs(extra) do table.insert(lines, ln) end
+            end
+
+            local text = table.concat(lines, "\n")
+            local clipOk = pcall(function() setclipboard(text) end)
+            if not clipOk then
+                showCopyFallback(text)
+            else
+                local toast = Instance.new("TextLabel")
+                toast.Size = UDim2.new(0,260,0,30)
+                toast.Position = UDim2.new(0.5,-130,0.9,-35)
+                toast.BackgroundTransparency = 0.12
+                toast.BackgroundColor3 = Color3.fromRGB(40,40,40)
+                toast.TextColor3 = Color3.fromRGB(220,220,220)
+                toast.Text = "Copied property snapshot"
+                toast.Font = Enum.Font.SourceSans
+                toast.Parent = screenGui
+                delay(1.6, function() pcall(function() toast:Destroy() end) end)
+            end
+        end)
+    end
+    return row
+end
+
+-- Build panels
+local function clearPanel(panel)
+    for _,c in ipairs(panel:GetChildren()) do
+        if not (c:IsA("UIListLayout") or c:IsA("UIPadding") or c:IsA("UIScrollBar")) then
+            c:Destroy()
+        end
+    end
+end
+
+-- Scanners
+local function scanParticleEmitters()
+    local out = {}
+    for _,inst in ipairs(workspace:GetDescendants()) do
+        if inst:IsA("ParticleEmitter") then
+            table.insert(out, inst)
+        end
+    end
+    return out
+end
+
+local function scanLightingEffects()
+    local classes = {
+        Atmosphere = true,
+        Sky = true,
+        ColorCorrectionEffect = true,
+        BloomEffect = true,
+        SunRaysEffect = true,
+        BlurEffect = true,
+        DepthOfFieldEffect = true
+    }
+    local out = {}
+    table.insert(out, Lighting)
+    for _,inst in ipairs(Lighting:GetDescendants()) do
+        if classes[inst.ClassName] or inst:IsA("Sky") or inst:IsA("Atmosphere") or inst:IsA("ColorCorrectionEffect") or inst:IsA("BloomEffect") or inst:IsA("SunRaysEffect") or inst:IsA("BlurEffect") or inst:IsA("DepthOfFieldEffect") then
+            table.insert(out, inst)
+        end
+    end
+    return out
+end
+
+-- known property lists
+local knownProps = {
+    ParticleEmitter = {"Texture","EmissionDirection","Rate","Lifetime","Speed","Size","SpreadAngle","Rotation","Color","VelocityInheritance","LightInfluence","Enabled"},
+    Sky = {"SkyboxBk","SkyboxDn","SkyboxFt","SkyboxLf","SkyboxRt","SkyboxUp","MoonTextureId","SunAngularSize","CelestialBodiesShown"},
+    Atmosphere = {"Density","Offset","Color","Decay","Glare","Haze","Enabled"},
+    Lighting = {"TimeOfDay","OutdoorAmbient","Ambient","Brightness","GlobalShadows","FogEnd","FogStart","FogColor","ClockTime"},
+    ColorCorrectionEffect = {"TintColor","Saturation","Contrast","Enabled"},
+    BloomEffect = {"Intensity","Size","Threshold","Enabled"},
+    SunRaysEffect = {"Intensity","Spread","FadeInTime","Enabled"},
+    BlurEffect = {"Size","Enabled"},
+    DepthOfFieldEffect = {"FocusDistance","InFocusRadius","FarIntensity","NearIntensity","Enabled"}
+}
+
+local function collectProperties(inst)
+    local props = {}
+    if not inst then return props end
+    local className = inst.ClassName
+    local list = knownProps[className] or {}
+    local attributes = inst:GetAttributes()
+    if attributes and next(attributes) then
+        props._Attributes = attributes
+    end
+    for _,p in ipairs(list) do
+        local ok, val = pcall(function() return inst[p] end)
+        if ok then
+            props[p] = val
+        end
+    end
+    if className == "Sky" then
+        for _,k in ipairs({"MoonAngularSize","MoonTextureId","SunTextureId"}) do
+            local ok, v = pcall(function() return inst[k] end)
+            if ok and v ~= nil then props[k] = v end
+        end
+    end
+    if next(props) == nil then
+        local fallback = {"Name","Parent","ClassName"}
+        for _,p in ipairs(fallback) do
+            props[p] = safeGet(inst, p)
+        end
+    end
+    return props
+end
+
+-- Copy full snapshot (now includes linked part lines for ParticleEmitters)
+local function copyFullSnapshot(inst)
+    if not inst then return end
+    local function safeVal(v)
+        if typeof(v) == "Color3" then
+            return string.format("%d,%d,%d", math.floor(v.R*255), math.floor(v.G*255), math.floor(v.B*255))
+        elseif typeof(v) == "Vector3" then
+            return string.format("%.2f,%.2f,%.2f", v.X, v.Y, v.Z)
+        elseif typeof(v) == "Instance" then
+            return string.format("%s (%s)", v.Name or "<unnamed>", v.ClassName or "Instance")
+        else
+            return tostring(v)
+        end
+    end
+
+    local lines = {}
+    table.insert(lines, string.format("Class: %s", inst.ClassName or "<unknown>"))
+    table.insert(lines, string.format("Name: %s", inst.Name or "<unnamed>"))
+    table.insert(lines, string.format("Path: %s", getFullPath(inst)))
+    table.insert(lines, "")
+
+    if inst.Parent then
+        table.insert(lines, string.format("Parent: %s (%s)", inst.Parent.Name or "<unnamed>", inst.Parent.ClassName or "<unknown>"))
+        table.insert(lines, string.format("Parent Path: %s", getFullPath(inst.Parent)))
+        table.insert(lines, "")
+    end
+
+    table.insert(lines, "Properties:")
+    local props = collectProperties(inst)
+    local list = knownProps[inst.ClassName] or {}
+    for _,k in ipairs(list) do
+        if props[k] ~= nil then
+            table.insert(lines, string.format("  - %s = %s", tostring(k), safeVal(props[k])))
+        end
+    end
+    for k,v in pairs(props) do
+        if k ~= "_Attributes" then
+            local found = false
+            for _,kk in ipairs(list) do if kk == k then found = true break end end
+            if not found then
+                table.insert(lines, string.format("  - %s = %s", tostring(k), safeVal(v)))
+            end
+        end
+    end
+    local attrs = inst:GetAttributes() or {}
+    for k,v in pairs(attrs) do
+        table.insert(lines, string.format("  - Attribute:%s = %s", tostring(k), tostring(v)))
+    end
+
+    table.insert(lines, "")
+    table.insert(lines, "Children:")
+    local children = inst:GetChildren()
+    if #children == 0 then
+        table.insert(lines, "  (none)")
+    else
+        for _,c in ipairs(children) do
+            table.insert(lines, string.format("  - %s (%s)", c.Name or "<unnamed>", c.ClassName or "<unknown>"))
+        end
+    end
+
+    -- If ParticleEmitter, append linked part info
+    if inst:IsA("ParticleEmitter") then
+        local extra = buildLinkedPartLines(inst)
+        for _,ln in ipairs(extra) do table.insert(lines, ln) end
+    end
+
+    local text = table.concat(lines, "\n")
+    local ok = pcall(function() setclipboard(text) end)
+    if not ok then
+        showCopyFallback(text)
+    else
+        local toast = Instance.new("TextLabel")
+        toast.Size = UDim2.new(0,220,0,30)
+        toast.Position = UDim2.new(0.5,-110,0.9,-35)
+        toast.BackgroundTransparency = 0.12
+        toast.BackgroundColor3 = Color3.fromRGB(40,40,40)
+        toast.TextColor3 = Color3.fromRGB(220,220,220)
+        toast.Text = "Copied full snapshot"
+        toast.Font = Enum.Font.SourceSans
+        toast.Parent = screenGui
+        delay(1.6, function() pcall(function() toast:Destroy() end) end)
+    end
+end
+
+-- Show properties UI
+local function showProperties(inst)
+    clearPanel(rightPanel)
+    if not inst then return end
+    local header = Instance.new("TextLabel", rightPanel)
+    header.Size = UDim2.new(1,0,0,30)
+    header.BackgroundTransparency = 1
+    header.Font = Enum.Font.SourceSansBold
+    header.TextSize = 16
+    header.TextColor3 = Color3.fromRGB(240,240,240)
+    header.Text = string.format("%s — %s", inst.Name or "<unnamed>", inst.ClassName or "Instance")
+
+    -- Parent information
+    makeRow(rightPanel, "Parent", getFullPath(inst.Parent or inst), true, inst)
+
+    local props = collectProperties(inst)
+
+    -- copy all (full snapshot)
+    local copyAll = Instance.new("TextButton", rightPanel)
+    copyAll.Size = UDim2.new(0,160,0,30)
+    copyAll.Text = "Copy full snapshot"
+    copyAll.Font = Enum.Font.SourceSansBold
+    copyAll.TextSize = 14
+    copyAll.BackgroundTransparency = 0.12
+    local corner = Instance.new("UICorner", copyAll)
+    corner.CornerRadius = UDim.new(0,6)
+    copyAll.MouseButton1Click:Connect(function()
+        copyFullSnapshot(inst)
+    end)
+
+    -- Show each property
+    for k,v in pairs(props) do
+        if k == "_Attributes" then
+            local attrHeader = Instance.new("TextLabel", rightPanel)
+            attrHeader.Size = UDim2.new(1,0,0,20)
+            attrHeader.BackgroundTransparency = 1
+            attrHeader.Font = Enum.Font.SourceSansSemibold
+            attrHeader.TextSize = 13
+            attrHeader.TextColor3 = Color3.fromRGB(220,220,220)
+            attrHeader.Text = "Attributes"
+            for ak,av in pairs(v) do
+                makeRow(rightPanel, tostring(ak), valueToString(av), true, inst)
+            end
+        else
+            local valStr = valueToString(v)
+            makeRow(rightPanel, tostring(k), valStr, true, inst)
+        end
+    end
+end
+
+-- populate left panel
+local function populateLeft(entries)
+    clearPanel(leftPanel)
+    if #entries == 0 then
+        local n = Instance.new("TextLabel", leftPanel)
+        n.Size = UDim2.new(1,0,0,30)
+        n.BackgroundTransparency = 1
+        n.Text = "No entries found."
+        n.Font = Enum.Font.SourceSans
+        n.TextColor3 = Color3.fromRGB(200,200,200)
+        return
+    end
+    for _,inst in ipairs(entries) do
+        local btn = Instance.new("TextButton", leftPanel)
+        btn.Size = UDim2.new(1,0,0,40)
+        btn.BackgroundTransparency = 0.12
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.AutoButtonColor = true
+        btn.Text = string.format("%s — %s", inst.Name or "<unnamed>", inst.ClassName or "Instance")
+        btn.Font = Enum.Font.SourceSans
+        btn.TextSize = 14
+        btn.MouseButton1Click:Connect(function()
+            showProperties(inst)
+        end)
+    end
+end
+
+-- Create Tabs
+local particleTabBtn = makeTabButton and makeTabButton("ParticleEmitters") or (function() local b = Instance.new("TextButton") b.Text="ParticleEmitters" return b end)()
+particleTabBtn.Parent = tabsFrame
+particleTabBtn.MouseButton1Click:Connect(function()
+    local entries = scanParticleEmitters()
+    populateLeft(entries)
+    clearPanel(rightPanel)
+end)
+
+local lightingTabBtn = makeTabButton("Lighting & Sky")
+lightingTabBtn.Parent = tabsFrame
+lightingTabBtn.MouseButton1Click:Connect(function()
+    local entries = scanLightingEffects()
+    populateLeft(entries)
+    clearPanel(rightPanel)
+end)
+
+-- Atmosphere tab
+local atmosphereTabBtn = makeTabButton("Atmosphere")
+atmosphereTabBtn.Parent = tabsFrame
+atmosphereTabBtn.MouseButton1Click:Connect(function()
+    local entries = {}
+    for _,inst in ipairs(Lighting:GetDescendants()) do
+        if inst:IsA("Atmosphere") then
+            table.insert(entries, inst)
+        end
+    end
+    populateLeft(entries)
+    clearPanel(rightPanel)
+end)
+
+local refreshBtn = makeTabButton("Refresh")
+refreshBtn.Parent = tabsFrame
+refreshBtn.MouseButton1Click:Connect(function()
+    populateLeft(scanParticleEmitters())
+end)
+
+-- Default open: populate particles
+populateLeft(scanParticleEmitters())
+
+-- Make draggable
+local dragging, dragStart, startPos
+main.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = main.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+main.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Toggle visibility handler
+toggleBtn.MouseButton1Click:Connect(function()
+    if not screenGui or not screenGui.Parent then
+        toggleBtn.Text = "No GUI"
+        toggleBtn.AutoButtonColor = false
+        toggleBtn.Active = false
+        return
+    end
+    screenGui.Enabled = not screenGui.Enabled
+    updateToggleText()
+end)
+
+-- Cleanup
+player.AncestryChanged:Connect(function()
+    if not player:IsDescendantOf(game) then
+        pcall(function() screenGui:Destroy() end)
+    end
+end)
+
+print("Sky & Effects Inspector loaded. Open the GUI from PlayerGui -> SkyEffectsInspectorGUI")
