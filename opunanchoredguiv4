@@ -1,14 +1,11 @@
--- Full updated script (client)
--- Changes from provided script:
---  * Local player is never modified (no attachments parented to character, no noclip changes affecting player)
---  * switchDelay = 0.35 (target selection delay requested)
---  * Loop Fix Parts toggle removed
---  * Skid toggle added: when enabled, all black holes (primary + extras) perform a 360-degree skid around their target
---    - Skid completes a full cycle every 0.03 seconds (one side every 0.015s -> half-cycle)
---    - Skid radius scales with target HumanoidRootPart speed
---  * Distribution logic changed: when there are more black holes than players, BHs (and attachments) are divided across players
---    in a round-robin fashion (local player is never assigned). This applies for PAA / target-all / target-selected modes.
---  * Other improvements kept: smoothing, safety checks, rebalancer, no local-character parenting
+-- Full updated script (client) - MASSLESS-aware, extreme powers, smoother & more accurate skid/prediction
+-- Changes:
+--  * Fling torque per-axis = 1e14
+--  * Pull MaxForce = 1e20
+--  * Pull Responsiveness = 1e18
+--  * Script adapts when parts are Massless
+--  * Better prediction using velocity+accel estimate
+--  * Stronger, speed-adaptive skid smoothing
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -16,62 +13,97 @@ local RunService = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer
 
--- Utilities
 local function clamp(val, a, b)
     if val < a then return a end
     if val > b then return b end
     return val
 end
 
--- Core state
-local blackHoleActive = false
-local toggleState = false
-local targetPlayer = nil
-local switchDelay = 0.35 -- seconds between target selection / refresh (user requested 0.35)
-local processedParts = {} -- set: part -> true
+-- ====== CONFIG / STATE ======
+local targetAllActive = false
+local targetSelectedActive = false
+local primaryLoopRunning = false
+
+local switchDelay = 0.13
+local processedParts = {}
 local initiallyAnchoredParts = {}
+local initiallyMasslessParts = {} -- store original Massless state to restore later
 local anchoredOnce = false
 local unanchorTimerRunning = false
 local unanchorCoroutine
 
--- Primary single attachment (kept in workspace folder, NOT parented to local player)
 local Attachment1 = nil
 
--- Manager for extra black holes created by commands (table of {Part, Attachment, AssignedParts, TargetPlayer, LastTarget, _running, _active})
+-- All extra BHs (both PAA and CMD). Each BH table has bh.source = "PAA" or "CMD"
 local extraBlackHoles = {}
 
--- PAA mode state
+-- PAA state
 local PAAEnabled = false
-local PAA_isUsingSelected = false -- when true, PAA uses selected players
+local PAA_isUsingSelected = false
 local paaConnections = {}
 
--- Rebalancer state
+-- Rebalancer
 local rebalancerRunning = false
-local rebalancerFreq = 0.10 -- seconds between rebalances; lower = faster redistribution (tweakable)
-local alignResponsiveness = 1500 -- high = snappy; tweak if physics break
+local rebalancerFreq = 0.10
+local alignResponsiveness_base = 1500
 
--- BH motion tuning (tweakable)
-local BH_SWAP_INTERVAL = 0.01         -- seconds per swap (kept, not used directly for skid)
-local BH_AMPLITUDE_FACTOR = 0.22     -- amplitude multiplier applied to speed to compute displacement
-local BH_MIN_AMPLITUDE = 0.6        -- small jitter even when standing still
-local BH_MAX_AMPLITUDE = 80         -- upper clamp for amplitude (studs)
-
--- SKID tuning
-local SKID_ENABLED = false
-local SKID_FULL_CYCLE = 0.03 -- seconds per full circular skid (user requested full cycle 0.03s)
-local SKID_FREQ = 1 / SKID_FULL_CYCLE -- Hz (~33.333)
-
--- Target smoothing (higher => smoother, lower => more immediate)
+-- BH motion
+local BH_SWAP_INTERVAL = 0.01
+local BH_OSC_FREQUENCY = 1 / (BH_SWAP_INTERVAL * 2)
+local BH_AMPLITUDE_FACTOR = 0.22
+local BH_MIN_AMPLITUDE = 0.6
+local BH_MAX_AMPLITUDE = 80
 local TARGET_SMOOTHNESS = 6.0
 
--- Setup initial Attachment placed under a workspace folder (not parented to player)
+-- ROTATION settings for extra BH remainder (swap cooldown set to 0.2)
+local ROTATE_INTERVAL = 0.2 -- seconds between rotating reassigns for leftover BHs
+
+-- Life Cycle Mode state
+local LifeCycleMode = false
+local cycleActive = false
+local cyclePlayers = {}        -- snapshot players for the current cycle (Player instances)
+local cycleDead = {}           -- set: player -> true if died this cycle
+local cycleConns = {}          -- for Humanoid.Died & CharacterAdded/AncestryChanged connections
+local cycleRestartPending = false
+
+-- USER-REQUESTED VALUES (extremely large)
+local fallenpartsdestroyheight = 0/0    -- NaN intentionally (user requested 0/0)
+
+-- Base values the user set earlier
+local BASE_FLING_AXIS = 1e6       -- previous base
+local BASE_PULL_FORCE = 1e8       -- previous base
+local BASE_PULL_RESP  = 1e6       -- previous base
+
+-- Multipliers requested (interpreted as multiplication factors)
+local FLING_MULTIPLIER = 100000000       -- 100 million (1e8)
+local PULL_MULTIPLIER  = 1000000000000   -- 1 trillion (1e12)
+
+-- Final applied extreme values (computed)
+local FLING_TORQUE = Vector3.new(BASE_FLING_AXIS * FLING_MULTIPLIER,
+                                 BASE_FLING_AXIS * FLING_MULTIPLIER,
+                                 BASE_FLING_AXIS * FLING_MULTIPLIER) -- 1e6 * 1e8 = 1e14
+local PULL_MAX_FORCE = BASE_PULL_FORCE * PULL_MULTIPLIER -- 1e8 * 1e12 = 1e20
+local PULL_RESPONSIVENESS = BASE_PULL_RESP * PULL_MULTIPLIER -- 1e6 * 1e12 = 1e18
+
+-- Massless adaptation scales (so behavior remains consistent)
+local MASSLESS_TORQUE_SCALE = 1.0           -- keep fling magnitude (can be tuned)
+local MASSLESS_PULL_SCALE  = 1.0            -- keep pull magnitude (can be tuned)
+local MASSLESS_RESP_SCALE  = 1.2            -- slightly higher responsiveness for massless parts
+
+-- SKID SMOOTHING (increase for more smoothness)
+local SKID_SMOOTHNESS = 14.0
+
+-- Prediction smoothing & velocity history
+local playerLastVel = {}   -- player -> last velocity vector
+local playerLastVelTime = {} -- player -> last timestamp
+
+-- Setup folder & primary attachment
 local function setupPlayer()
     local Folder = Workspace:FindFirstChild("ÆS_BlackHole_Folder")
     if not Folder then
         Folder = Instance.new("Folder", Workspace)
         Folder.Name = "ÆS_BlackHole_Folder"
     end
-    -- keep a single invisible part for the default attachment
     local existing = Folder:FindFirstChild("BH_Center_Part")
     if existing and existing:IsA("BasePart") then
         local att = existing:FindFirstChildOfClass("Attachment")
@@ -91,17 +123,14 @@ end
 
 Attachment1 = setupPlayer()
 
--- Detect if a character is an NPC (has Humanoid but not a player character)
+-- helpers
 local function isNPC(character)
     if not character or not character:IsA("Model") then return false end
     local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if humanoid and not Players:GetPlayerFromCharacter(character) then
-        return true
-    end
+    if humanoid and not Players:GetPlayerFromCharacter(character) then return true end
     return false
 end
 
--- Ensure we don't affect any player's character parts (local or remote players)
 local function isPartPlayerCharacter(part)
     if not part then return false end
     for _, pl in ipairs(Players:GetPlayers()) do
@@ -113,13 +142,8 @@ local function isPartPlayerCharacter(part)
     return false
 end
 
--- ===== NOTE: We deliberately make noclip a no-op so local player's movement is never modified =====
-local function enableLocalPlayerNoclip(enable)
-    -- no-op: do not alter local player's parts or collisions; avoids breaking walking
-    return
-end
+local function enableLocalPlayerNoclip(enable) return end
 
--- helper to remove any existing physics bodyobjects from a part
 local function stripBodyForces(part)
     for _, x in next, part:GetChildren() do
         if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro")
@@ -133,7 +157,6 @@ local function stripBodyForces(part)
     if part:FindFirstChild("Torque") then part:FindFirstChild("Torque"):Destroy() end
 end
 
--- Utility: shuffle table in place
 local function shuffle(t)
     for i = #t, 2, -1 do
         local j = math.random(1, i)
@@ -141,39 +164,105 @@ local function shuffle(t)
     end
 end
 
--- Choose the extra black hole with fewest assigned parts (for immediate balanced assignment)
-local function getLeastLoadedBlackHole()
-    if #extraBlackHoles == 0 then return nil end
-    table.sort(extraBlackHoles, function(a,b) return (#a.AssignedParts) < (#b.AssignedParts) end)
-    return extraBlackHoles[1]
-end
-
--- Return array of players excluding local player. Always returns current players even without characters.
-local function getAllNonLocalPlayers()
-    local res = {}
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= localPlayer then
-            table.insert(res, p)
-        end
-    end
-    return res
-end
-
--- Exponential smoothing for CFrame lerp (smoother targeting)
 local function smoothLerpCFrame(curCF, targetCF, dt)
-    -- alpha = 1 - exp(-k * dt). k = TARGET_SMOOTHNESS
     local alpha = 1 - math.exp(-TARGET_SMOOTHNESS * dt)
     if alpha < 0.001 then alpha = 0.001 end
     if alpha > 1 then alpha = 1 end
     return curCF:Lerp(targetCF, alpha)
 end
 
--- ForcePart now assigns to extra black holes (if any). Also prevents affecting player characters.
+-- Whitelist check: returns true if player has BoolValue "Whitelisted" == true
+local function isWhitelisted(player)
+    if not player then return false end
+    local v = player:FindFirstChild("Whitelisted")
+    if v and typeof(v.Value) == "boolean" then
+        return v.Value
+    end
+    return false
+end
+
+-- Player alive check
+local function isPlayerAlive(player)
+    if not player then return false end
+    local char = player.Character
+    if not char then return false end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    if humanoid.Health and humanoid.Health > 0 then return true end
+    return false
+end
+
+-- Return players excluding local & whitelisted. Use when we want "target all" semantics.
+local function getAllNonLocalPlayers()
+    local res = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p and p ~= localPlayer and p.Parent and not isWhitelisted(p) then
+            table.insert(res, p)
+        end
+    end
+    return res
+end
+
+-- Return selected players; allowWhitelisted = true will include whitelisted selected players
+local function getSelectedPlayers(allowWhitelisted)
+    local res = {}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player and player ~= localPlayer and player.Parent then
+            local sel = player:FindFirstChild("Selected")
+            if sel and typeof(sel.Value) == "boolean" and sel.Value == true then
+                if allowWhitelisted then
+                    table.insert(res, player)
+                else
+                    if not isWhitelisted(player) then table.insert(res, player) end
+                end
+            end
+        end
+    end
+    return res
+end
+
+-- Separate BH lists helper
+local function getBHsBySource(source)
+    local out = {}
+    for _, bh in ipairs(extraBlackHoles) do
+        if bh.source == source then table.insert(out, bh) end
+    end
+    return out
+end
+
+local function getLeastLoadedBlackHole()
+    if #extraBlackHoles == 0 then return nil end
+    table.sort(extraBlackHoles, function(a,b) return (#a.AssignedParts) < (#b.AssignedParts) end)
+    return extraBlackHoles[1]
+end
+
+-- Helper to compute a better predicted position using velocity + accel estimate
+local function predictTargetPosition(pl, pos, vel, now)
+    -- track last velocity & time
+    local lastV = playerLastVel[pl]
+    local lastT = playerLastVelTime[pl]
+    local accel = Vector3.new(0,0,0)
+    if lastV and lastT and now and now > lastT then
+        accel = (vel - lastV) / (now - lastT)
+    end
+    playerLastVel[pl] = vel
+    playerLastVelTime[pl] = now
+
+    -- lead factor grows with speed but bounded
+    local speed = vel.Magnitude
+    local leadFactor = clamp(0.25 + (speed * 0.06), 0.25, 1.8)
+
+    -- simple kinematic lead: pos + v*t + 0.5*a*t^2
+    local tlead = leadFactor
+    local predicted = pos + vel * tlead + 0.5 * accel * (tlead * tlead)
+    return predicted, leadFactor, accel
+end
+
+-- ForcePart: assigned to least loaded BH or primary Attachment1; never assign to player's character nor local
+-- ALSO: make the part MASSLESS if it qualifies (unanchored & not player)
 local function ForcePart(v)
     if not v or not v:IsA("BasePart") then return end
-    -- safety checks: skip ANY player's character parts (local or remote)
     if isPartPlayerCharacter(v) then return end
-    -- also skip anything parented to local player's character explicitly
     if localPlayer.Character and v:IsDescendantOf(localPlayer.Character) then return end
 
     if v:IsA("BasePart")
@@ -187,29 +276,44 @@ local function ForcePart(v)
         if processedParts[v] then return end
         processedParts[v] = true
 
-        stripBodyForces(v)
+        -- store original Massless state if we haven't already
+        if initiallyMasslessParts[v] == nil then
+            pcall(function() initiallyMasslessParts[v] = v.Massless end)
+        end
 
-        -- ensure picked up parts have collisions off (unless deactivated later)
+        -- make massless (user requested). safe pcall in case property isn't available on some parts
+        pcall(function() v.Massless = true end)
+
+        stripBodyForces(v)
         v.CanCollide = false
 
-        -- torque + alignposition
+        -- CREATE TORQUE with MASSLESS adaptation
+        local torqueVal = FLING_TORQUE
+        if pcall(function() return v.Massless end) and v.Massless == true then
+            torqueVal = torqueVal * MASSLESS_TORQUE_SCALE
+        end
         local Torque = Instance.new("Torque", v)
-        Torque.Torque = Vector3.new(1e6, 1e6, 1e6)
+        Torque.Torque = torqueVal
+
+        -- AlignPosition with MASSLESS adaptation
         local AlignPosition = Instance.new("AlignPosition", v)
         local Attachment2 = Instance.new("Attachment", v)
-        -- place attachment at the part's world center to avoid grabbing edges (mesh offsets)
-        pcall(function()
-            Attachment2.WorldCFrame = v.CFrame
-        end)
+        pcall(function() Attachment2.WorldCFrame = v.CFrame end)
         Torque.Attachment0 = Attachment2
 
-        -- make align fast & snappy for rapid switching
-        AlignPosition.MaxForce = 1e9
+        -- adapt pull values if Massless
+        local maxF = PULL_MAX_FORCE
+        local resp  = PULL_RESPONSIVENESS
+        if pcall(function() return v.Massless end) and v.Massless == true then
+            maxF = maxF * MASSLESS_PULL_SCALE
+            resp  = resp * MASSLESS_RESP_SCALE
+        end
+
+        AlignPosition.MaxForce = maxF
         AlignPosition.MaxVelocity = math.huge
-        AlignPosition.Responsiveness = alignResponsiveness
+        AlignPosition.Responsiveness = resp
         AlignPosition.Attachment0 = Attachment2
 
-        -- assign immediate target: least loaded BH if exists else primary Attachment1
         local bh = getLeastLoadedBlackHole()
         if bh and bh.Attachment and bh._active then
             AlignPosition.Attachment1 = bh.Attachment
@@ -225,25 +329,34 @@ local function clearProcessedParts()
         if part and part.Parent then
             stripBodyForces(part)
             part.CanCollide = true
-            if not initiallyAnchoredParts[part] then
+
+            -- restore original anchored state if we recorded it
+            if initiallyAnchoredParts[part] == false then
                 part.Anchored = false
-            else
+            elseif initiallyAnchoredParts[part] == true then
                 part.Anchored = true
+            end
+
+            -- restore original Massless if we recorded it
+            if initiallyMasslessParts[part] ~= nil then
+                local original = initiallyMasslessParts[part]
+                pcall(function() part.Massless = original end)
+            else
+                pcall(function() part.Massless = false end)
             end
         end
     end
     processedParts = {}
     initiallyAnchoredParts = {}
+    initiallyMasslessParts = {}
     anchoredOnce = false
 end
 
--- Unfreeze cooldown changed to 1 second
 local function anchorAndDelayedUnanchorParts()
     unanchorTimerRunning = true
 
     local candidateParts = {}
     for _, v in ipairs(Workspace:GetDescendants()) do
-        -- IMPORTANT: exclude ANY player's character parts here too
         if v:IsA("BasePart")
             and not v.Anchored
             and v.Name ~= "Handle"
@@ -260,32 +373,39 @@ local function anchorAndDelayedUnanchorParts()
     initiallyAnchoredParts = {}
     for _, part in ipairs(candidateParts) do
         initiallyAnchoredParts[part] = false
+        -- store original Massless and set true
+        if initiallyMasslessParts[part] == nil then
+            pcall(function() initiallyMasslessParts[part] = part.Massless end)
+        end
+        pcall(function() part.Massless = true end)
+
         part.Anchored = true
         part.CanCollide = false
     end
 
-    -- Enable collisions for NPC characters (not players)
     for _, npcCandidate in ipairs(Workspace:GetChildren()) do
         if isNPC(npcCandidate) then
             for _, p in ipairs(npcCandidate:GetDescendants()) do
-                if p:IsA("BasePart") then
-                    p.CanCollide = true
-                end
+                if p:IsA("BasePart") then p.CanCollide = true end
             end
         end
     end
 
-    -- NOTE: do NOT change local player's collisions or noclip.
-
     local startTime = tick()
-    while blackHoleActive and tick() - startTime < 1 do
+    while (targetAllActive or targetSelectedActive) and tick() - startTime < 1 do
         wait(0.05)
     end
 
-    -- After cooldown unanchor candidate parts and apply ForcePart
     for _, part in ipairs(candidateParts) do
         if part and part.Parent and initiallyAnchoredParts[part] == false then
             part.Anchored = false
+            -- ensure it's massless when unanchored and qualifying
+            pcall(function()
+                if not isPartPlayerCharacter(part) and not (localPlayer.Character and part:IsDescendantOf(localPlayer.Character)) then
+                    initiallyMasslessParts[part] = initiallyMasslessParts[part] or part.Massless
+                    part.Massless = true
+                end
+            end)
             ForcePart(part)
         end
     end
@@ -295,27 +415,30 @@ local function anchorAndDelayedUnanchorParts()
 end
 
 local descendantAddedConn
-
 local function processWorkspaceParts()
     if descendantAddedConn then
         descendantAddedConn:Disconnect()
         descendantAddedConn = nil
     end
 
-    if blackHoleActive then
+    if (targetAllActive or targetSelectedActive) then
         if not unanchorTimerRunning and not anchoredOnce then
             unanchorCoroutine = coroutine.create(anchorAndDelayedUnanchorParts)
             coroutine.resume(unanchorCoroutine)
         end
 
         descendantAddedConn = Workspace.DescendantAdded:Connect(function(v)
-            if blackHoleActive then
-                -- ensure we don't attach to player character parts that spawn
+            if (targetAllActive or targetSelectedActive) then
                 if v:IsA("BasePart")
                     and not v.Anchored
                     and not processedParts[v]
                     and not isPartPlayerCharacter(v)
                     and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character)) then
+                    -- store original Massless and make massless
+                    if initiallyMasslessParts[v] == nil then
+                        pcall(function() initiallyMasslessParts[v] = v.Massless end)
+                    end
+                    pcall(function() v.Massless = true end)
                     ForcePart(v)
                 end
             end
@@ -329,50 +452,39 @@ local function getRandomPlayer()
     return players[math.random(1, #players)]
 end
 
-local function getSelectedPlayers()
-    local res = {}
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= localPlayer and player:FindFirstChild("Selected") and player.Selected.Value then
-            table.insert(res, player)
-        end
-    end
-    return res
-end
-
--- Helper: sets a BH active/inactive (deactivate means stop effects but keep object)
+-- set BH active/inactive
 local function setBlackHoleActiveState(bh, active)
     if not bh then return end
     if bh._active == active then return end
     bh._active = active
     if not active then
-        -- when deactivated: re-enable collisions on assigned parts and clear their attachments gently
         for _, p in ipairs(bh.AssignedParts) do
             if p and p.Parent then
                 p.CanCollide = true
                 local ap = p:FindFirstChildOfClass("AlignPosition")
                 if ap then
                     ap.Attachment1 = Attachment1
+                    pcall(function() ap.MaxForce = PULL_MAX_FORCE * (pcall(function() return p.Massless end) and p.Massless and MASSLESS_PULL_SCALE or 1) end)
+                    pcall(function() ap.Responsiveness = PULL_RESPONSIVENESS * (pcall(function() return p.Massless end) and p.Massless and MASSLESS_RESP_SCALE or 1) end)
                 end
             end
         end
     else
-        -- when re-activated: ensure assigned parts are set back to this BH's attachment
         for _, p in ipairs(bh.AssignedParts) do
             if p and p.Parent then
                 local ap = p:FindFirstChildOfClass("AlignPosition")
-                if ap then
-                    ap.Attachment1 = bh.Attachment
-                    p.CanCollide = false
-                end
+                if ap then ap.Attachment1 = bh.Attachment; p.CanCollide = false end
             end
         end
     end
 end
 
--- Helper: create an extra black hole (part + attachment) and start its loop
-local function createExtraBlackHole(initialTarget)
-    -- ensure initialTarget is never the local player
+-- create extra BH helper
+local function createExtraBlackHole(initialTarget, source)
     if initialTarget == localPlayer then initialTarget = nil end
+    if initialTarget and isWhitelisted(initialTarget) and source ~= "CMD_ALLOW_WHITELISTED" then
+        initialTarget = nil
+    end
 
     local folder = Workspace:FindFirstChild("ÆS_BlackHole_Folder") or Instance.new("Folder", Workspace)
     folder.Name = "ÆS_BlackHole_Folder"
@@ -392,10 +504,12 @@ local function createExtraBlackHole(initialTarget)
         TargetPlayer = initialTarget,
         LastTarget = nil,
         _running = true,
-        _active = true -- active by default
+        _active = true,
+        source = source or "CMD",
+        rotating = false, -- set true for rotating leftovers
+        smoothedCF = part.CFrame
     }
 
-    -- small helper to check if a player is "disabled" by design (BoolValue named "Disabled")
     local function isPlayerDisabled(pl)
         if not pl then return false end
         if pl:FindFirstChild("Disabled") and typeof(pl.Disabled.Value) == "boolean" then
@@ -404,87 +518,124 @@ local function createExtraBlackHole(initialTarget)
         return false
     end
 
-    -- spawn loop: update position to target's HRP if exists
+    -- BH behavior thread:
     bh._thread = spawn(function()
         local t = 0
         while bh._running do
             local dt = RunService.Heartbeat:Wait()
             t = t + dt
 
-            if bh.TargetPlayer and bh.TargetPlayer ~= localPlayer then
-                -- If player flagged disabled, deactivate BH (but keep it around)
+            if bh.TargetPlayer and bh.TargetPlayer ~= localPlayer and not isWhitelisted(bh.TargetPlayer) and isPlayerAlive(bh.TargetPlayer) then
                 if isPlayerDisabled(bh.TargetPlayer) then
                     setBlackHoleActiveState(bh, false)
                 else
                     setBlackHoleActiveState(bh, true)
+
                     local char = bh.TargetPlayer.Character
                     if char and char:FindFirstChild("HumanoidRootPart") then
                         local hrp = char.HumanoidRootPart
-
-                        -- SKID logic: when enabled, perform a fast circular skid whose radius depends on HRP speed
+                        local pos = hrp.Position
                         local vel = hrp.Velocity or Vector3.new(0,0,0)
+                        local now = tick()
+
+                        -- better prediction using velocity + accel estimate
+                        local predictedPos, leadFactor, accel = predictTargetPosition(bh.TargetPlayer, pos, vel, now)
                         local speed = vel.Magnitude
 
-                        -- base amplitude scales with speed
-                        local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
+                        -- AMPLITUDE & FREQUENCY scaling
+                        local baseAmp = 2.0
+                        local ampFromSpeed = clamp(speed * 0.45, 0, 140) -- slightly larger allowed amplitude
+                        local amplitude = clamp(baseAmp + ampFromSpeed, 0.5, 600) -- allow bigger radius for very fast players
 
-                        if SKID_ENABLED then
-                            -- determine orientation phase offset based on movement direction relative to HRP forward
-                            local moveDir = (speed > 0.1) and vel.Unit or hrp.CFrame.LookVector
-                            local dotF = moveDir:Dot(hrp.CFrame.LookVector)
-                            local dotR = moveDir:Dot(hrp.CFrame.RightVector)
-                            local baseAngle = math.atan2(dotR, dotF) -- radians
+                        local baseFreq = 6.0
+                        local freq = baseFreq + (speed * 1.8) -- slightly more aggressive freq scaling
+                        if freq < 6 then freq = 6 end
 
-                            local phase = t * (2 * math.pi * SKID_FREQ)
-                            -- circular offset in HRP local space
-                            local x = math.cos(phase + baseAngle) * amplitude
-                            local z = math.sin(phase + baseAngle) * amplitude
-                            local y = math.sin(phase * 0.7) * (amplitude * 0.25)
+                        -- spherical oscillation (360°) with multi-phase sinusoids
+                        local phase = t * (2 * math.pi * freq)
+                        local sin1 = math.sin(phase)
+                        local sin2 = math.sin(phase * 1.31)
+                        local sin3 = math.cos(phase * 0.77)
 
-                            local targetCFrame = hrp.CFrame * CFrame.new(hrp.CFrame.RightVector * x + hrp.CFrame.LookVector * z + hrp.CFrame.UpVector * y)
+                        local right = hrp.CFrame.RightVector
+                        local up = hrp.CFrame.UpVector
+                        local forward = hrp.CFrame.LookVector
 
-                            if att then
-                                local success, cur = pcall(function() return att.WorldCFrame end)
-                                local curCF = success and cur or att.WorldCFrame or part.CFrame
-                                att.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
-                            end
+                        local oscillation = forward * (sin1 * amplitude)
+                                         + right   * (sin2 * amplitude * 0.62)
+                                         + up      * (sin3 * amplitude * 0.78)
 
-                        else
-                            -- default (previous) oscillation behaviour
-                            local dir
-                            if speed > 0.5 then
-                                dir = vel.Unit
-                            else
-                                dir = (hrp.CFrame.LookVector + hrp.CFrame.UpVector * 0.3).Unit
-                            end
+                        -- rotating component for fuller 3D coverage
+                        local rotSpeed = (1.4 + speed * 0.09)
+                        local rotPhase = t * rotSpeed
+                        local rotX = math.cos(rotPhase)
+                        local rotY = math.sin(rotPhase)
+                        local rotatedOsc = CFrame.new(Vector3.new(0,0,0)) * CFrame.Angles(rotX*0.46, rotY*0.62, rotX*0.24)
+                        local rotatedOffset = (rotatedOsc * CFrame.new(oscillation)).p
 
-                            local phase = t * (2 * math.pi * (1 / (BH_SWAP_INTERVAL * 2)))
+                        local desiredPos = predictedPos + rotatedOffset
+                        local targetCF = CFrame.new(desiredPos, predictedPos + hrp.CFrame.LookVector)
 
-                            local primaryOffset = dir * (math.sin(phase) * amplitude)
-                            local verticalOffset = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
-                            local lateralOffset = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
+                        -- SKID SMOOTHING (speed-adaptive, more smooth at low speed, more responsive at high speed):
+                        local effectiveSmooth = SKID_SMOOTHNESS / (1 + speed * 0.65)
+                        if effectiveSmooth < 0.4 then effectiveSmooth = 0.4 end
 
-                            local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateralOffset + verticalOffset)
+                        -- exponential smoothing alpha
+                        local skidAlpha = 1 - math.exp(-effectiveSmooth * dt)
+                        if skidAlpha < 0.005 then skidAlpha = 0.005 end
+                        if skidAlpha > 0.99 then skidAlpha = 0.99 end
 
-                            if att then
-                                local success, cur = pcall(function() return att.WorldCFrame end)
-                                local curCF = success and cur or att.WorldCFrame or part.CFrame
-                                att.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
-                            end
+                        local success, cur = pcall(function() return bh.Attachment.WorldCFrame end)
+                        local curCF = success and cur or bh.smoothedCF or bh.Part.CFrame
+
+                        -- low-pass the world CFrame toward the targetCF using skidAlpha (smoother)
+                        bh.smoothedCF = curCF:Lerp(targetCF, skidAlpha)
+
+                        if att then
+                            att.WorldCFrame = bh.smoothedCF
                         end
                     end
                 end
             else
-                -- roam near local player when no target assigned (pure roam, does not modify local player)
-                if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local hrp = localPlayer.Character.HumanoidRootPart
-                    local phase = t * (SKID_FREQ * 0.45)
-                    local roamOffset = Vector3.new(math.sin(phase*1.11)*4, math.sin(phase*1.3)*1.6, math.cos(phase*0.9)*4)
+                -- No valid targets: do not roam to local player. deactivate & idle near Attachment1
+                local hasValidTargets = false
+                for _, pl in ipairs(Players:GetPlayers()) do
+                    if pl ~= localPlayer and pl.Parent and not isWhitelisted(pl) and isPlayerAlive(pl) then
+                        hasValidTargets = true
+                        break
+                    end
+                end
+
+                if not hasValidTargets then
+                    setBlackHoleActiveState(bh, false)
+                    if Attachment1 and Attachment1.Parent and att then
+                        local success, cur = pcall(function() return bh.Attachment.WorldCFrame end)
+                        local curCF = success and cur or bh.smoothedCF or bh.Part.CFrame
+                        local centerCF
+                        pcall(function() centerCF = Attachment1.WorldCFrame end)
+                        if centerCF then
+                            local idleOffset = Vector3.new(math.random(-2,2), math.random(-1,1), math.random(-2,2))
+                            local targetCF = centerCF * CFrame.new(idleOffset)
+
+                            local idleAlpha = 1 - math.exp(- (SKID_SMOOTHNESS * 1.6) * dt)
+                            if idleAlpha < 0.005 then idleAlpha = 0.005 end
+                            if idleAlpha > 0.99 then idleAlpha = 0.99 end
+
+                            bh.smoothedCF = curCF:Lerp(targetCF, idleAlpha)
+                            att.WorldCFrame = bh.smoothedCF
+                        end
+                    end
+                    wait(0.06)
+                else
+                    -- have players but BH unassigned: keep stable with smoothing
                     if att then
-                        local success, cur = pcall(function() return att.WorldCFrame end)
-                        local curCF = success and cur or att.WorldCFrame or part.CFrame
-                        local targetCF = hrp.CFrame * CFrame.new(roamOffset + Vector3.new(math.random(-2,2), math.random(-1,1), math.random(-2,2)))
-                        att.WorldCFrame = smoothLerpCFrame(curCF, targetCF, dt)
+                        local success, cur = pcall(function() return bh.Attachment.WorldCFrame end)
+                        local curCF = success and cur or bh.smoothedCF or bh.Part.CFrame
+                        local idleAlpha = 1 - math.exp(- (SKID_SMOOTHNESS * 0.5) * dt)
+                        if idleAlpha < 0.005 then idleAlpha = 0.005 end
+                        if idleAlpha > 0.85 then idleAlpha = 0.85 end
+                        bh.smoothedCF = curCF:Lerp(curCF, idleAlpha)
+                        att.WorldCFrame = bh.smoothedCF
                     end
                 end
             end
@@ -502,128 +653,241 @@ local function destroyExtraBlackHole(bh)
     for _, p in ipairs(bh.AssignedParts) do
         if p and p.Parent then
             local ap = p:FindFirstChildOfClass("AlignPosition")
-            if ap then
-                ap.Attachment1 = Attachment1
-            end
+            if ap then ap.Attachment1 = Attachment1 end
             p.CanCollide = false
+            -- restore Massless for assigned parts if we recorded it
+            if initiallyMasslessParts[p] ~= nil then
+                pcall(function() p.Massless = initiallyMasslessParts[p] end)
+            else
+                pcall(function() p.Massless = false end)
+            end
         end
     end
 end
 
--- Distribute BHs across players (round-robin), never assigning to local player. If no players, leave BHs roaming.
-local function distributeBHsOverPlayers()
-    if #extraBlackHoles == 0 then return end
+local function deleteBHsBySource(source)
+    for i = #extraBlackHoles, 1, -1 do
+        local bh = extraBlackHoles[i]
+        if bh and bh.source == source then
+            destroyExtraBlackHole(bh)
+            table.remove(extraBlackHoles, i)
+        end
+    end
+end
+
+local function deleteAllExtraBlackHoles()
+    for _, bh in ipairs(extraBlackHoles) do destroyExtraBlackHole(bh) end
+    extraBlackHoles = {}
+    if not Attachment1 or not Attachment1.Parent then Attachment1 = setupPlayer() end
+    stopRebalancer()
+end
+
+-- ---------- Even distribution + rotating leftovers ----------
+local rotatingCoroutine = nil
+local rotatingActive = false
+
+local function stopRotatingCoroutine()
+    rotatingActive = false
+    rotatingCoroutine = nil
+end
+
+local function distributeBHListEvenly(bhList, players)
+    -- reset rotating flags for BHs in bhList
+    for _, bh in ipairs(bhList) do
+        bh.rotating = false
+        bh.TargetPlayer = nil
+        bh.AssignedParts = {}
+    end
+
+    if #players == 0 then
+        -- When there are no players, deactivate BHs and do NOT roam to local player.
+        for _, bh in ipairs(bhList) do
+            bh.TargetPlayer = nil
+            setBlackHoleActiveState(bh, false)
+        end
+        stopRotatingCoroutine()
+        return
+    end
+
+    local totalBH = #bhList
+    local playerCount = #players
+    local base = math.floor(totalBH / playerCount)
+    local remainder = totalBH - (base * playerCount)
+
+    -- assign base BHs to each player
+    local idx = 1
+    for pi = 1, playerCount do
+        local pl = players[pi]
+        for k = 1, base do
+            if bhList[idx] then
+                bhList[idx].TargetPlayer = pl
+                bhList[idx].rotating = false
+                setBlackHoleActiveState(bhList[idx], true)
+                if pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
+                    pcall(function() bhList[idx].Attachment.WorldCFrame = pl.Character.HumanoidRootPart.CFrame end)
+                end
+                idx = idx + 1
+            end
+        end
+    end
+
+    -- remainder: assign these BHs as rotating extras
+    local rotatingBHs = {}
+    for r = 1, remainder do
+        if bhList[idx] then
+            bhList[idx].rotating = true
+            bhList[idx].TargetPlayer = nil -- will be assigned by rotating coroutine
+            setBlackHoleActiveState(bhList[idx], true)
+            table.insert(rotatingBHs, bhList[idx])
+            idx = idx + 1
+        end
+    end
+
+    stopRotatingCoroutine()
+    if #rotatingBHs == 0 then return end
+
+    rotatingActive = true
+    rotatingCoroutine = spawn(function()
+        local posIndex = 1
+        while rotatingActive do
+            -- refresh player list each cycle so we adapt to joins/leaves/whitelists and alive-checks
+            local curPlayers = {}
+            for _, pl in ipairs(players) do
+                if pl and pl.Parent and isPlayerAlive(pl) and not isWhitelisted(pl) and pl ~= localPlayer then
+                    table.insert(curPlayers, pl)
+                end
+            end
+            if #curPlayers == 0 then
+                for _, rb in ipairs(rotatingBHs) do
+                    rb.TargetPlayer = nil
+                    setBlackHoleActiveState(rb, false) -- ensure it does not roam to local
+                end
+                break
+            end
+
+            for _, rb in ipairs(rotatingBHs) do
+                local pick = curPlayers[((posIndex - 1) % #curPlayers) + 1]
+                if pick and not isWhitelisted(pick) and pick ~= localPlayer and isPlayerAlive(pick) then
+                    rb.TargetPlayer = pick
+                    setBlackHoleActiveState(rb, true)
+                    if pick.Character and pick.Character:FindFirstChild("HumanoidRootPart") and rb.Attachment then
+                        pcall(function() rb.Attachment.WorldCFrame = pick.Character.HumanoidRootPart.CFrame end)
+                    end
+                else
+                    rb.TargetPlayer = nil
+                    setBlackHoleActiveState(rb, false)
+                end
+                posIndex = posIndex + 1
+            end
+
+            wait(ROTATE_INTERVAL)
+        end
+    end)
+end
+
+-- wrapper: distribute PAA BHs (PAA BHs should be distributed across valid players depending on PAA mode and LifeCycle)
+local function assignTargetsForPAA()
+    local paaBHs = getBHsBySource("PAA")
+    if #paaBHs == 0 then return end
 
     local players = {}
-    if PAA_isUsingSelected then
-        players = getSelectedPlayers()
+    if LifeCycleMode and cycleActive then
+        -- use LifeCycle snapshot players (explicitly excludes whitelisted during snapshot)
+        for _, pl in ipairs(cyclePlayers) do
+            if pl and pl.Parent and not cycleDead[pl] and isPlayerAlive(pl) then
+                table.insert(players, pl)
+            end
+        end
+    else
+        if PAA_isUsingSelected then
+            players = getSelectedPlayers(true)
+        else
+            players = getAllNonLocalPlayers()
+        end
+    end
+
+    shuffle(paaBHs)
+    distributeBHListEvenly(paaBHs, players)
+end
+
+-- distribute CMD BHs across players (honoring LifeCycle if active)
+local function assignTargetsForCMD()
+    local cmdBHs = getBHsBySource("CMD")
+    if #cmdBHs == 0 then return end
+
+    local players = {}
+    if LifeCycleMode and cycleActive then
+        for _, pl in ipairs(cyclePlayers) do
+            if pl and pl.Parent and not cycleDead[pl] and isPlayerAlive(pl) then
+                table.insert(players, pl)
+            end
+        end
     else
         players = getAllNonLocalPlayers()
     end
 
-    if #players == 0 then
-        -- no players to attach to: leave BHs targetless (they will roam)
-        for _, bh in ipairs(extraBlackHoles) do
-            bh.TargetPlayer = nil
-            bh.AssignedParts = {}
-            setBlackHoleActiveState(bh, true)
-        end
-        return
-    end
-
-    -- Round-robin distribute BHs over players
-    for i, bh in ipairs(extraBlackHoles) do
-        local pl = players[((i-1) % #players) + 1]
-        bh.TargetPlayer = pl
-        bh.AssignedParts = {}
-        bh.LastTarget = nil
-        -- respect disabled state
-        if pl and pl:FindFirstChild("Disabled") and pl.Disabled.Value == true then
-            setBlackHoleActiveState(bh, false)
-        else
-            setBlackHoleActiveState(bh, true)
-        end
-        if pl and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
-            bh.Attachment.WorldCFrame = pl.Character.HumanoidRootPart.CFrame
-        end
-    end
+    shuffle(cmdBHs)
+    distributeBHListEvenly(cmdBHs, players)
 end
 
--- Assign unique targets to BHs for older PAA semantics is replaced by distributeBHsOverPlayers to ensure no BH goes to local player
-local function assignUniqueTargetsToBHs()
-    distributeBHsOverPlayers()
-end
-
--- Create N extra black holes, attempt to assign different initial targets
-local function createNBlackHoles(n)
+-- create N command BHs (CMD) - stacks with existing PAA BHs
+local function createNCommandBlackHoles(n)
     if n <= 0 then return end
-
-    -- Create BHs
-    for i = 1, n do
-        createExtraBlackHole(nil)
-    end
-
-    -- Always distribute BHs over players (round-robin). This guarantees BHs are not assigned to local player
-    distributeBHsOverPlayers()
-
-    if #extraBlackHoles > 0 then
-        startRebalancer()
-    end
+    for i = 1, n do createExtraBlackHole(nil, "CMD") end
+    assignTargetsForCMD()
+    if PAAEnabled then assignTargetsForPAA() end
+    if #extraBlackHoles > 0 then startRebalancer() end
 end
 
--- Delete extra black holes and reset back to single Attachment1
-local function deleteExtraBlackHoles()
-    for _, bh in ipairs(extraBlackHoles) do
-        destroyExtraBlackHole(bh)
-    end
-    extraBlackHoles = {}
-    if not Attachment1 or not Attachment1.Parent then
-        Attachment1 = setupPlayer()
-    end
-    stopRebalancer()
+local function deleteCommandBlackHoles()
+    deleteBHsBySource("CMD")
+    stopRotatingCoroutine()
 end
 
--- PAA management: create one black hole per player (or selected players) -> replaced with round-robin distribution
+-- PAA refresh: remove only PAA BHs and re-create them; do NOT touch CMD BHs (stack)
 local function refreshPAA()
-    deleteExtraBlackHoles()
-
+    deleteBHsBySource("PAA")
     local targets = {}
-    if PAA_isUsingSelected then
-        targets = getSelectedPlayers()
+    if LifeCycleMode and cycleActive then
+        for _, pl in ipairs(cyclePlayers) do
+            if pl and pl.Parent and not cycleDead[pl] and isPlayerAlive(pl) then
+                table.insert(targets, pl)
+            end
+        end
     else
-        targets = getAllNonLocalPlayers()
+        if PAA_isUsingSelected then
+            targets = getSelectedPlayers(true) -- include whitelisted selected here
+        else
+            targets = getAllNonLocalPlayers()
+        end
     end
 
     for _, tgt in ipairs(targets) do
-        local bh = createExtraBlackHole(tgt)
-        bh.TargetPlayer = tgt
-        bh.LastTarget = nil
-        -- respect disabled at creation
-        if tgt:FindFirstChild("Disabled") and tgt.Disabled.Value == true then
-            setBlackHoleActiveState(bh, false)
-        else
+        if tgt and tgt ~= localPlayer and not isWhitelisted(tgt) then
+            local bh = createExtraBlackHole(tgt, "PAA")
+            bh.TargetPlayer = tgt
+            bh.LastTarget = nil
             setBlackHoleActiveState(bh, true)
-        end
-        if tgt.Character and tgt.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
-            bh.Attachment.WorldCFrame = tgt.Character.HumanoidRootPart.CFrame
+            if tgt.Character and tgt.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
+                pcall(function() bh.Attachment.WorldCFrame = tgt.Character.HumanoidRootPart.CFrame end)
+            end
         end
     end
 
-    -- distribute any remaining BHs (if commands added more) across players
-    distributeBHsOverPlayers()
-
-    if #extraBlackHoles > 0 then
-        startRebalancer()
-    end
+    assignTargetsForPAA()
+    if #extraBlackHoles > 0 then startRebalancer() end
 end
 
--- Player join/leave handlers for PAA live updates
+-- Player join/leave handlers for PAA live updates (only affects PAA BHs)
 local function onPlayerAddedForPAA(pl)
-    if PAAEnabled and not PAA_isUsingSelected and pl ~= localPlayer then
-        local bh = createExtraBlackHole(pl)
+    if PAAEnabled and not PAA_isUsingSelected and pl ~= localPlayer and not isWhitelisted(pl) then
+        if LifeCycleMode and cycleActive then
+            return
+        end
+        local bh = createExtraBlackHole(pl, "PAA")
         bh.TargetPlayer = pl
         bh.LastTarget = nil
-        distributeBHsOverPlayers()
+        assignTargetsForPAA()
     end
 end
 
@@ -631,200 +895,188 @@ local function onPlayerRemovingForPAA(pl)
     if PAAEnabled then
         for i = #extraBlackHoles, 1, -1 do
             local bh = extraBlackHoles[i]
-            if bh and bh.TargetPlayer == pl then
+            if bh and bh.source == "PAA" and bh.TargetPlayer == pl then
                 destroyExtraBlackHole(bh)
                 table.remove(extraBlackHoles, i)
                 break
             end
         end
-        distributeBHsOverPlayers()
+        assignTargetsForPAA()
     end
 end
 
--- Toggle main black hole (legacy single Attachment1 behavior)
-local function toggleBlackHole()
-    blackHoleActive = toggleState
-    if blackHoleActive then
-        -- Keep Attachment1 in the global folder (do NOT parent to local player)
-        if not Attachment1 or not Attachment1.Parent then
-            Attachment1 = setupPlayer()
+-- ---- Life Cycle Mode handling ----
+local function clearCycleConnections()
+    for _, conn in ipairs(cycleConns) do
+        if conn and conn.Disconnect then
+            pcall(function() conn:Disconnect() end)
         end
+    end
+    cycleConns = {}
+end
 
-        anchoredOnce = false
-        processWorkspaceParts()
+local function stopCycle()
+    cycleActive = false
+    cyclePlayers = {}
+    cycleDead = {}
+    clearCycleConnections()
+    cycleRestartPending = false
+end
+
+local function checkCycleCompletionAndMaybeRestart()
+    if not cycleActive then return end
+    if #cyclePlayers == 0 then
+        cycleRestartPending = true
+        return
+    end
+    for _, pl in ipairs(cyclePlayers) do
+        if not cycleDead[pl] then
+            return
+        end
+    end
+    cycleRestartPending = true
+end
+
+local function scheduleCycleRestart()
+    if cycleRestartPending then
+        cycleRestartPending = false
         spawn(function()
-            local phaseT = 0
-            local lastHeartbeat = tick()
-            while blackHoleActive do
-                local now = tick()
-                local dt = now - lastHeartbeat
-                lastHeartbeat = now
-                phaseT = phaseT + dt
-
-                targetPlayer = getRandomPlayer()
-                if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local hrp = targetPlayer.Character.HumanoidRootPart
-                    local vel = hrp.Velocity or Vector3.new(0,0,0)
-                    local speed = vel.Magnitude
-                    local dir = (speed > 0.5) and vel.Unit or hrp.CFrame.LookVector
-                    local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
-
-                    if SKID_ENABLED then
-                        local moveDir = (speed > 0.1) and vel.Unit or hrp.CFrame.LookVector
-                        local dotF = moveDir:Dot(hrp.CFrame.LookVector)
-                        local dotR = moveDir:Dot(hrp.CFrame.RightVector)
-                        local baseAngle = math.atan2(dotR, dotF)
-
-                        local phase = phaseT * (2 * math.pi * SKID_FREQ)
-                        local x = math.cos(phase + baseAngle) * amplitude
-                        local z = math.sin(phase + baseAngle) * amplitude
-                        local y = math.sin(phase * 0.7) * (amplitude * 0.25)
-
-                        local targetCFrame = hrp.CFrame * CFrame.new(hrp.CFrame.RightVector * x + hrp.CFrame.LookVector * z + hrp.CFrame.UpVector * y)
-
-                        if Attachment1 then
-                            local success, cur = pcall(function() return Attachment1.WorldCFrame end)
-                            local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
-                            Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
-                        end
-
-                    else
-                        local phase = phaseT * (2 * math.pi * (1 / (BH_SWAP_INTERVAL * 2)))
-                        local primaryOffset = dir * (math.sin(phase) * amplitude)
-                        local lateral = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
-                        local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
-                        local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
-
-                        if Attachment1 then
-                            local success, cur = pcall(function() return Attachment1.WorldCFrame end)
-                            local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
-                            Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+            wait(0.12)
+            local newSnapshot = {}
+            if targetSelectedActive then
+                newSnapshot = getSelectedPlayers(false)
+            else
+                newSnapshot = getAllNonLocalPlayers()
+            end
+            cyclePlayers = {}
+            cycleDead = {}
+            for _, pl in ipairs(newSnapshot) do
+                if pl and pl.Parent and pl ~= localPlayer then
+                    cyclePlayers[#cyclePlayers+1] = pl
+                    cycleDead[pl] = false
+                end
+            end
+            clearCycleConnections()
+            for _, pl in ipairs(cyclePlayers) do
+                if pl and pl.Parent then
+                    local function onHumanoidAdded(char)
+                        local hum = char:FindFirstChildOfClass("Humanoid")
+                        if hum then
+                            local dconn = hum.Died:Connect(function()
+                                cycleDead[pl] = true
+                                assignTargetsForPAA()
+                                assignTargetsForCMD()
+                                checkCycleCompletionAndMaybeRestart()
+                            end)
+                            table.insert(cycleConns, dconn)
                         end
                     end
-                end
-                wait(switchDelay)
-            end
-        end)
-    else
-        blackHoleActive = false
-        -- do not change local player's collisions/noclip
-        if unanchorTimerRunning and unanchorCoroutine then
-            unanchorTimerRunning = false
-            for part, anchored in pairs(initiallyAnchoredParts) do
-                if part and part.Parent and anchored == false then
-                    part.Anchored = false
-                    ForcePart(part)
-                end
-            end
-        end
-        clearProcessedParts()
-
-        -- If PAA is enabled and we toggled off the primary targeting mode, destroy existing extra BHs (so enabling will re-create correctly)
-        if PAAEnabled then
-            deleteExtraBlackHoles()
-        end
-    end
-end
-
--- Toggle target selected behavior (legacy)
-local function toggleTargetSelected()
-    blackHoleActive = toggleState
-    if blackHoleActive then
-        if not Attachment1 or not Attachment1.Parent then
-            Attachment1 = setupPlayer()
-        end
-
-        anchoredOnce = false
-        processWorkspaceParts()
-        spawn(function()
-            local phaseT = 0
-            local lastHeartbeat = tick()
-            while blackHoleActive do
-                local now = tick()
-                local dt = now - lastHeartbeat
-                lastHeartbeat = now
-                phaseT = phaseT + dt
-
-                local selectedPlayers = getSelectedPlayers()
-                if #selectedPlayers > 0 then
-                    targetPlayer = selectedPlayers[math.random(1, #selectedPlayers)]
-                else
-                    targetPlayer = nil
-                end
-                if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local hrp = targetPlayer.Character.HumanoidRootPart
-                    local vel = hrp.Velocity or Vector3.new(0,0,0)
-                    local speed = vel.Magnitude
-                    local dir = (speed > 0.5) and vel.Unit or hrp.CFrame.LookVector
-                    local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
-
-                    if SKID_ENABLED then
-                        local moveDir = (speed > 0.1) and vel.Unit or hrp.CFrame.LookVector
-                        local dotF = moveDir:Dot(hrp.CFrame.LookVector)
-                        local dotR = moveDir:Dot(hrp.CFrame.RightVector)
-                        local baseAngle = math.atan2(dotR, dotF)
-
-                        local phase = phaseT * (2 * math.pi * SKID_FREQ)
-                        local x = math.cos(phase + baseAngle) * amplitude
-                        local z = math.sin(phase + baseAngle) * amplitude
-                        local y = math.sin(phase * 0.7) * (amplitude * 0.25)
-
-                        local targetCFrame = hrp.CFrame * CFrame.new(hrp.CFrame.RightVector * x + hrp.CFrame.LookVector * z + hrp.CFrame.UpVector * y)
-
-                        if Attachment1 then
-                            local success, cur = pcall(function() return Attachment1.WorldCFrame end)
-                            local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
-                            Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
-                        end
-
-                    else
-                        local phase = phaseT * (2 * math.pi * (1 / (BH_SWAP_INTERVAL * 2)))
-                        local primaryOffset = dir * (math.sin(phase) * amplitude)
-                        local lateral = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
-                        local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
-                        local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
-
-                        if Attachment1 then
-                            local success, cur = pcall(function() return Attachment1.WorldCFrame end)
-                            local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
-                            Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
-                        end
+                    if pl.Character then
+                        onHumanoidAdded(pl.Character)
                     end
+                    local cconn = pl.CharacterAdded:Connect(onHumanoidAdded)
+                    table.insert(cycleConns, cconn)
+                    local rconn = pl.AncestryChanged:Connect(function()
+                        if not pl.Parent then
+                            for i = #cyclePlayers, 1, -1 do
+                                if cyclePlayers[i] == pl then table.remove(cyclePlayers, i) end
+                            end
+                            cycleDead[pl] = true
+                            assignTargetsForPAA()
+                            assignTargetsForCMD()
+                            checkCycleCompletionAndMaybeRestart()
+                        end
+                    end)
+                    table.insert(cycleConns, rconn)
                 end
-                wait(switchDelay)
             end
+            assignTargetsForPAA()
+            assignTargetsForCMD()
         end)
+    end
+end
+
+local function startCycleSnapshot()
+    stopCycle()
+    cycleActive = true
+    cyclePlayers = {}
+    cycleDead = {}
+
+    -- Life Cycle snapshot: intentionally exclude whitelisted players
+    local snapshot = {}
+    if targetSelectedActive then
+        snapshot = getSelectedPlayers(false) -- exclude whitelisted from cycle
     else
-        blackHoleActive = false
-        if unanchorTimerRunning and unanchorCoroutine then
-            unanchorTimerRunning = false
-            for part, anchored in pairs(initiallyAnchoredParts) do
-                if part and part.Parent and anchored == false then
-                    part.Anchored = false
-                    ForcePart(part)
+        snapshot = getAllNonLocalPlayers()
+    end
+
+    for _, pl in ipairs(snapshot) do
+        if pl and pl.Parent and pl ~= localPlayer then
+            cyclePlayers[#cyclePlayers+1] = pl
+            cycleDead[pl] = false
+        end
+    end
+
+    clearCycleConnections()
+    for _, pl in ipairs(cyclePlayers) do
+        if pl and pl.Parent then
+            local function attachHumanoidWatcher(char)
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    local dconn = hum.Died:Connect(function()
+                        cycleDead[pl] = true
+                        assignTargetsForPAA()
+                        assignTargetsForCMD()
+                        checkCycleCompletionAndMaybeRestart()
+                        scheduleCycleRestart()
+                    end)
+                    table.insert(cycleConns, dconn)
                 end
             end
+            if pl.Character then attachHumanoidWatcher(pl.Character) end
+            local cconn = pl.CharacterAdded:Connect(attachHumanoidWatcher)
+            table.insert(cycleConns, cconn)
+            local rconn = pl.AncestryChanged:Connect(function()
+                if not pl.Parent then
+                    for i = #cyclePlayers, 1, -1 do
+                        if cyclePlayers[i] == pl then table.remove(cyclePlayers, i) end
+                    end
+                    cycleDead[pl] = true
+                    assignTargetsForPAA()
+                    assignTargetsForCMD()
+                    checkCycleCompletionAndMaybeRestart()
+                    scheduleCycleRestart()
+                end
+            end)
+            table.insert(cycleConns, rconn)
         end
-        clearProcessedParts()
+    end
 
-        if PAAEnabled then
-            deleteExtraBlackHoles()
-        end
+    assignTargetsForPAA()
+    assignTargetsForCMD()
+end
+
+-- Immediate cycle reset function (used by Reset Cycle button)
+local function resetCycleNow()
+    if not LifeCycleMode then return end
+    if not (targetAllActive or targetSelectedActive) then return end
+    startCycleSnapshot()
+end
+
+local function tryStartCycleIfNeeded()
+    if not LifeCycleMode then return end
+    if (targetAllActive or targetSelectedActive) and not cycleActive then
+        startCycleSnapshot()
     end
 end
 
--- Keep primary behavior consistent on respawn but do NOT reparent Attachment1 to local player
-local function onCharacterAdded(character)
-    if blackHoleActive then
-        -- do not attach Attachment1 to character; keep it in folder
-        processedParts = {}
-        processWorkspaceParts()
-    end
+local function endCycleMode()
+    stopCycle()
+    assignTargetsForPAA()
+    assignTargetsForCMD()
 end
 
-localPlayer.CharacterAdded:Connect(onCharacterAdded)
-
--- ---- Rebalancer: exact equal-count distribution of processed parts across extraBlackHoles ----
+-- ---- Rebalancer: distributes processed parts per-BH; still used for part-to-BH assignment
 function startRebalancer()
     if rebalancerRunning then return end
     rebalancerRunning = true
@@ -836,24 +1088,33 @@ function startRebalancer()
                 if p and p.Parent then
                     local ap = p:FindFirstChildOfClass("AlignPosition")
                     if ap then
+                        pcall(function()
+                            local isMass = (pcall(function() return p.Massless end) and p.Massless)
+                            ap.MaxForce = PULL_MAX_FORCE * (isMass and MASSLESS_PULL_SCALE or 1)
+                            ap.Responsiveness = PULL_RESPONSIVENESS * (isMass and MASSLESS_RESP_SCALE or 1)
+                        end)
                         table.insert(parts, p)
                     else
                         ForcePart(p)
                         local ap2 = p:FindFirstChildOfClass("AlignPosition")
-                        if ap2 then table.insert(parts, p) end
+                        if ap2 then
+                            pcall(function()
+                                local isMass = (pcall(function() return p.Massless end) and p.Massless)
+                                ap2.MaxForce = PULL_MAX_FORCE * (isMass and MASSLESS_PULL_SCALE or 1)
+                                ap2.Responsiveness = PULL_RESPONSIVENESS * (isMass and MASSLESS_RESP_SCALE or 1)
+                            end)
+                            table.insert(parts, p)
+                        end
                     end
                 end
             end
 
             if bhCount > 0 and #parts > 0 then
-                -- exact equal-count calculation
                 local total = #parts
                 local base = math.floor(total / bhCount)
-                local rem = total - (base * bhCount) -- remainder to distribute (0..bhCount-1)
+                local rem = total - (base * bhCount)
                 local counts = {}
-                for i = 1, bhCount do
-                    counts[i] = base + (i <= rem and 1 or 0)
-                end
+                for i = 1, bhCount do counts[i] = base + (i <= rem and 1 or 0) end
 
                 local partIndex = 1
                 for i = 1, bhCount do
@@ -864,7 +1125,6 @@ function startRebalancer()
                         if not p then break end
                         local ap = p:FindFirstChildOfClass("AlignPosition")
                         if ap then
-                            -- ensure the BH attachment is safe and BH active
                             if bh and bh.Attachment and bh._active then
                                 ap.Attachment1 = bh.Attachment
                                 p.CanCollide = false
@@ -878,18 +1138,17 @@ function startRebalancer()
                     end
                 end
             else
-                -- no extra BHs: ensure all parts point to Attachment1 (primary)
                 for _, p in ipairs(parts) do
                     local ap = p:FindFirstChildOfClass("AlignPosition")
-                    if ap then
-                        ap.Attachment1 = Attachment1
-                        p.CanCollide = false
-                    end
+                    if ap then ap.Attachment1 = Attachment1; p.CanCollide = false end
                 end
             end
 
-            if PAAEnabled then
-                distributeBHsOverPlayers()
+            if PAAEnabled then assignTargetsForPAA() end
+            assignTargetsForCMD()
+
+            if cycleRestartPending then
+                scheduleCycleRestart()
             end
 
             wait(rebalancerFreq)
@@ -897,36 +1156,28 @@ function startRebalancer()
     end)
 end
 
-function stopRebalancer()
-    rebalancerRunning = false
-end
+function stopRebalancer() rebalancerRunning = false end
 
--- ---- Command system (chat) and GUI toggles ----
-local enableCommands = true -- commands enabled by default
-
--- Chat command parser (client-side; only listens to local player's chat)
+-- Commands (chat)
+local enableCommands = true
 local function onLocalPlayerChatted(msg)
     if not enableCommands then return end
     if not msg then return end
     local raw = msg
     msg = msg:lower()
-    -- /e blackholes N
+
     local bhArg = string.match(msg, "^/e%s+blackholes%s+(%d+)")
     if bhArg then
         local n = tonumber(bhArg)
-        if n and n > 0 then
-            createNBlackHoles(n)
-        end
+        if n and n > 0 then createNCommandBlackHoles(n) end
         return
     end
 
-    -- /e dbh
     if string.match(msg, "^/e%s+dbh") then
-        deleteExtraBlackHoles()
+        deleteCommandBlackHoles()
         return
     end
 
-    -- /e paa -> toggle PAA on
     if string.match(msg, "^/e%s+paa") then
         PAAEnabled = true
         PAA_isUsingSelected = false
@@ -936,18 +1187,14 @@ local function onLocalPlayerChatted(msg)
         return
     end
 
-    -- /e unpaa -> disable PAA
     if string.match(msg, "^/e%s+unpaa") then
         PAAEnabled = false
-        for _, c in ipairs(paaConnections) do
-            if c and c.Disconnect then pcall(function() c:Disconnect() end) end
-        end
+        for _, c in ipairs(paaConnections) do pcall(function() c:Disconnect() end) end
         paaConnections = {}
-        deleteExtraBlackHoles()
+        deleteBHsBySource("PAA")
         return
     end
 
-    -- /e psel -> PAA using selected players
     if string.match(msg, "^/e%s+psel") then
         PAAEnabled = true
         PAA_isUsingSelected = true
@@ -958,65 +1205,175 @@ end
 
 localPlayer.Chatted:Connect(onLocalPlayerChatted)
 
--- ---- GUI (TurtleLib) ----
+-- Primary loop (handles both Target All and Target Selected)
+local function startPrimaryLoop()
+    if primaryLoopRunning then return end
+    primaryLoopRunning = true
+    if not Attachment1 or not Attachment1.Parent then Attachment1 = setupPlayer() end
+    anchoredOnce = false
+    processWorkspaceParts()
+
+    spawn(function()
+        local phaseT = 0
+        local lastHeartbeat = tick()
+        while targetAllActive or targetSelectedActive do
+            local now = tick()
+            local dt = now - lastHeartbeat
+            lastHeartbeat = now
+            phaseT = phaseT + dt
+
+            if targetSelectedActive then
+                local selectedPlayers = getSelectedPlayers(true)
+                if #selectedPlayers > 0 then
+                    targetPlayer = selectedPlayers[math.random(1, #selectedPlayers)]
+                else
+                    targetPlayer = nil
+                end
+            elseif targetAllActive then
+                targetPlayer = getRandomPlayer()
+            else
+                targetPlayer = nil
+            end
+
+            if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") and isPlayerAlive(targetPlayer) then
+                local hrp = targetPlayer.Character.HumanoidRootPart
+                local vel = hrp.Velocity or Vector3.new(0,0,0)
+                local speed = vel.Magnitude
+                local dir = (speed > 0.5) and vel.Unit or hrp.CFrame.LookVector
+                local amplitude = clamp(speed * BH_AMPLITUDE_FACTOR, BH_MIN_AMPLITUDE, BH_MAX_AMPLITUDE)
+                local phase = phaseT * (2 * math.pi * BH_OSC_FREQUENCY)
+                local primaryOffset = dir * (math.sin(phase) * amplitude)
+                local lateral = hrp.CFrame.RightVector * (math.sin(phase * 1.27) * amplitude * 0.35)
+                local vertical = hrp.CFrame.UpVector * (math.sin(phase * 1.0) * amplitude * 0.5)
+                local targetCFrame = hrp.CFrame * CFrame.new(primaryOffset + lateral + vertical)
+                if Attachment1 then
+                    local success, cur = pcall(function() return Attachment1.WorldCFrame end)
+                    local curCF = success and cur or Attachment1.WorldCFrame or hrp.CFrame
+                    Attachment1.WorldCFrame = smoothLerpCFrame(curCF, targetCFrame, dt)
+                end
+            end
+
+            wait(switchDelay)
+        end
+
+        primaryLoopRunning = false
+        if unanchorTimerRunning and unanchorCoroutine then
+            unanchorTimerRunning = false
+            for part, anchored in pairs(initiallyAnchoredParts) do
+                if part and part.Parent and anchored == false then
+                    part.Anchored = false
+                    ForcePart(part)
+                end
+            end
+        end
+        clearProcessedParts()
+
+        if PAAEnabled then deleteBHsBySource("PAA") end
+    end)
+end
+
+local function setTargetAll(value)
+    targetAllActive = value
+    if (targetAllActive or targetSelectedActive) then startPrimaryLoop() end
+
+    if LifeCycleMode then
+        if targetAllActive then
+            tryStartCycleIfNeeded()
+        else
+            stopCycle()
+        end
+    end
+
+    if PAAEnabled then
+        if targetAllActive then
+            PAA_isUsingSelected = false
+            refreshPAA()
+            if #paaConnections == 0 then
+                paaConnections[#paaConnections+1] = Players.PlayerAdded:Connect(onPlayerAddedForPAA)
+                paaConnections[#paaConnections+1] = Players.PlayerRemoving:Connect(onPlayerRemovingForPAA)
+            end
+        else
+            deleteBHsBySource("PAA")
+        end
+    end
+end
+
+local function setTargetSelected(value)
+    targetSelectedActive = value
+    if (targetAllActive or targetSelectedActive) then startPrimaryLoop() end
+
+    if LifeCycleMode then
+        if targetSelectedActive then
+            tryStartCycleIfNeeded()
+        else
+            stopCycle()
+        end
+    end
+
+    if PAAEnabled then
+        if targetSelectedActive then
+            PAA_isUsingSelected = true
+            refreshPAA()
+            if #paaConnections == 0 then
+                paaConnections[#paaConnections+1] = Players.PlayerAdded:Connect(onPlayerAddedForPAA)
+                paaConnections[#paaConnections+1] = Players.PlayerRemoving:Connect(onPlayerRemovingForPAA)
+            end
+        else
+            deleteBHsBySource("PAA")
+        end
+    end
+end
+
+local function onCharacterAdded(character)
+    if (targetAllActive or targetSelectedActive) then
+        processedParts = {}
+        processWorkspaceParts()
+    end
+end
+
+Players.LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+-- GUI (TurtleLib)
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/miroeramaa/TurtleLib/main/TurtleUiLib.lua"))()
-local window = library:Window("made by JLchris") 
+local window = library:Window("Fix it you panis negor🗣🔥")
 
-window:Toggle("Unanchored Target All", false, function(Value)
-    toggleState = Value
-    blackHoleActive = Value
-    toggleBlackHole()
+window:Toggle("Unanchored Target All", false, function(Value) setTargetAll(Value) end)
+window:Toggle("Target Selected Players", false, function(Value) setTargetSelected(Value) end)
 
-    if PAAEnabled then
-        if Value then
-            refreshPAA()
-        else
-            deleteExtraBlackHoles()
-        end
+-- Life Cycle Mode toggle
+window:Toggle("Life Cycle Mode", false, function(Value)
+    LifeCycleMode = Value
+    if LifeCycleMode then
+        tryStartCycleIfNeeded()
+    else
+        endCycleMode()
     end
 end)
 
-window:Toggle("Target Selected Players", false, function(Value)
-    toggleState = Value
-    blackHoleActive = Value
-    toggleTargetSelected()
-
-    if PAAEnabled then
-        if Value then
-            refreshPAA()
-        else
-            deleteExtraBlackHoles()
-        end
-    end
-end)
-
-window:Toggle("Skid Mode (fast 360°)", false, function(Value)
-    SKID_ENABLED = Value
-end)
-
-window:Toggle("Skid Mode Apply To Extra BHs", false, function(Value)
-    -- convenience toggle that toggles skid for extra BHs as well; kept for clarity though core loop reads SKID_ENABLED
-    SKID_ENABLED = Value
+-- Reset Cycle button (instant reset while Life Cycle Mode is ON)
+window:Button("Reset Cycle", function()
+    resetCycleNow()
 end)
 
 window:Button("Load Player List Script", function()
     loadstring(game:HttpGet("https://raw.githubusercontent.com/Jlchris1/Udklol/refs/heads/main/Playerlistv6"))()
 end)
-
 window:Button("telekinesis/fix target", function()
     loadstring(game:HttpGet(('https://raw.githubusercontent.com/SAZXHUB/Control-update/main/README.md'), true))()
 end)
 
 local loopCheckActive = false
-
 window:Toggle("Continuous Loop Check", false, function(Value)
     loopCheckActive = Value
     if loopCheckActive then
         spawn(function()
             while loopCheckActive do
-                if blackHoleActive then
+                if targetAllActive or targetSelectedActive then
                     for _, v in ipairs(Workspace:GetDescendants()) do
                         if v:IsA("BasePart") and not v.Anchored and not processedParts[v] and not isPartPlayerCharacter(v) and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character)) then
+                            -- ensure massless and ForcePart
+                            if initiallyMasslessParts[v] == nil then pcall(function() initiallyMasslessParts[v] = v.Massless end) end
+                            pcall(function() v.Massless = true end)
                             ForcePart(v)
                         end
                     end
@@ -1027,7 +1384,7 @@ window:Toggle("Continuous Loop Check", false, function(Value)
     end
 end)
 
--- PAA/unPAA toggle (player-amount BHs) -- uses round-robin distribution when BHs > players
+-- PAA toggle
 window:Toggle("PAA/unPAA (player amount BHs)", false, function(Value)
     PAAEnabled = Value
     if PAAEnabled then
@@ -1036,46 +1393,40 @@ window:Toggle("PAA/unPAA (player amount BHs)", false, function(Value)
         paaConnections[#paaConnections+1] = Players.PlayerAdded:Connect(onPlayerAddedForPAA)
         paaConnections[#paaConnections+1] = Players.PlayerRemoving:Connect(onPlayerRemovingForPAA)
     else
-        for _, c in ipairs(paaConnections) do
-            if c and c.Disconnect then pcall(function() c:Disconnect() end) end
-        end
+        for _, c in ipairs(paaConnections) do pcall(function() c:Disconnect() end) end
         paaConnections = {}
-        deleteExtraBlackHoles()
+        deleteBHsBySource("PAA")
     end
 end)
 
--- convenience buttons
-window:Button("Create 3 Blackholes (quick)", function()
-    createNBlackHoles(3)
-end)
+window:Button("Create 3 Blackholes (quick)", function() createNCommandBlackHoles(3) end)
+window:Button("Delete Extra Blackholes (DBH)", function() deleteCommandBlackHoles() end)
 
-window:Button("Delete Extra Blackholes (DBH)", function()
-    deleteExtraBlackHoles()
-end)
-
--- Continuous refresh for selection-based PAA if selected mode is enabled
+-- continuous refresh for PAA depending on matching primary mode:
 spawn(function()
     while true do
-        if PAAEnabled and PAA_isUsingSelected then
-            refreshPAA()
+        if PAAEnabled then
+            if PAA_isUsingSelected then
+                if targetSelectedActive then refreshPAA() end
+            else
+                if targetAllActive then refreshPAA() end
+            end
         end
         wait(2)
     end
 end)
 
--- Start/stop rebalancer based on presence of extra black holes
+-- start/stop rebalancer
 spawn(function()
     while true do
-        if #extraBlackHoles > 0 and not rebalancerRunning then
-            startRebalancer()
-        elseif #extraBlackHoles == 0 and rebalancerRunning then
-            stopRebalancer()
-        end
+        if #extraBlackHoles > 0 and not rebalancerRunning then startRebalancer()
+        elseif #extraBlackHoles == 0 and rebalancerRunning then stopRebalancer() end
+        if cycleRestartPending then scheduleCycleRestart() end
         wait(0.5)
     end
 end)
 
--- GUI: top-of-screen invisible box with visible text showing how many black hole PARTS exist in blackhole folders
+-- HUD: BH count
 do
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "ÆS_BHCountGui"
@@ -1087,7 +1438,7 @@ do
     txt.AnchorPoint = Vector2.new(0.5, 0)
     txt.Position = UDim2.new(0.5, 0, 0, 6)
     txt.Size = UDim2.new(0, 220, 0, 24)
-    txt.BackgroundTransparency = 1 -- invisible box
+    txt.BackgroundTransparency = 1
     txt.TextTransparency = 0
     txt.Text = "BlackHoles: 0"
     txt.TextScaled = false
@@ -1096,7 +1447,6 @@ do
     txt.TextColor3 = Color3.new(1,1,1)
     txt.Parent = screenGui
 
-    -- helper to count black hole parts inside any folder with "blackhole" or "bh" in its name
     local function countBlackHolePartsInFolders()
         local count = 0
         for _, obj in ipairs(Workspace:GetDescendants()) do
@@ -1120,9 +1470,7 @@ do
     spawn(function()
         while true do
             local count = 0
-            pcall(function()
-                count = countBlackHolePartsInFolders()
-            end)
+            pcall(function() count = countBlackHolePartsInFolders() end)
             txt.Text = "BlackHoles: "..tostring(count)
             wait(0.5)
         end
