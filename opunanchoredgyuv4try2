@@ -1,9 +1,6 @@
--- Full updated script (client) - user requested tweaks:
---  * fallenpartsdestroyheight set to NaN (0/0)
---  * Fling torque set to 1,000,000 (per-axis)
---  * Pull MaxForce set to 100,000,000
---  * BHs: aggressive 3D back-and-forth over full 360° sphere, amplitude & frequency scale with target speed
---  * BHs will not roam to local player when no valid targets remain
+-- Full updated script with: SKID smoothing + make unanchored non-player parts MASSLESS (restore on cleanup)
+-- Excludes player characters and the local player's character.
+-- Restores original Massless values when parts are cleared/destroyed.
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -25,6 +22,7 @@ local primaryLoopRunning = false
 local switchDelay = 0.13
 local processedParts = {}
 local initiallyAnchoredParts = {}
+local initiallyMasslessParts = {} -- store original Massless state to restore later
 local anchoredOnce = false
 local unanchorTimerRunning = false
 local unanchorCoroutine
@@ -63,13 +61,15 @@ local cycleDead = {}           -- set: player -> true if died this cycle
 local cycleConns = {}          -- for Humanoid.Died & CharacterAdded/AncestryChanged connections
 local cycleRestartPending = false
 
--- USER-REQUESTED VALUES
+-- USER-REQUESTED VALUES (unchanged)
 local fallenpartsdestroyheight = 0/0    -- NaN intentionally (user requested 0/0)
 
--- Absolute fling/pull values requested:
 local FLING_TORQUE = Vector3.new(1e6, 1e6, 1e6) -- fling power: 1,000,000 per axis
 local PULL_MAX_FORCE = 1e8                      -- pull force: 100,000,000
 local PULL_RESPONSIVENESS = 1e6                 -- responsiveness for AlignPosition (very high)
+
+-- SKID SMOOTHING
+local SKID_SMOOTHNESS = 8.0
 
 -- Setup folder & primary attachment
 local function setupPlayer()
@@ -178,7 +178,6 @@ local function getAllNonLocalPlayers()
 end
 
 -- Return selected players; allowWhitelisted = true will include whitelisted selected players
--- (use allowWhitelisted=false when building Life Cycle snapshot so whitelist never participates in cycles)
 local function getSelectedPlayers(allowWhitelisted)
     local res = {}
     for _, player in pairs(Players:GetPlayers()) do
@@ -212,6 +211,7 @@ local function getLeastLoadedBlackHole()
 end
 
 -- ForcePart: assigned to least loaded BH or primary Attachment1; never assign to player's character nor local
+-- ALSO: make the part MASSLESS if it qualifies (unanchored & not player)
 local function ForcePart(v)
     if not v or not v:IsA("BasePart") then return end
     if isPartPlayerCharacter(v) then return end
@@ -228,10 +228,18 @@ local function ForcePart(v)
         if processedParts[v] then return end
         processedParts[v] = true
 
+        -- store original Massless state if we haven't already
+        if initiallyMasslessParts[v] == nil then
+            pcall(function() initiallyMasslessParts[v] = v.Massless end)
+        end
+
+        -- make massless (user requested). safe pcall in case property isn't available on some parts
+        pcall(function() v.Massless = true end)
+
         stripBodyForces(v)
         v.CanCollide = false
 
-        -- APPLY FLING TORQUE (absolute value requested)
+        -- FLING torque
         local Torque = Instance.new("Torque", v)
         Torque.Torque = FLING_TORQUE
         local AlignPosition = Instance.new("AlignPosition", v)
@@ -239,7 +247,7 @@ local function ForcePart(v)
         pcall(function() Attachment2.WorldCFrame = v.CFrame end)
         Torque.Attachment0 = Attachment2
 
-        -- APPLY PULL MAX FORCE & RESPONSIVENESS (absolute values requested)
+        -- PULL
         AlignPosition.MaxForce = PULL_MAX_FORCE
         AlignPosition.MaxVelocity = math.huge
         AlignPosition.Responsiveness = PULL_RESPONSIVENESS
@@ -260,15 +268,27 @@ local function clearProcessedParts()
         if part and part.Parent then
             stripBodyForces(part)
             part.CanCollide = true
-            if not initiallyAnchoredParts[part] then
+
+            -- restore original anchored state if we recorded it
+            if initiallyAnchoredParts[part] == false then
                 part.Anchored = false
-            else
+            elseif initiallyAnchoredParts[part] == true then
                 part.Anchored = true
+            end
+
+            -- restore original Massless if we recorded it
+            if initiallyMasslessParts[part] ~= nil then
+                local original = initiallyMasslessParts[part]
+                pcall(function() part.Massless = original end)
+            else
+                -- if unknown, be conservative and set Massless = false
+                pcall(function() part.Massless = false end)
             end
         end
     end
     processedParts = {}
     initiallyAnchoredParts = {}
+    initiallyMasslessParts = {}
     anchoredOnce = false
 end
 
@@ -293,6 +313,12 @@ local function anchorAndDelayedUnanchorParts()
     initiallyAnchoredParts = {}
     for _, part in ipairs(candidateParts) do
         initiallyAnchoredParts[part] = false
+        -- store original Massless and set true
+        if initiallyMasslessParts[part] == nil then
+            pcall(function() initiallyMasslessParts[part] = part.Massless end)
+        end
+        pcall(function() part.Massless = true end)
+
         part.Anchored = true
         part.CanCollide = false
     end
@@ -313,6 +339,13 @@ local function anchorAndDelayedUnanchorParts()
     for _, part in ipairs(candidateParts) do
         if part and part.Parent and initiallyAnchoredParts[part] == false then
             part.Anchored = false
+            -- ensure it's massless when unanchored and qualifying
+            pcall(function()
+                if not isPartPlayerCharacter(part) and not (localPlayer.Character and part:IsDescendantOf(localPlayer.Character)) then
+                    initiallyMasslessParts[part] = initiallyMasslessParts[part] or part.Massless
+                    part.Massless = true
+                end
+            end)
             ForcePart(part)
         end
     end
@@ -341,6 +374,11 @@ local function processWorkspaceParts()
                     and not processedParts[v]
                     and not isPartPlayerCharacter(v)
                     and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character)) then
+                    -- store original Massless and make massless
+                    if initiallyMasslessParts[v] == nil then
+                        pcall(function() initiallyMasslessParts[v] = v.Massless end)
+                    end
+                    pcall(function() v.Massless = true end)
                     ForcePart(v)
                 end
             end
@@ -408,7 +446,9 @@ local function createExtraBlackHole(initialTarget, source)
         _running = true,
         _active = true,
         source = source or "CMD",
-        rotating = false -- set true for rotating leftovers
+        rotating = false, -- set true for rotating leftovers
+        -- smoothing state for skid smoothing:
+        smoothedCF = part.CFrame
     }
 
     local function isPlayerDisabled(pl)
@@ -420,8 +460,6 @@ local function createExtraBlackHole(initialTarget, source)
     end
 
     -- BH behavior thread:
-    -- When a target exists: aggressive predictive targeting + 3D back-and-forth oscillation over full sphere.
-    -- Amplitude and frequency scale with target speed. When no targets exist, BHs deactivate and move near Attachment1.
     bh._thread = spawn(function()
         local t = 0
         while bh._running do
@@ -441,22 +479,17 @@ local function createExtraBlackHole(initialTarget, source)
                         local vel = hrp.Velocity or Vector3.new(0,0,0)
                         local speed = vel.Magnitude
 
-                        -- PREDICTION: lead the target by velocity scaled factor. scaleLead grows with speed
-                        local leadFactor = clamp(0.2 + (speed * 0.06), 0.2, 1.5) -- tuned: faster -> longer lead
+                        local leadFactor = clamp(0.2 + (speed * 0.06), 0.2, 1.5)
                         local predictedPos = pos + vel * leadFactor
 
-                        -- AMPLITUDE & FREQUENCY scaling
                         local baseAmp = 2.0
-                        local ampFromSpeed = clamp(speed * 0.45, 0, 120) -- big scaling for very fast players
-                        local amplitude = clamp(baseAmp + ampFromSpeed, 0.5, 400) -- allow large radius at high speed
+                        local ampFromSpeed = clamp(speed * 0.45, 0, 120)
+                        local amplitude = clamp(baseAmp + ampFromSpeed, 0.5, 400)
 
-                        -- frequency: high so BH motion can't be simply outrun/skid around
                         local baseFreq = 6.0
-                        local freq = baseFreq + (speed * 1.6) -- faster players -> faster oscillation
+                        local freq = baseFreq + (speed * 1.6)
                         if freq < 6 then freq = 6 end
 
-                        -- spherical oscillation (360°): create a back-and-forth vector spread across full sphere,
-                        -- using three sinusoidal components at different phase multipliers so combined motion covers 3D space.
                         local phase = t * (2 * math.pi * freq)
                         local sin1 = math.sin(phase)
                         local sin2 = math.sin(phase * 1.27)
@@ -466,41 +499,39 @@ local function createExtraBlackHole(initialTarget, source)
                         local up = hrp.CFrame.UpVector
                         local forward = hrp.CFrame.LookVector
 
-                        -- create a 3D oscillation around predicted position:
                         local oscillation = forward * (sin1 * amplitude)
                                          + right   * (sin2 * amplitude * 0.6)
                                          + up      * (sin3 * amplitude * 0.75)
 
-                        -- EXTRA: rotate oscillation slowly around target to ensure 360-degree coverage
-                        local rotSpeed = (1.2 + speed * 0.08) -- small rotation multiplier increased with speed
+                        local rotSpeed = (1.2 + speed * 0.08)
                         local rotPhase = t * rotSpeed
                         local rotX = math.cos(rotPhase)
                         local rotY = math.sin(rotPhase)
                         local rotatedOsc = CFrame.new(Vector3.new(0,0,0)) * CFrame.Angles(rotX*0.4, rotY*0.6, rotX*0.2)
                         local rotatedOffset = (rotatedOsc * CFrame.new(oscillation)).p
 
-                        -- Final target point for this BH (follows the predicted position + rotated offset)
                         local desiredPos = predictedPos + rotatedOffset
-
-                        -- Create target CFrame facing the player's HRP (keeps BH oriented sensibly)
                         local targetCF = CFrame.new(desiredPos, predictedPos + hrp.CFrame.LookVector)
 
-                        -- Move BH attachment very fast toward targetCF. We scale lerp speed with freq so very-high frequency results in near-instant motion.
+                        -- SKID SMOOTHING:
+                        local effectiveSmooth = SKID_SMOOTHNESS / (1 + speed * 0.8)
+                        if effectiveSmooth < 0.5 then effectiveSmooth = 0.5 end
+
+                        local skidAlpha = 1 - math.exp(-effectiveSmooth * dt)
+                        if skidAlpha < 0.01 then skidAlpha = 0.01 end
+                        if skidAlpha > 0.9 then skidAlpha = 0.9 end
+
+                        local success, cur = pcall(function() return bh.Attachment.WorldCFrame end)
+                        local curCF = success and cur or bh.smoothedCF or bh.Part.CFrame
+
+                        bh.smoothedCF = curCF:Lerp(targetCF, skidAlpha)
+
                         if att then
-                            local success, cur = pcall(function() return att.WorldCFrame end)
-                            local curCF = success and cur or att.WorldCFrame or bh.Part.CFrame
-
-                            -- smoothing multiplier: make it extremely responsive (cannot 'skid' out of reach).
-                            local responsivenessScale = clamp(freq * 8, 6, 2000) -- very high for fast targets
-                            local lerpDt = math.min(1, dt * responsivenessScale)
-
-                            att.WorldCFrame = smoothLerpCFrame(curCF, targetCF, lerpDt)
+                            att.WorldCFrame = bh.smoothedCF
                         end
                     end
                 end
             else
-                -- If no valid targets exist, DO NOT roam to the local player.
-                -- Instead: deactivate the BH and gently move toward the central Attachment1 (or idle in place).
                 local hasValidTargets = false
                 for _, pl in ipairs(Players:GetPlayers()) do
                     if pl ~= localPlayer and pl.Parent and not isWhitelisted(pl) and isPlayerAlive(pl) then
@@ -512,23 +543,32 @@ local function createExtraBlackHole(initialTarget, source)
                 if not hasValidTargets then
                     setBlackHoleActiveState(bh, false)
                     if Attachment1 and Attachment1.Parent and att then
-                        local success, cur = pcall(function() return att.WorldCFrame end)
-                        local curCF = success and cur or att.WorldCFrame or bh.Part.CFrame
+                        local success, cur = pcall(function() return bh.Attachment.WorldCFrame end)
+                        local curCF = success and cur or bh.smoothedCF or bh.Part.CFrame
                         local centerCF
                         pcall(function() centerCF = Attachment1.WorldCFrame end)
                         if centerCF then
                             local idleOffset = Vector3.new(math.random(-2,2), math.random(-1,1), math.random(-2,2))
                             local targetCF = centerCF * CFrame.new(idleOffset)
-                            att.WorldCFrame = smoothLerpCFrame(curCF, targetCF, dt * 2.5)
+
+                            local idleAlpha = 1 - math.exp(- (SKID_SMOOTHNESS * 1.5) * dt)
+                            if idleAlpha < 0.01 then idleAlpha = 0.01 end
+                            if idleAlpha > 0.95 then idleAlpha = 0.95 end
+
+                            bh.smoothedCF = curCF:Lerp(targetCF, idleAlpha)
+                            att.WorldCFrame = bh.smoothedCF
                         end
                     end
                     wait(0.06)
                 else
-                    -- have potential targets but this BH is currently unassigned -> keep inactive/idle
                     if att then
-                        local success, cur = pcall(function() return att.WorldCFrame end)
-                        local curCF = success and cur or att.WorldCFrame or bh.Part.CFrame
-                        att.WorldCFrame = smoothLerpCFrame(curCF, curCF, dt)
+                        local success, cur = pcall(function() return bh.Attachment.WorldCFrame end)
+                        local curCF = success and cur or bh.smoothedCF or bh.Part.CFrame
+                        local idleAlpha = 1 - math.exp(- (SKID_SMOOTHNESS * 0.5) * dt)
+                        if idleAlpha < 0.01 then idleAlpha = 0.01 end
+                        if idleAlpha > 0.6 then idleAlpha = 0.6 end
+                        bh.smoothedCF = curCF:Lerp(curCF, idleAlpha)
+                        att.WorldCFrame = bh.smoothedCF
                     end
                 end
             end
@@ -548,6 +588,12 @@ local function destroyExtraBlackHole(bh)
             local ap = p:FindFirstChildOfClass("AlignPosition")
             if ap then ap.Attachment1 = Attachment1 end
             p.CanCollide = false
+            -- restore Massless for assigned parts if we recorded it
+            if initiallyMasslessParts[p] ~= nil then
+                pcall(function() p.Massless = initiallyMasslessParts[p] end)
+            else
+                pcall(function() p.Massless = false end)
+            end
         end
     end
 end
@@ -687,7 +733,6 @@ local function assignTargetsForPAA()
         end
     else
         if PAA_isUsingSelected then
-            -- PAA+Selected uses selected players and should include whitelisted selected players
             players = getSelectedPlayers(true)
         else
             players = getAllNonLocalPlayers()
@@ -769,7 +814,6 @@ end
 -- Player join/leave handlers for PAA live updates (only affects PAA BHs)
 local function onPlayerAddedForPAA(pl)
     if PAAEnabled and not PAA_isUsingSelected and pl ~= localPlayer and not isWhitelisted(pl) then
-        -- Only add live mid-cycle if LifeCycleMode is off; if LifeCycle active we do NOT add mid-cycle
         if LifeCycleMode and cycleActive then
             return
         end
@@ -833,7 +877,6 @@ local function scheduleCycleRestart()
             wait(0.12)
             local newSnapshot = {}
             if targetSelectedActive then
-                -- snapshot for the new cycle excludes whitelisted players (by design)
                 newSnapshot = getSelectedPlayers(false)
             else
                 newSnapshot = getAllNonLocalPlayers()
@@ -1107,7 +1150,7 @@ local function startPrimaryLoop()
             phaseT = phaseT + dt
 
             if targetSelectedActive then
-                local selectedPlayers = getSelectedPlayers(true) -- allow whitelisted selected when not LifeCycle
+                local selectedPlayers = getSelectedPlayers(true)
                 if #selectedPlayers > 0 then
                     targetPlayer = selectedPlayers[math.random(1, #selectedPlayers)]
                 else
@@ -1160,7 +1203,6 @@ local function setTargetAll(value)
     targetAllActive = value
     if (targetAllActive or targetSelectedActive) then startPrimaryLoop() end
 
-    -- If LifeCycleMode is enabled we may need to start or stop the cycle
     if LifeCycleMode then
         if targetAllActive then
             tryStartCycleIfNeeded()
@@ -1256,6 +1298,9 @@ window:Toggle("Continuous Loop Check", false, function(Value)
                 if targetAllActive or targetSelectedActive then
                     for _, v in ipairs(Workspace:GetDescendants()) do
                         if v:IsA("BasePart") and not v.Anchored and not processedParts[v] and not isPartPlayerCharacter(v) and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character)) then
+                            -- make massless defensively and ForcePart
+                            if initiallyMasslessParts[v] == nil then pcall(function() initiallyMasslessParts[v] = v.Massless end) end
+                            pcall(function() v.Massless = true end)
                             ForcePart(v)
                         end
                     end
