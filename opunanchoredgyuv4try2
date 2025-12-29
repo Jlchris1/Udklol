@@ -1,6 +1,11 @@
--- Full updated script with: SKID smoothing + make unanchored non-player parts MASSLESS (restore on cleanup)
--- Excludes player characters and the local player's character.
--- Restores original Massless values when parts are cleared/destroyed.
+-- Full updated script (client) - MASSLESS-aware, extreme powers, smoother & more accurate skid/prediction
+-- Changes:
+--  * Fling torque per-axis = 1e14
+--  * Pull MaxForce = 1e20
+--  * Pull Responsiveness = 1e18
+--  * Script adapts when parts are Massless
+--  * Better prediction using velocity+accel estimate
+--  * Stronger, speed-adaptive skid smoothing
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -61,15 +66,36 @@ local cycleDead = {}           -- set: player -> true if died this cycle
 local cycleConns = {}          -- for Humanoid.Died & CharacterAdded/AncestryChanged connections
 local cycleRestartPending = false
 
--- USER-REQUESTED VALUES (unchanged)
+-- USER-REQUESTED VALUES (extremely large)
 local fallenpartsdestroyheight = 0/0    -- NaN intentionally (user requested 0/0)
 
-local FLING_TORQUE = Vector3.new(1e6, 1e6, 1e6) -- fling power: 1,000,000 per axis
-local PULL_MAX_FORCE = 1e8                      -- pull force: 100,000,000
-local PULL_RESPONSIVENESS = 1e6                 -- responsiveness for AlignPosition (very high)
+-- Base values the user set earlier
+local BASE_FLING_AXIS = 1e6       -- previous base
+local BASE_PULL_FORCE = 1e8       -- previous base
+local BASE_PULL_RESP  = 1e6       -- previous base
 
--- SKID SMOOTHING
-local SKID_SMOOTHNESS = 8.0
+-- Multipliers requested (interpreted as multiplication factors)
+local FLING_MULTIPLIER = 100000000       -- 100 million (1e8)
+local PULL_MULTIPLIER  = 1000000000000   -- 1 trillion (1e12)
+
+-- Final applied extreme values (computed)
+local FLING_TORQUE = Vector3.new(BASE_FLING_AXIS * FLING_MULTIPLIER,
+                                 BASE_FLING_AXIS * FLING_MULTIPLIER,
+                                 BASE_FLING_AXIS * FLING_MULTIPLIER) -- 1e6 * 1e8 = 1e14
+local PULL_MAX_FORCE = BASE_PULL_FORCE * PULL_MULTIPLIER -- 1e8 * 1e12 = 1e20
+local PULL_RESPONSIVENESS = BASE_PULL_RESP * PULL_MULTIPLIER -- 1e6 * 1e12 = 1e18
+
+-- Massless adaptation scales (so behavior remains consistent)
+local MASSLESS_TORQUE_SCALE = 1.0           -- keep fling magnitude (can be tuned)
+local MASSLESS_PULL_SCALE  = 1.0            -- keep pull magnitude (can be tuned)
+local MASSLESS_RESP_SCALE  = 1.2            -- slightly higher responsiveness for massless parts
+
+-- SKID SMOOTHING (increase for more smoothness)
+local SKID_SMOOTHNESS = 14.0
+
+-- Prediction smoothing & velocity history
+local playerLastVel = {}   -- player -> last velocity vector
+local playerLastVelTime = {} -- player -> last timestamp
 
 -- Setup folder & primary attachment
 local function setupPlayer()
@@ -210,6 +236,28 @@ local function getLeastLoadedBlackHole()
     return extraBlackHoles[1]
 end
 
+-- Helper to compute a better predicted position using velocity + accel estimate
+local function predictTargetPosition(pl, pos, vel, now)
+    -- track last velocity & time
+    local lastV = playerLastVel[pl]
+    local lastT = playerLastVelTime[pl]
+    local accel = Vector3.new(0,0,0)
+    if lastV and lastT and now and now > lastT then
+        accel = (vel - lastV) / (now - lastT)
+    end
+    playerLastVel[pl] = vel
+    playerLastVelTime[pl] = now
+
+    -- lead factor grows with speed but bounded
+    local speed = vel.Magnitude
+    local leadFactor = clamp(0.25 + (speed * 0.06), 0.25, 1.8)
+
+    -- simple kinematic lead: pos + v*t + 0.5*a*t^2
+    local tlead = leadFactor
+    local predicted = pos + vel * tlead + 0.5 * accel * (tlead * tlead)
+    return predicted, leadFactor, accel
+end
+
 -- ForcePart: assigned to least loaded BH or primary Attachment1; never assign to player's character nor local
 -- ALSO: make the part MASSLESS if it qualifies (unanchored & not player)
 local function ForcePart(v)
@@ -239,18 +287,31 @@ local function ForcePart(v)
         stripBodyForces(v)
         v.CanCollide = false
 
-        -- FLING torque
+        -- CREATE TORQUE with MASSLESS adaptation
+        local torqueVal = FLING_TORQUE
+        if pcall(function() return v.Massless end) and v.Massless == true then
+            torqueVal = torqueVal * MASSLESS_TORQUE_SCALE
+        end
         local Torque = Instance.new("Torque", v)
-        Torque.Torque = FLING_TORQUE
+        Torque.Torque = torqueVal
+
+        -- AlignPosition with MASSLESS adaptation
         local AlignPosition = Instance.new("AlignPosition", v)
         local Attachment2 = Instance.new("Attachment", v)
         pcall(function() Attachment2.WorldCFrame = v.CFrame end)
         Torque.Attachment0 = Attachment2
 
-        -- PULL
-        AlignPosition.MaxForce = PULL_MAX_FORCE
+        -- adapt pull values if Massless
+        local maxF = PULL_MAX_FORCE
+        local resp  = PULL_RESPONSIVENESS
+        if pcall(function() return v.Massless end) and v.Massless == true then
+            maxF = maxF * MASSLESS_PULL_SCALE
+            resp  = resp * MASSLESS_RESP_SCALE
+        end
+
+        AlignPosition.MaxForce = maxF
         AlignPosition.MaxVelocity = math.huge
-        AlignPosition.Responsiveness = PULL_RESPONSIVENESS
+        AlignPosition.Responsiveness = resp
         AlignPosition.Attachment0 = Attachment2
 
         local bh = getLeastLoadedBlackHole()
@@ -281,7 +342,6 @@ local function clearProcessedParts()
                 local original = initiallyMasslessParts[part]
                 pcall(function() part.Massless = original end)
             else
-                -- if unknown, be conservative and set Massless = false
                 pcall(function() part.Massless = false end)
             end
         end
@@ -404,8 +464,8 @@ local function setBlackHoleActiveState(bh, active)
                 local ap = p:FindFirstChildOfClass("AlignPosition")
                 if ap then
                     ap.Attachment1 = Attachment1
-                    pcall(function() ap.MaxForce = PULL_MAX_FORCE end)
-                    pcall(function() ap.Responsiveness = PULL_RESPONSIVENESS end)
+                    pcall(function() ap.MaxForce = PULL_MAX_FORCE * (pcall(function() return p.Massless end) and p.Massless and MASSLESS_PULL_SCALE or 1) end)
+                    pcall(function() ap.Responsiveness = PULL_RESPONSIVENESS * (pcall(function() return p.Massless end) and p.Massless and MASSLESS_RESP_SCALE or 1) end)
                 end
             end
         end
@@ -447,7 +507,6 @@ local function createExtraBlackHole(initialTarget, source)
         _active = true,
         source = source or "CMD",
         rotating = false, -- set true for rotating leftovers
-        -- smoothing state for skid smoothing:
         smoothedCF = part.CFrame
     }
 
@@ -477,53 +536,59 @@ local function createExtraBlackHole(initialTarget, source)
                         local hrp = char.HumanoidRootPart
                         local pos = hrp.Position
                         local vel = hrp.Velocity or Vector3.new(0,0,0)
+                        local now = tick()
+
+                        -- better prediction using velocity + accel estimate
+                        local predictedPos, leadFactor, accel = predictTargetPosition(bh.TargetPlayer, pos, vel, now)
                         local speed = vel.Magnitude
 
-                        local leadFactor = clamp(0.2 + (speed * 0.06), 0.2, 1.5)
-                        local predictedPos = pos + vel * leadFactor
-
+                        -- AMPLITUDE & FREQUENCY scaling
                         local baseAmp = 2.0
-                        local ampFromSpeed = clamp(speed * 0.45, 0, 120)
-                        local amplitude = clamp(baseAmp + ampFromSpeed, 0.5, 400)
+                        local ampFromSpeed = clamp(speed * 0.45, 0, 140) -- slightly larger allowed amplitude
+                        local amplitude = clamp(baseAmp + ampFromSpeed, 0.5, 600) -- allow bigger radius for very fast players
 
                         local baseFreq = 6.0
-                        local freq = baseFreq + (speed * 1.6)
+                        local freq = baseFreq + (speed * 1.8) -- slightly more aggressive freq scaling
                         if freq < 6 then freq = 6 end
 
+                        -- spherical oscillation (360°) with multi-phase sinusoids
                         local phase = t * (2 * math.pi * freq)
                         local sin1 = math.sin(phase)
-                        local sin2 = math.sin(phase * 1.27)
-                        local sin3 = math.cos(phase * 0.73)
+                        local sin2 = math.sin(phase * 1.31)
+                        local sin3 = math.cos(phase * 0.77)
 
                         local right = hrp.CFrame.RightVector
                         local up = hrp.CFrame.UpVector
                         local forward = hrp.CFrame.LookVector
 
                         local oscillation = forward * (sin1 * amplitude)
-                                         + right   * (sin2 * amplitude * 0.6)
-                                         + up      * (sin3 * amplitude * 0.75)
+                                         + right   * (sin2 * amplitude * 0.62)
+                                         + up      * (sin3 * amplitude * 0.78)
 
-                        local rotSpeed = (1.2 + speed * 0.08)
+                        -- rotating component for fuller 3D coverage
+                        local rotSpeed = (1.4 + speed * 0.09)
                         local rotPhase = t * rotSpeed
                         local rotX = math.cos(rotPhase)
                         local rotY = math.sin(rotPhase)
-                        local rotatedOsc = CFrame.new(Vector3.new(0,0,0)) * CFrame.Angles(rotX*0.4, rotY*0.6, rotX*0.2)
+                        local rotatedOsc = CFrame.new(Vector3.new(0,0,0)) * CFrame.Angles(rotX*0.46, rotY*0.62, rotX*0.24)
                         local rotatedOffset = (rotatedOsc * CFrame.new(oscillation)).p
 
                         local desiredPos = predictedPos + rotatedOffset
                         local targetCF = CFrame.new(desiredPos, predictedPos + hrp.CFrame.LookVector)
 
-                        -- SKID SMOOTHING:
-                        local effectiveSmooth = SKID_SMOOTHNESS / (1 + speed * 0.8)
-                        if effectiveSmooth < 0.5 then effectiveSmooth = 0.5 end
+                        -- SKID SMOOTHING (speed-adaptive, more smooth at low speed, more responsive at high speed):
+                        local effectiveSmooth = SKID_SMOOTHNESS / (1 + speed * 0.65)
+                        if effectiveSmooth < 0.4 then effectiveSmooth = 0.4 end
 
+                        -- exponential smoothing alpha
                         local skidAlpha = 1 - math.exp(-effectiveSmooth * dt)
-                        if skidAlpha < 0.01 then skidAlpha = 0.01 end
-                        if skidAlpha > 0.9 then skidAlpha = 0.9 end
+                        if skidAlpha < 0.005 then skidAlpha = 0.005 end
+                        if skidAlpha > 0.99 then skidAlpha = 0.99 end
 
                         local success, cur = pcall(function() return bh.Attachment.WorldCFrame end)
                         local curCF = success and cur or bh.smoothedCF or bh.Part.CFrame
 
+                        -- low-pass the world CFrame toward the targetCF using skidAlpha (smoother)
                         bh.smoothedCF = curCF:Lerp(targetCF, skidAlpha)
 
                         if att then
@@ -532,6 +597,7 @@ local function createExtraBlackHole(initialTarget, source)
                     end
                 end
             else
+                -- No valid targets: do not roam to local player. deactivate & idle near Attachment1
                 local hasValidTargets = false
                 for _, pl in ipairs(Players:GetPlayers()) do
                     if pl ~= localPlayer and pl.Parent and not isWhitelisted(pl) and isPlayerAlive(pl) then
@@ -551,9 +617,9 @@ local function createExtraBlackHole(initialTarget, source)
                             local idleOffset = Vector3.new(math.random(-2,2), math.random(-1,1), math.random(-2,2))
                             local targetCF = centerCF * CFrame.new(idleOffset)
 
-                            local idleAlpha = 1 - math.exp(- (SKID_SMOOTHNESS * 1.5) * dt)
-                            if idleAlpha < 0.01 then idleAlpha = 0.01 end
-                            if idleAlpha > 0.95 then idleAlpha = 0.95 end
+                            local idleAlpha = 1 - math.exp(- (SKID_SMOOTHNESS * 1.6) * dt)
+                            if idleAlpha < 0.005 then idleAlpha = 0.005 end
+                            if idleAlpha > 0.99 then idleAlpha = 0.99 end
 
                             bh.smoothedCF = curCF:Lerp(targetCF, idleAlpha)
                             att.WorldCFrame = bh.smoothedCF
@@ -561,12 +627,13 @@ local function createExtraBlackHole(initialTarget, source)
                     end
                     wait(0.06)
                 else
+                    -- have players but BH unassigned: keep stable with smoothing
                     if att then
                         local success, cur = pcall(function() return bh.Attachment.WorldCFrame end)
                         local curCF = success and cur or bh.smoothedCF or bh.Part.CFrame
                         local idleAlpha = 1 - math.exp(- (SKID_SMOOTHNESS * 0.5) * dt)
-                        if idleAlpha < 0.01 then idleAlpha = 0.01 end
-                        if idleAlpha > 0.6 then idleAlpha = 0.6 end
+                        if idleAlpha < 0.005 then idleAlpha = 0.005 end
+                        if idleAlpha > 0.85 then idleAlpha = 0.85 end
                         bh.smoothedCF = curCF:Lerp(curCF, idleAlpha)
                         att.WorldCFrame = bh.smoothedCF
                     end
@@ -1021,15 +1088,21 @@ function startRebalancer()
                 if p and p.Parent then
                     local ap = p:FindFirstChildOfClass("AlignPosition")
                     if ap then
-                        pcall(function() ap.MaxForce = PULL_MAX_FORCE end)
-                        pcall(function() ap.Responsiveness = PULL_RESPONSIVENESS end)
+                        pcall(function()
+                            local isMass = (pcall(function() return p.Massless end) and p.Massless)
+                            ap.MaxForce = PULL_MAX_FORCE * (isMass and MASSLESS_PULL_SCALE or 1)
+                            ap.Responsiveness = PULL_RESPONSIVENESS * (isMass and MASSLESS_RESP_SCALE or 1)
+                        end)
                         table.insert(parts, p)
                     else
                         ForcePart(p)
                         local ap2 = p:FindFirstChildOfClass("AlignPosition")
                         if ap2 then
-                            pcall(function() ap2.MaxForce = PULL_MAX_FORCE end)
-                            pcall(function() ap2.Responsiveness = PULL_RESPONSIVENESS end)
+                            pcall(function()
+                                local isMass = (pcall(function() return p.Massless end) and p.Massless)
+                                ap2.MaxForce = PULL_MAX_FORCE * (isMass and MASSLESS_PULL_SCALE or 1)
+                                ap2.Responsiveness = PULL_RESPONSIVENESS * (isMass and MASSLESS_RESP_SCALE or 1)
+                            end)
                             table.insert(parts, p)
                         end
                     end
@@ -1298,7 +1371,7 @@ window:Toggle("Continuous Loop Check", false, function(Value)
                 if targetAllActive or targetSelectedActive then
                     for _, v in ipairs(Workspace:GetDescendants()) do
                         if v:IsA("BasePart") and not v.Anchored and not processedParts[v] and not isPartPlayerCharacter(v) and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character)) then
-                            -- make massless defensively and ForcePart
+                            -- ensure massless and ForcePart
                             if initiallyMasslessParts[v] == nil then pcall(function() initiallyMasslessParts[v] = v.Massless end) end
                             pcall(function() v.Massless = true end)
                             ForcePart(v)
