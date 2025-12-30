@@ -64,7 +64,6 @@ local DestroyGui = Instance.new("TextButton")
 JLadminGui.Name = "JLadminGui"
 JLadminGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 JLadminGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-JLadminGui.ResetOnRespawn = false
 
 Toggle.Name = "Toggle"
 Toggle.Parent = JLadminGui
