@@ -1,0 +1,576 @@
+-- Full LocalScript: Floating + reliable local respawn-at-last-death toggle + auto-equip animation tool
+-- Place this LocalScript in StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+local lastPosition = nil
+local spawnPart = nil
+local previousRespawnLocation = nil
+local humanoidDiedConn = nil
+
+-- Track original collision states
+local originalCollisions = {}
+
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FloatGui"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.DisplayOrder = 10000 -- large to try and keep on top of other ScreenGuis
+
+-- small consistent size for all controls
+local CONTROL_W = 60
+local CONTROL_H = 26
+local TOP_X_OFFSET = -70
+
+local function makeButton(name, posY, text)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.new(0, CONTROL_W, 0, CONTROL_H)
+    btn.Position = UDim2.new(1, TOP_X_OFFSET, 0, posY)
+    btn.AnchorPoint = Vector2.new(0, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Text = text
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 14
+    btn.ZIndex = 50
+    btn.Parent = screenGui
+    return btn
+end
+
+-- Buttons (aligned right)
+local btnUp = makeButton("Up", 20, "Up")
+local btnDown = makeButton("Down", 60, "Down")
+local btnDisable = makeButton("Disable", 100, "Off")
+local btnSpawnToggle = makeButton("SpawnToggle", 140, "Spawn: OFF")
+local btnFreeToggle = makeButton("FreeToggle", 180, "Free: OFF") -- free-style float toggle
+
+-- Speed textboxes (to the left of the up/down area)
+local speedBox = Instance.new("TextBox")
+speedBox.Size = UDim2.new(0, CONTROL_W, 0, CONTROL_H)
+speedBox.Position = UDim2.new(1, TOP_X_OFFSET - 70, 0, 20)
+speedBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+speedBox.TextColor3 = Color3.new(1, 1, 1)
+speedBox.PlaceholderText = "Float Spd"
+speedBox.Text = "5"
+speedBox.ClearTextOnFocus = false
+speedBox.Font = Enum.Font.SourceSansBold
+speedBox.TextSize = 14
+speedBox.ZIndex = 50
+speedBox.Parent = screenGui
+
+local tpSpeedBox = Instance.new("TextBox")
+tpSpeedBox.Size = UDim2.new(0, CONTROL_W, 0, CONTROL_H)
+tpSpeedBox.Position = UDim2.new(1, TOP_X_OFFSET - 70, 0, 60)
+tpSpeedBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+tpSpeedBox.TextColor3 = Color3.new(1, 1, 1)
+tpSpeedBox.PlaceholderText = "TP Spd"
+tpSpeedBox.Text = "0.23"
+tpSpeedBox.ClearTextOnFocus = false
+tpSpeedBox.Font = Enum.Font.SourceSansBold
+tpSpeedBox.TextSize = 14
+tpSpeedBox.ZIndex = 50
+tpSpeedBox.Parent = screenGui
+
+-- Hide/Show toggle (left of speed boxes). This button remains visible always and hides/shows the other controls.
+local hideBtn = Instance.new("TextButton")
+hideBtn.Name = "HideToggle"
+hideBtn.Size = UDim2.new(0, CONTROL_W, 0, CONTROL_H)
+hideBtn.Position = UDim2.new(1, TOP_X_OFFSET - 140, 0, 20)
+hideBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+hideBtn.TextColor3 = Color3.new(1, 1, 1)
+hideBtn.Text = "Hide"
+hideBtn.Font = Enum.Font.SourceSansBold
+hideBtn.TextSize = 14
+hideBtn.ZIndex = 60
+hideBtn.Parent = screenGui
+
+-- Variables
+local floating = false
+local upHeld = false
+local downHeld = false
+local targetY = 0
+local spawnToggle = false
+
+local floatSpeed = tonumber(speedBox.Text) or 5
+local tpwalkSpeed = tonumber(tpSpeedBox.Text) or 0.23
+
+local moveSpeed = 20
+local airAccel = 12
+
+local idleAnimId = "rbxassetid://180435571"
+local idleAnimTrack
+
+local currentVel = Vector3.new(0, 0, 0)
+local lastLookVector = Vector3.new(0, 0, -1)
+
+local originalGravity = workspace.Gravity
+
+-- Free-style toggle
+local freeStyle = false
+
+-- ========== Auto-Equip Tool & Animation ==========
+local FLOAT_TOOL_NAME = "FloatAnimTool"
+local TOOL_ANIM_ASSET = "rbxassetid://99901644422479" -- user's animation
+
+-- tool and animation track holders
+local floatTool = nil
+local toolAnimObj = nil
+local toolAnimTrack = nil
+
+local function ensureToolExists()
+    if floatTool and floatTool.Parent then
+        return floatTool
+    end
+
+    -- create tool
+    floatTool = Instance.new("Tool")
+    floatTool.Name = FLOAT_TOOL_NAME
+    floatTool.RequiresHandle = false
+    floatTool.CanBeDropped = false
+    floatTool.Parent = player:WaitForChild("Backpack")
+
+    -- create (cached) Animation object under tool for reference (not strictly required)
+    toolAnimObj = Instance.new("Animation")
+    toolAnimObj.Name = "FloatToolAnim"
+    toolAnimObj.AnimationId = TOOL_ANIM_ASSET
+    toolAnimObj.Parent = floatTool
+
+    -- Equipped / Unequipped handlers
+    floatTool.Equipped:Connect(function()
+        -- play the animation on the current humanoid (looped)
+        if humanoid and humanoid.Parent then
+            -- stop previous if present
+            if toolAnimTrack then
+                pcall(function() toolAnimTrack:Stop() end)
+                toolAnimTrack = nil
+            end
+            local ok, track = pcall(function()
+                return humanoid:LoadAnimation(toolAnimObj)
+            end)
+            if ok and track then
+                toolAnimTrack = track
+                toolAnimTrack.Looped = true
+                pcall(function() toolAnimTrack:Play() end)
+            end
+        end
+    end)
+
+    floatTool.Unequipped:Connect(function()
+        if toolAnimTrack then
+            pcall(function() toolAnimTrack:Stop() end)
+            toolAnimTrack = nil
+        end
+    end)
+
+    return floatTool
+end
+
+local function equipFloatTool()
+    local t = ensureToolExists()
+    -- equip to current character's humanoid if possible
+    if humanoid and humanoid.Parent and t and t.Parent == player.Backpack then
+        -- Use humanoid:EquipTool where available
+        pcall(function()
+            humanoid:EquipTool(t)
+        end)
+    else
+        -- try to parent to character (this usually equips instantly)
+        if t and character and character.Parent then
+            t.Parent = character
+        end
+    end
+end
+
+local function unequipFloatTool()
+    if not floatTool then return end
+    -- stop animation if playing
+    if toolAnimTrack then
+        pcall(function() toolAnimTrack:Stop() end)
+        toolAnimTrack = nil
+    end
+    -- move tool back to backpack (this unequips)
+    if floatTool.Parent ~= player.Backpack then
+        pcall(function()
+            floatTool.Parent = player.Backpack
+        end)
+    end
+end
+
+-- ==================================================
+
+-- Helpers
+local function createOrUpdateLocalSpawn(pos)
+    if not pos then return end
+    if previousRespawnLocation == nil then
+        previousRespawnLocation = player.RespawnLocation
+    end
+    if not spawnPart or not spawnPart.Parent then
+        spawnPart = Instance.new("SpawnLocation")
+        spawnPart.Name = ("_LocalSpawn_%d"):format(player.UserId)
+        spawnPart.Size = Vector3.new(2, 1, 2)
+        spawnPart.Anchored = true
+        spawnPart.CanCollide = false
+        spawnPart.Transparency = 1
+        spawnPart.Locked = true
+        spawnPart.Neutral = true
+        spawnPart.Parent = workspace
+    end
+    spawnPart.CFrame = CFrame.new(pos) + Vector3.new(0, 1.5, 0)
+    pcall(function()
+        player.RespawnLocation = spawnPart
+    end)
+end
+
+local function removeLocalSpawnAndRestore()
+    pcall(function()
+        player.RespawnLocation = previousRespawnLocation
+    end)
+    previousRespawnLocation = nil
+    if spawnPart and spawnPart.Parent then
+        spawnPart:Destroy()
+        spawnPart = nil
+    end
+end
+
+-- Animations
+local function playFrozenIdle()
+    if idleAnimTrack then
+        idleAnimTrack:Stop()
+        idleAnimTrack = nil
+    end
+    if humanoid and humanoid.Parent then
+        local anim = Instance.new("Animation")
+        anim.AnimationId = idleAnimId
+        idleAnimTrack = humanoid:LoadAnimation(anim)
+        idleAnimTrack.Looped = true
+        idleAnimTrack:Play()
+        idleAnimTrack:AdjustSpeed(0)
+    end
+end
+
+local function stopFrozenIdle()
+    if idleAnimTrack then
+        idleAnimTrack:Stop()
+        idleAnimTrack = nil
+    end
+end
+
+-- Movement state
+local moving = false
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.W
+    or input.KeyCode == Enum.KeyCode.A
+    or input.KeyCode == Enum.KeyCode.S
+    or input.KeyCode == Enum.KeyCode.D then
+        moving = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gp)
+    if input.KeyCode == Enum.KeyCode.W
+    or input.KeyCode == Enum.KeyCode.A
+    or input.KeyCode == Enum.KeyCode.S
+    or input.KeyCode == Enum.KeyCode.D then
+        local keysDown = UserInputService:IsKeyDown(Enum.KeyCode.W)
+            or UserInputService:IsKeyDown(Enum.KeyCode.A)
+            or UserInputService:IsKeyDown(Enum.KeyCode.S)
+            or UserInputService:IsKeyDown(Enum.KeyCode.D)
+        moving = keysDown
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    local moveVec = humanoid and humanoid.MoveDirection or Vector3.new()
+    if moveVec.Magnitude > 0 then
+        moving = true
+    elseif not (
+        UserInputService:IsKeyDown(Enum.KeyCode.W)
+        or UserInputService:IsKeyDown(Enum.KeyCode.A)
+        or UserInputService:IsKeyDown(Enum.KeyCode.S)
+        or UserInputService:IsKeyDown(Enum.KeyCode.D)
+    ) then
+        moving = false
+    end
+end)
+
+-- Velocity reset loop
+task.spawn(function()
+    while true do
+        if floating and hrp then
+            hrp.Velocity = Vector3.new(0, 0, 0)
+        end
+        task.wait()
+    end
+end)
+
+-- Helper to set visibility of GUI elements except the hide button (hide button must always stay visible)
+local function setControlsVisible(visible)
+    for _, child in pairs(screenGui:GetChildren()) do
+        if child ~= hideBtn then
+            if child:IsA("GuiObject") then
+                child.Visible = visible
+            end
+        end
+    end
+end
+
+-- Float logic
+RunService.RenderStepped:Connect(function(dt)
+    -- read speed boxes live
+    floatSpeed = tonumber(speedBox.Text) or floatSpeed
+    tpwalkSpeed = tonumber(tpSpeedBox.Text) or tpwalkSpeed
+
+    if floating and hrp and humanoid then
+        workspace.Gravity = 0
+
+        if targetY == 0 then
+            targetY = hrp.Position.Y
+        end
+
+        -- manual up/down from buttons always apply
+        if upHeld then
+            targetY = targetY + floatSpeed * dt
+        elseif downHeld then
+            targetY = targetY - floatSpeed * dt
+        end
+
+        -- camera & look vector
+        local cam = workspace.CurrentCamera
+        local camLookVector = Vector3.new(0, 0, 0)
+        if cam then
+            camLookVector = cam.CFrame.LookVector
+        end
+
+        -- SPECIAL CASE: Free-style ON but player not moving -> stop entirely
+        if freeStyle and not moving then
+            -- stop horizontal velocity and vertical drift
+            currentVel = Vector3.new(0, 0, 0)
+            hrp.Velocity = Vector3.new(0, 0, 0)
+            -- lock targetY to current position so no vertical change
+            targetY = hrp.Position.Y
+
+            -- ensure character faces camera horizontal look (keeps rotation responsive)
+            local camLookFlat = Vector3.new(camLookVector.X, 0, camLookVector.Z)
+            if camLookFlat.Magnitude > 0 then
+                camLookFlat = camLookFlat.Unit
+                lastLookVector = camLookFlat
+            end
+
+            local pos = hrp.Position
+            local newPos = Vector3.new(pos.X, targetY, pos.Z)
+            hrp.CFrame = CFrame.new(newPos, newPos + lastLookVector)
+
+            -- still set parts CanCollide false and save original states
+            for _, part in pairs(character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    if originalCollisions[part] == nil then
+                        originalCollisions[part] = part.CanCollide
+                    end
+                    part.CanCollide = false
+                end
+            end
+
+            return
+        end
+
+        -- free-style vertical based on camera pitch (Y). This adds a vertical change proportional to the camera's Y look vector.
+        if freeStyle and cam then
+            local verticalSpeed = camLookVector.Y * floatSpeed
+            targetY = targetY + verticalSpeed * dt
+        end
+
+        -- horizontal movement smoothing (keeps your existing logic)
+        local moveDir = humanoid.MoveDirection
+        if moveDir.Magnitude > 0 then
+            moveDir = moveDir.Unit
+        else
+            moveDir = Vector3.new()
+        end
+
+        local desiredVel = moveDir * moveSpeed
+        local currentVelXZ = Vector3.new(currentVel.X, 0, currentVel.Z)
+        local desiredVelXZ = Vector3.new(desiredVel.X, 0, desiredVel.Z)
+        local t = math.clamp(airAccel * dt, 0, 1)
+        currentVelXZ = currentVelXZ:Lerp(desiredVelXZ, t)
+        currentVel = Vector3.new(currentVelXZ.X, 0, currentVelXZ.Z)
+
+        hrp.Velocity = Vector3.new(currentVel.X, 0, currentVel.Z)
+
+        -- compute look vector for facing (flattened)
+        local camLookFlat = Vector3.new(camLookVector.X, 0, camLookVector.Z)
+        if camLookFlat.Magnitude > 0 then
+            camLookFlat = camLookFlat.Unit
+            lastLookVector = camLookFlat
+        end
+
+        local pos = hrp.Position
+        local newPos = Vector3.new(pos.X, targetY, pos.Z)
+
+        -- if moving, perform a small tp step forward in the move dir (tpwalkSpeed) to keep responsiveness
+        if moving and moveDir.Magnitude > 0 then
+            newPos = newPos + moveDir * tpwalkSpeed
+        end
+
+        -- final CFrame set (face towards camera flat look)
+        hrp.CFrame = CFrame.new(newPos, newPos + lastLookVector)
+
+        -- Save original CanCollide states once and set CanCollide false
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                if originalCollisions[part] == nil then
+                    originalCollisions[part] = part.CanCollide
+                end
+                part.CanCollide = false
+            end
+        end
+    else
+        workspace.Gravity = originalGravity
+        targetY = 0
+
+        -- Restore original CanCollide states
+        for part, state in pairs(originalCollisions) do
+            if part and part.Parent then
+                part.CanCollide = state
+            end
+        end
+        originalCollisions = {}
+
+        if humanoid and humanoid:GetState() == Enum.HumanoidStateType.Physics then
+            humanoid:ChangeState(Enum.HumanoidStateType.Running)
+        end
+    end
+end)
+
+-- Character setup
+local function setupCharacter(char)
+    if humanoidDiedConn then
+        humanoidDiedConn:Disconnect()
+        humanoidDiedConn = nil
+    end
+
+    character = char
+    humanoid = char:WaitForChild("Humanoid")
+    hrp = char:WaitForChild("HumanoidRootPart")
+
+    -- ensure tool exists and resides in Backpack on respawn
+    pcall(function()
+        ensureToolExists()
+        if floatTool and floatTool.Parent ~= player.Backpack then
+            floatTool.Parent = player.Backpack
+        end
+    end)
+
+    if spawnToggle and lastPosition then
+        task.spawn(function()
+            task.wait(0.05)
+            if char and char.Parent and char:FindFirstChild("HumanoidRootPart") then
+                char.HumanoidRootPart.CFrame = CFrame.new(lastPosition) + Vector3.new(0, 1.5, 0)
+            end
+        end)
+    end
+
+    humanoidDiedConn = humanoid.Died:Connect(function()
+        if hrp then
+            lastPosition = hrp.Position
+        end
+        if spawnToggle and lastPosition then
+            createOrUpdateLocalSpawn(lastPosition)
+        end
+    end)
+end
+
+player.CharacterAdded:Connect(setupCharacter)
+if character then setupCharacter(character) end
+
+-- Button events
+btnUp.MouseButton1Down:Connect(function()
+    floating = true
+    upHeld = true
+    if hrp then targetY = hrp.Position.Y end
+    if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Physics) end
+    playFrozenIdle()
+    equipFloatTool() -- auto-equip animation tool when enabling float
+end)
+btnUp.MouseButton1Up:Connect(function()
+    upHeld = false
+end)
+
+btnDown.MouseButton1Down:Connect(function()
+    floating = true
+    downHeld = true
+    if hrp then targetY = hrp.Position.Y end
+    if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Physics) end
+    playFrozenIdle()
+    equipFloatTool() -- auto-equip animation tool when enabling float
+end)
+btnDown.MouseButton1Up:Connect(function()
+    downHeld = false
+end)
+
+btnDisable.MouseButton1Click:Connect(function()
+    floating = false
+    stopFrozenIdle()
+    unequipFloatTool() -- unequip animation when disabling float
+end)
+
+btnSpawnToggle.MouseButton1Click:Connect(function()
+    spawnToggle = not spawnToggle
+    if spawnToggle then
+        btnSpawnToggle.Text = "Spawn: ON"
+        local desiredPos = lastPosition or (hrp and hrp.Position) or nil
+        if desiredPos then
+            createOrUpdateLocalSpawn(desiredPos)
+        else
+            task.spawn(function()
+                task.wait(0.05)
+                if hrp then
+                    createOrUpdateLocalSpawn(hrp.Position)
+                end
+            end)
+        end
+    else
+        btnSpawnToggle.Text = "Spawn: OFF"
+        removeLocalSpawnAndRestore()
+    end
+end)
+
+-- Free-style toggle button
+btnFreeToggle.MouseButton1Click:Connect(function()
+    freeStyle = not freeStyle
+    if freeStyle then
+        btnFreeToggle.Text = "Free: ON"
+    else
+        btnFreeToggle.Text = "Free: OFF"
+    end
+end)
+
+-- Hide/Show toggle: hides all controls except this hide button so user can reveal again
+local controlsVisible = true
+hideBtn.MouseButton1Click:Connect(function()
+    controlsVisible = not controlsVisible
+    if controlsVisible then
+        hideBtn.Text = "Hide"
+    else
+        hideBtn.Text = "Show"
+    end
+    setControlsVisible(controlsVisible)
+end)
+
+-- Ensure initial ZIndex for all existing controls (for sibling ordering)
+for _, child in pairs(screenGui:GetChildren()) do
+    if child:IsA("GuiObject") then
+        child.ZIndex = child.ZIndex or 50
+    end
+end
