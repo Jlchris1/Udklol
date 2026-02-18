@@ -1,8 +1,5 @@
--- Devour Soul + Black Hole tools (LocalScript)
--- Place in StarterPlayerScripts (client).
--- Singularity: pulls ALL NPCs simultaneously to BH center, then they die.
--- Quick right-click: same but shorter travel time.
--- BH placement (left click) now has a smaller pull (20 studs) and does same post-pull death.
+-- Devour Soul + Black Hole (client LocalScript)
+-- Place in StarterPlayerScripts
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -146,7 +143,7 @@ local BLACKHOLE_TOOL_NAME = "Black Hole"
 
 local LIFT_STUDS = 25
 local DRAIN_INTERVAL = 0.01
-local DRAIN_PCT = 0.005 -- 0.5% per tick (kept for compatibility)
+local DRAIN_PCT = 0.005 -- 0.5% per tick (kept for backwards compatibility)
 local ALIGN_MAX_FORCE = 9e9
 local ALIGN_RESP = 1200
 local ALIGN_ORI_RESP = 1200
@@ -173,11 +170,11 @@ local SINGULARITY_ARRIVAL_KILL_DISTANCE = 3
 local SINGULARITY_HANDLE_LIFETIME = 10 -- seconds
 local QUICK_SINGULARITY_HANDLE_LIFETIME = 1
 
-local POST_PULL_DEATH_DELAY = 3 -- seconds after arrival before killing (shared)
+local POST_PULL_DEATH_DELAY = 3 -- wait this many seconds after pull arrival before killing (applies to singularity, devour, and click-BH pulls)
 
--- NEW: click-placement pull config (smaller)
+-- Click-placement BH small pull settings (user request)
 local CLICK_PULL_RADIUS = 20
-local CLICK_PULL_TRAVEL_TIME = 1.5
+local CLICK_PULL_TRAVEL_TIME = 1.0
 
 -- ===== Persistent BH setup =====
 local BHFolder = Workspace:FindFirstChild(BH_FOLDER_NAME)
@@ -690,7 +687,7 @@ local function startHPToggleLoop(humanoid, smallHP, interval, duration)
     end)
 end
 
--- Modified: placement kill should NOT attach NPCs immediately; additionally, DO a smaller coordinated pull when placing BH
+-- Small instant kill fallback (keeps previous placement behavior if no NPCs are pulled)
 local function clickBHInstantKillAt(tempBH)
     if not tempBH or not tempBH.Part then return end
     local pos = tempBH.Part.Position
@@ -700,7 +697,7 @@ local function clickBHInstantKillAt(tempBH)
             local hum = m:FindFirstChildOfClass("Humanoid")
             local hrp = m:FindFirstChild("HumanoidRootPart") or m:FindFirstChild("UpperTorso") or m:FindFirstChild("Torso")
             if hum and hrp and (hrp.Position - pos).Magnitude <= radius then
-                -- kill only; do NOT attach to the temporary BH (black hole placement cannot pick up NPCs instantly)
+                -- kill only; do NOT attach to the temporary BH (black hole placement cannot pick up NPCs)
                 pcall(function() hum.Health = 0 end)
                 startHPToggleLoop(hum, 0.0001, CLICK_KILL_HP_TOGGLE_PERIOD, CLICK_KILL_TOGGLE_DURATION)
             end
@@ -746,7 +743,7 @@ local function returnTempBHToCenter(tempBH, returnDelay)
     end)
 end
 
--- Pull multiple NPCs together to BH over `duration` seconds, then kill after POST_PULL_DEATH_DELAY and attach to persistent BH.
+-- Pull multiple NPCs together to BH over `duration` seconds, then kill after POST_PULL_DEATH_DELAY and attach to provided BH (afterKillAttachToBH table must contain Attachment field).
 local function pullMultipleNPCsToBH(models, bhPos, duration, afterKillAttachToBH)
     if not models or #models == 0 then return end
     duration = duration or 1
@@ -816,7 +813,7 @@ local function pullMultipleNPCsToBH(models, bhPos, duration, afterKillAttachToBH
         end
     end
 
-    -- upon arrival, schedule kill for each humanoid after POST_PULL_DEATH_DELAY, then switch aligns to persistent BH
+    -- upon arrival, schedule kill for each humanoid after POST_PULL_DEATH_DELAY, then switch aligns to provided BH attachment (if any)
     for _, rec in ipairs(records) do
         spawn(function()
             wait(POST_PULL_DEATH_DELAY)
@@ -930,7 +927,7 @@ local function wireBlackHoleTool(tool)
 
             -- ensure handle removed after a safe timeout
             spawn(function()
-                wait(math.max(SINGULARITY_HANDLE_LIFETIME, travelTime + 0.5))
+                wait(math.max(SINGULARITY_HANDLE_LIFETIME, travelTime + 0.5 + POST_PULL_DEATH_DELAY))
                 if singularityActiveHandleCreated then
                     removeTempHandleForTool(tool)
                     singularityActiveHandleCreated = false
@@ -975,7 +972,7 @@ local function wireBlackHoleTool(tool)
             -- run a single coordinated pull for all collected models
             spawn(function()
                 pullMultipleNPCsToBH(models, bhPos, travelTime or SINGULARITY_TRAVEL_TIME, { Attachment = BH_Attachment })
-                -- after travel finishes, schedule removal check
+                -- after travel finishes + post-death delay, schedule removal check
                 spawn(function()
                     wait(0.25 + POST_PULL_DEATH_DELAY)
                     destroySingularityHandleIfDone(pulledHumanoids)
@@ -1006,10 +1003,7 @@ local function wireBlackHoleTool(tool)
             tempBH.ToolRef = tool
             createTempHandleForTool(tool)
 
-            -- instant small-radius kill (same as before)
-            spawn(function() clickBHInstantKillAt(tempBH) end)
-
-            -- NEW: do a smaller coordinated pull of NPCs within CLICK_PULL_RADIUS (excluding those within immediate kill radius to avoid double actions)
+            -- Attempt to PULL nearby NPCs (CLICK_PULL_RADIUS) to this tempBH, then apply same POST_PULL_DEATH_DELAY kill
             spawn(function()
                 local models = {}
                 local seen = {}
@@ -1026,7 +1020,7 @@ local function wireBlackHoleTool(tool)
                             local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso") or findFallbackPartInModel(model)
                             if hrp and hum and hum.Health ~= nil then
                                 local d = (hrp.Position - placePos).Magnitude
-                                if d <= CLICK_PULL_RADIUS and d > 8 then -- >8 to avoid interfering with instant kills
+                                if d <= CLICK_PULL_RADIUS then
                                     table.insert(models, model)
                                     seen[model] = true
                                 end
@@ -1034,12 +1028,17 @@ local function wireBlackHoleTool(tool)
                         end
                     end
                 end
+
                 if #models > 0 then
-                    pullMultipleNPCsToBH(models, placePos, CLICK_PULL_TRAVEL_TIME, { Attachment = tempBH.Attachment })
+                    -- pull them to the temp BH (shorter/smaller pull)
+                    pullMultipleNPCsToBH(models, placePos, CLICK_PULL_TRAVEL_TIME, tempBH)
+                else
+                    -- fallback: perform older instant-kill behaviour for very-close NPCs
+                    clickBHInstantKillAt(tempBH)
                 end
             end)
 
-            -- still attach nearby world parts (unchanged)
+            -- Attach processed world parts (non-humanoid) to temp BH if in range
             spawn(function()
                 local radius = 80
                 for part, _ in pairs(processedParts) do
