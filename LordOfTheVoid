@@ -1,9 +1,11 @@
 -- Devourer of Souls + Black Hole tools (LocalScript)
 -- Place in StarterPlayerScripts (client).
--- Singularity: pulls ALL NPCs simultaneously to BH center, then they die after POST_PULL_KILL_DELAY (configurable).
--- Quick right-click: same but shorter travel time.
--- BH placement (left click) will pull NPCs within CLICK_KILL_RADIUS to the placed BH, set their Health to 0 at pull start,
--- hold/attach them to the placed BH, and preserve the visual attachments.
+-- Features:
+-- * "Devour Soul" renamed to "Devourer of Souls"
+-- * Persistent main black hole starts DISABLED
+-- * Click-placed black hole pulls dead NPC parts to the center and holds for 5s, then applies velocity 500 outward
+-- * Devourer of Souls will reset Humanoid health to 0 if Health is NaN/Inf, lift parts upward for 5s, then release
+-- * Devourer of Souls can target and click through walls/parts by scanning along the camera ray
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -62,7 +64,6 @@ local function isFiniteNumber(n)
     return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge
 end
 
--- ===== Devour-style safe handle helpers (tool.Handle created/destroyed; safe) =====
 local function createTempHandleForTool(tool)
     if not tool or not tool:IsA("Tool") then return nil end
     local existing = tool:FindFirstChild("Handle")
@@ -142,6 +143,27 @@ local function findNPCNearPosition(hitPos, snapRadius)
                 return m, hrp
             end
         end
+    end
+    return nil, nil
+end
+
+-- NEW: find humanoid along camera ray even if walls are between camera and target
+local function getHumanoidAlongScreenRay(screenPos, maxDistance, step, snapRadius)
+    if not Camera then Camera = Workspace.CurrentCamera end
+    maxDistance = maxDistance or 2000
+    step = step or 4
+    snapRadius = snapRadius or 8
+    local ray = Camera:ScreenPointToRay(screenPos.X, screenPos.Y)
+    local origin = ray.Origin
+    local dir = ray.Direction.Unit
+    local t = 0
+    while t <= maxDistance do
+        local samplePos = origin + dir * t
+        local hum, model = findHumanoidFromTargetOrPosition(nil, samplePos, snapRadius)
+        if hum and model then
+            return hum, model
+        end
+        t = t + step
     end
     return nil, nil
 end
@@ -285,13 +307,11 @@ local function initialScanAndForce()
     end
 end
 
--- If BH disabled, this will restore the parts previously processed.
 local function disablePersistentBH()
     persistentBHEnabled = false
     -- iterate processedParts and restore state
     for p, _ in pairs(processedParts) do
         if p and p.Parent then
-            -- restore collisions & mass/anchored state
             pcall(function() p.CanCollide = true end)
             pcall(function()
                 if initiallyMasslessParts[p] ~= nil then p.Massless = initiallyMasslessParts[p] end
@@ -299,33 +319,28 @@ local function disablePersistentBH()
             pcall(function()
                 if initiallyAnchoredParts[p] == false then p.Anchored = false end
             end)
-            -- destroy aligns/attachments/torque we created
             local ap = p:FindFirstChild("DevourBH_Align")
             if ap then pcall(function() ap:Destroy() end) end
             local att = p:FindFirstChild("DevourBH_Att_Part")
             if att then pcall(function() att:Destroy() end) end
-            -- destroy any torque or related attachments
             for _, c in ipairs(p:GetChildren()) do
                 if c:IsA("Torque") or (c:IsA("Attachment") and (c.Name:match("^TempBH_Torque_Att") or c.Name:match("^Sing_Torque_Att"))) then
                     pcall(function() c:Destroy() end)
                 end
             end
         end
-        -- remove tracking
         processedParts[p] = nil
         initiallyMasslessParts[p] = nil
         initiallyAnchoredParts[p] = nil
     end
 end
 
--- Re-enable persistent BH: simply turn flag on and scan the workspace again
 local function enablePersistentBH()
     persistentBHEnabled = true
     initialScanAndForce()
 end
 
 Workspace.DescendantAdded:Connect(function(v)
-    -- only process new parts if BH is enabled
     if not persistentBHEnabled then return end
     if v and v:IsA("BasePart") then
         if not v.Anchored
@@ -363,7 +378,6 @@ end)
 -- ===== NEW: persistent fling loop to force huge velocity on BH-controlled parts =====
 spawn(function()
     while true do
-        -- wait once per heartbeat
         local dt = RunService.Heartbeat:Wait()
         if persistentBHEnabled and BH_Attachment then
             local success, centerPos = pcall(function() return BH_Attachment.WorldPosition end)
@@ -374,7 +388,6 @@ spawn(function()
                         local dir = part.Position - centerPos
                         local vel
                         if dir.Magnitude <= 0.001 then
-                            -- fallback: push upward if exactly centered
                             vel = Vector3.new(0, BH_FLING_VELOCITY, 0)
                         else
                             vel = dir.Unit * BH_FLING_VELOCITY
@@ -592,25 +605,22 @@ local function wireDevourTool(tool)
     tool.Equipped:Connect(function(mouse)
         if not mouse then mouse = localPlayer:GetMouse() end
 
-        -- Desktop mouse click
+        -- Desktop mouse click (modified to click through walls using getHumanoidAlongScreenRay)
         mouseConn = mouse.Button1Down:Connect(function()
-            local target = mouse.Target
-            local hit = mouse.Hit and mouse.Hit.p
-            local hum, model = findHumanoidFromTargetOrPosition(target, hit, 8)
+            local screenPos = Vector2.new(mouse.X, mouse.Y)
+            local hum, model = getHumanoidAlongScreenRay(screenPos, 2000, 4, SNAP_RADIUS)
             if not hum or not model then return end
             if isPlayerCharacter(model) then return end
-            -- remove previous handle if clicking a different NPC
             if latestTargetModel and latestTargetModel ~= model then
                 removeTempHandleForTool(tool)
             end
             pcall(function() performDevourOn(hum, model, tool) end)
         end)
 
-        -- Touch handling: use InputBegan/InputChanged/InputEnded to detect taps (no joystick interference)
+        -- Touch handling: use InputBegan/InputChanged/InputEnded to detect taps; use ray scan for through-wall targeting
         touchBeganConn = UserInputService.InputBegan:Connect(function(input, processed)
             if processed then return end
             if input.UserInputType == Enum.UserInputType.Touch then
-                -- ignore touches starting inside left-bottom joystick region
                 local vs = Camera and Camera.ViewportSize or Vector2.new(1920,1080)
                 local joystickIgnoreSize = 220
                 if input.Position.X <= joystickIgnoreSize and input.Position.Y >= (vs.Y - joystickIgnoreSize) then
@@ -631,10 +641,9 @@ local function wireDevourTool(tool)
                 local data = touchState[input]
                 local duration = tick() - data.time
                 local moved = data.moved or 0
-                -- treat as tap only if short & little movement
                 if duration < 0.35 and moved < 24 and not processed then
-                    local worldPos, instance = screenPosToWorldPosition(input.Position)
-                    local hum, model = findHumanoidFromTargetOrPosition(instance, worldPos, 8)
+                    local screenPos = data.pos
+                    local hum, model = getHumanoidAlongScreenRay(screenPos, 2000, 4, SNAP_RADIUS)
                     if hum and model and not isPlayerCharacter(model) then
                         if latestTargetModel and latestTargetModel ~= model then
                             removeTempHandleForTool(tool)
@@ -652,7 +661,6 @@ local function wireDevourTool(tool)
         if touchBeganConn then touchBeganConn:Disconnect(); touchBeganConn = nil end
         if touchChangedConn then touchChangedConn:Disconnect(); touchChangedConn = nil end
         if touchEndedConn then touchEndedConn:Disconnect(); touchEndedConn = nil end
-        -- cleanup devour handle on unequip
         removeTempHandleForTool(tool)
     end)
 end
@@ -729,7 +737,6 @@ local function cleanupAnchorAttachments(storageTable, afterAttachToBH)
     end
     for _, a in ipairs(storageTable.attachments or {}) do pcall(function() if a and a.Parent then a:Destroy() end end) end
     for _, ao in ipairs(storageTable.orients or {}) do pcall(function() if ao and ao.Parent then ao:Destroy() end end) end
-    -- parts stay non-collidable (consistent with BH behavior)
 end
 
 local function startHPToggleLoop(humanoid, smallHP, interval, duration)
@@ -787,7 +794,6 @@ local function clickBHPullAndKillAt(tempBH)
     end
 
     if #records == 0 then
-        -- nothing to pull / kill
         return
     end
 
@@ -873,7 +879,6 @@ local function clickBHPullAndKillAt(tempBH)
     for _, part in ipairs(tempBH.AssignedParts) do
         pcall(function()
             if part and part.Parent and part:IsA("BasePart") then
-                -- destroy the AlignPosition/AlignOrientation/attachments we created to keep them attached
                 local ap = part:FindFirstChildWhichIsA("AlignPosition")
                 if ap then pcall(function() ap:Destroy() end) end
                 local ao = part:FindFirstChildWhichIsA("AlignOrientation")
@@ -881,7 +886,7 @@ local function clickBHPullAndKillAt(tempBH)
                 local att = part:FindFirstChild("Sing_Att_Part") or part:FindFirstChild("DevourBH_Att_Part")
                 if att then pcall(function() att:Destroy() end) end
 
-                p.CanCollide = true -- attempt to restore collisions for more believable fling (safe pcall)
+                pcall(function() part.CanCollide = true end)
                 if part.Position and tempBH.Part.Position then
                     local dir = part.Position - tempBH.Part.Position
                     local vel
@@ -899,7 +904,6 @@ local function clickBHPullAndKillAt(tempBH)
     end
 end
 
--- Keep old name around for compatibility but replace implementation with the pulling version
 local function clickBHInstantKillAt(tempBH)
     clickBHPullAndKillAt(tempBH)
 end
@@ -932,7 +936,6 @@ local function returnTempBHToCenter(tempBH, returnDelay)
             end
         end
 
-        -- cleanup handle on tool for this temp BH if set
         if tempBH.ToolRef then
             pcall(function() removeTempHandleForTool(tempBH.ToolRef) end)
         end
@@ -948,7 +951,6 @@ local function pullMultipleNPCsToBH(models, bhPos, duration, afterKillAttachToBH
     duration = duration or 1
     local records = {}
 
-    -- create anchor + storage for each model
     for _, model in ipairs(models) do
         if model and model:IsA("Model") and not isPlayerCharacter(model) then
             local hum = model:FindFirstChildOfClass("Humanoid")
@@ -968,7 +970,6 @@ local function pullMultipleNPCsToBH(models, bhPos, duration, afterKillAttachToBH
                 local storage = { parts = {}, attachments = {}, aligns = {}, orients = {} }
                 attachAllPartsToAnchor(model, anchor, storage)
 
-                -- mark parts as processed so persistent BH won't re-process them
                 for _, part in ipairs(storage.parts or {}) do
                     if part then processedParts[part] = true end
                 end
@@ -999,7 +1000,6 @@ local function pullMultipleNPCsToBH(models, bhPos, duration, afterKillAttachToBH
                     local targetPos = rec.startPos:Lerp(bhPos, eased)
                     rec.anchor.Position = targetPos
                 end
-                -- zero velocities on parts so they don't fight the aligns
                 for _, part in ipairs(rec.storage.parts or {}) do
                     pcall(function()
                         if part and part:IsA("BasePart") then
@@ -1012,7 +1012,6 @@ local function pullMultipleNPCsToBH(models, bhPos, duration, afterKillAttachToBH
         end
     end
 
-    -- upon arrival, WAIT POST_PULL_KILL_DELAY seconds, then kill each humanoid, start HP toggle, switch aligns to persistent BH
     spawn(function()
         wait(POST_PULL_KILL_DELAY)
         for _, rec in ipairs(records) do
@@ -1102,7 +1101,6 @@ local function wireBlackHoleTool(tool)
 
         local gui, singBtn = createSingularityButtonGUI()
 
-        -- singularity handle & tracking
         local singularityActiveHandleCreated = false
         local pulledHumanoids = {}
 
@@ -1124,7 +1122,6 @@ local function wireBlackHoleTool(tool)
             singularityActiveHandleCreated = true
             createTempHandleForTool(tool)
 
-            -- ensure handle removed after a safe timeout
             spawn(function()
                 wait(math.max(SINGULARITY_HANDLE_LIFETIME, travelTime + 0.5))
                 if singularityActiveHandleCreated then
@@ -1133,7 +1130,6 @@ local function wireBlackHoleTool(tool)
                 end
             end)
 
-            -- collect all eligible NPC models (unique)
             local models = {}
             local seen = {}
             for _, desc in ipairs(Workspace:GetDescendants()) do
@@ -1160,7 +1156,6 @@ local function wireBlackHoleTool(tool)
             end
 
             if #models == 0 then
-                -- nothing found -> remove handle immediately
                 if singularityActiveHandleCreated then
                     removeTempHandleForTool(tool)
                     singularityActiveHandleCreated = false
@@ -1168,10 +1163,8 @@ local function wireBlackHoleTool(tool)
                 return
             end
 
-            -- run a single coordinated pull for all collected models
             spawn(function()
                 pullMultipleNPCsToBH(models, bhPos, travelTime or SINGULARITY_TRAVEL_TIME, { Attachment = BH_Attachment })
-                -- after travel finishes, schedule removal check
                 spawn(function()
                     wait(0.25)
                     destroySingularityHandleIfDone(pulledHumanoids)
@@ -1183,13 +1176,11 @@ local function wireBlackHoleTool(tool)
             pcall(function() startSingularityWithTravel(SINGULARITY_TRAVEL_TIME) end)
         end)
 
-        -- Right-click quick pickup: perform quick pull (1s)
         local rightClickConn = nil
         rightClickConn = mouse.Button2Down:Connect(function()
             pcall(function() startSingularityWithTravel(QUICK_SINGULARITY_TRAVEL_TIME) end)
         end)
 
-        -- Placement handlers (mouse & touch) - improved tap detection
         local function handlePlacementAt(worldPos, clickedInstance)
             if not worldPos then return end
             local snapPL, plHRP = findPlayerNearPosition(worldPos, SNAP_RADIUS)
@@ -1202,7 +1193,6 @@ local function wireBlackHoleTool(tool)
             tempBH.ToolRef = tool
             createTempHandleForTool(tool)
 
-            -- NEW: pull NPCs into the placed BH and set their Health to 0 at pull start
             spawn(function() clickBHInstantKillAt(tempBH) end)
 
             spawn(function()
@@ -1251,7 +1241,7 @@ local function wireBlackHoleTool(tool)
                 local duration = tick() - data.time
                 local moved = data.moved or 0
                 if duration < 0.35 and moved < 24 and not processed then
-                    local worldPos, instance = screenPosToWorldPosition(input.Position)
+                    local worldPos, instance = screenPosToWorldPosition(data.pos)
                     handlePlacementAt(worldPos, instance)
                 end
                 touchState[input] = nil
@@ -1288,7 +1278,6 @@ end
 local function setupRefreshAndBHToggleGUI()
     local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
     if playerGui:FindFirstChild("Toolpack_Refresh_GUI") then
-        -- update toggle state if already present
         local gui = playerGui:FindFirstChild("Toolpack_Refresh_GUI")
         local toggle = gui:FindFirstChild("BHToggleBtn")
         if toggle then toggle.Text = persistentBHEnabled and "BH: On" or "BH: Off" end
@@ -1332,7 +1321,6 @@ local function setupRefreshAndBHToggleGUI()
             end
         end
         wait(0.05)
-        -- recreate and wire
         local function createDevourAndWire()
             local bp2 = localPlayer:FindFirstChildOfClass("Backpack")
             if not bp2 then return end
@@ -1385,7 +1373,6 @@ local function setupRefreshAndBHToggleGUI()
         createBHAndWire()
     end)
 
-    -- BH toggle button (right side, small on mobile)
     local toggleBtn = Instance.new("TextButton", screenGui)
     toggleBtn.Name = "BHToggleBtn"
     if UserInputService.TouchEnabled then
@@ -1467,7 +1454,6 @@ end
 
 -- ===== Initialize =====
 initialScanAndForce()
--- create and wire tools (if missing)
 do
     local bp = localPlayer:FindFirstChildOfClass("Backpack")
     if bp then
