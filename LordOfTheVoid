@@ -1,9 +1,9 @@
 -- Devour Soul + Black Hole tools (LocalScript)
 -- Place in StarterPlayerScripts (client).
--- Singularity: INSTANTLY teleports + kills all NPCs within SINGULARITY_RADIUS,
--- attaches their parts to the BH center for duration (10s main, 1s quick), then cleans up.
--- Left-click placement: kills NPCs in a small radius and IMMEDIATELY pulls every body part
--- of the corpses into the temporary BH (they travel with the temp BH back to center).
+-- Singularity: INSTANTLY attaches all NPC parts within SINGULARITY_RADIUS to the BH center
+-- so they are dragged in (no CFrame teleport). Main duration 10s, quick/right-click 1s.
+-- Left-click placement: kills NPCs in a small radius and attaches every corpse body part
+-- to the temporary BH so they are dragged to center with it.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -601,10 +601,12 @@ local function wireDevourTool(tool)
     end)
 end
 
--- ===== Black Hole / Singularity (attach all BaseParts) =====
-local function attachPartsDirectlyToBH(model)
-    -- Attach every BasePart of model directly to BH_Attachment (returns storage for cleanup)
-    if not model or not BH_Attachment then return nil end
+-- ===== Black Hole / Singularity (attach all BaseParts VIA ALIGN; NO CFRAME teleport) =====
+
+-- Attach every BasePart of model to the BH Attachment using Aligns (dragging behavior).
+-- Returns storage for cleanup/restoration.
+local function attachPartsToBHViaAlign(model, targetAttachment)
+    if not model or not targetAttachment then return nil end
     local storage = { parts = {}, attachments = {}, aligns = {}, orients = {}, torques = {} }
 
     for _, v in ipairs(model:GetDescendants()) do
@@ -619,12 +621,6 @@ local function attachPartsDirectlyToBH(model)
             stripBodyForces(v)
             pcall(function() v.CanCollide = false end)
 
-            -- teleport part instantly to BH center (small random jitter to avoid exact overlap)
-            pcall(function()
-                local jitter = Vector3.new((math.random()-0.5)*0.5, (math.random()-0.5)*0.5, (math.random()-0.5)*0.5)
-                v.CFrame = centerPart.CFrame * CFrame.new(jitter)
-            end)
-
             -- create attachment on the part
             local attPart = Instance.new("Attachment")
             attPart.Name = "Sing_Att_Part"
@@ -633,26 +629,28 @@ local function attachPartsDirectlyToBH(model)
             table.insert(storage.attachments, attPart)
             table.insert(storage.parts, v)
 
-            -- create align on the part pointing to BH_Attachment
+            -- create AlignPosition pointing to targetAttachment (BH_Attachment or TempBH_Att)
             local ap = Instance.new("AlignPosition")
             ap.Name = "Sing_Align"
             ap.Attachment0 = attPart
-            ap.Attachment1 = BH_Attachment
+            ap.Attachment1 = targetAttachment
             ap.MaxForce = ALIGN_MAX_FORCE
             ap.MaxVelocity = math.huge
-            ap.Responsiveness = 900
+            ap.Responsiveness = 1200 -- high responsiveness so drag looks immediate
             ap.Parent = v
             table.insert(storage.aligns, ap)
 
+            -- AlignOrientation
             local ao = Instance.new("AlignOrientation")
             ao.Name = "Sing_AlignOri"
             ao.Attachment0 = attPart
-            ao.Attachment1 = BH_Attachment
+            ao.Attachment1 = targetAttachment
             ao.MaxTorque = 9e9
-            ao.Responsiveness = 900
+            ao.Responsiveness = 1200
             ao.Parent = v
             table.insert(storage.orients, ao)
 
+            -- optional Torque to keep spinning effect
             local ok, Torque = pcall(function() return Instance.new("Torque") end)
             if ok and Torque then
                 local tAtt = Instance.new("Attachment", v)
@@ -723,136 +721,7 @@ local function startHPToggleLoop(humanoid, smallHP, interval, duration)
     end)
 end
 
--- Instant singularity: teleport+attach+kill all NPCs within SINGULARITY_RADIUS, keep attachments for `duration`
-local function doInstantSingularity(toolRef, duration)
-    duration = duration or SINGULARITY_DURATION
-    if not centerPart or not BH_Attachment then return end
-
-    local hadHandle = false
-    if toolRef then
-        createTempHandleForTool(toolRef)
-        hadHandle = true
-    end
-
-    -- collect unique NPC models within radius
-    local bhPos = centerPart.Position
-    local models = {}
-    local seen = {}
-
-    for _, desc in ipairs(Workspace:GetDescendants()) do
-        if desc and desc:IsA("Humanoid") then
-            local hum = desc
-            local model = hum.Parent
-            local node = model
-            while node and not node:IsA("Model") do
-                node = node.Parent
-            end
-            model = node or model
-
-            if model and model:IsA("Model") and not Players:GetPlayerFromCharacter(model) and not seen[model] then
-                local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso") or findFallbackPartInModel(model)
-                if hrp and hum and hum.Health ~= nil then
-                    local d = (hrp.Position - bhPos).Magnitude
-                    if d <= SINGULARITY_RADIUS then
-                        table.insert(models, { model = model, humanoid = hum })
-                        seen[model] = true
-                    end
-                end
-            end
-        end
-    end
-
-    if #models == 0 then
-        if hadHandle then removeTempHandleForTool(toolRef) end
-        return
-    end
-
-    -- For each model: attach all parts directly to BH, teleport them to center instantly, kill humanoid
-    local storages = {}
-    for _, entry in ipairs(models) do
-        local model = entry.model
-        local hum = entry.humanoid
-        if model and hum and hum.Parent then
-            local storage = attachPartsDirectlyToBH(model)
-            table.insert(storages, storage)
-            pcall(function() hum.Health = 0 end)
-            startHPToggleLoop(hum, 0.0001, SINGULARITY_HIT_TOGGLE_PERIOD, SINGULARITY_HIT_TOGGLE_DURATION)
-        end
-    end
-
-    -- schedule cleanup after duration: remove aligns/attachments and restore parts
-    spawn(function()
-        wait(duration)
-        for _, storage in ipairs(storages) do
-            pcall(function() cleanupStorageAndRestore(storage) end)
-        end
-        if hadHandle then removeTempHandleForTool(toolRef) end
-    end)
-end
-
--- ===== Black Hole Tool creation + wiring =====
-local function createBlackHoleTool()
-    local bp = localPlayer:FindFirstChildOfClass("Backpack")
-    if not bp then return nil end
-    local existing = bp:FindFirstChild(BLACKHOLE_TOOL_NAME) or (localPlayer.Character and localPlayer.Character:FindFirstChild(BLACKHOLE_TOOL_NAME))
-    if existing and existing:IsA("Tool") then return existing end
-
-    local tool = Instance.new("Tool")
-    tool.Name = BLACKHOLE_TOOL_NAME
-    tool.RequiresHandle = false
-    tool.CanBeDropped = false
-    tool.Parent = bp
-    return tool
-end
-
-local function createTemporaryBH(pos)
-    local folder = Workspace:FindFirstChild(BH_FOLDER_NAME) or Instance.new("Folder", Workspace)
-    folder.Name = BH_FOLDER_NAME
-    local part = Instance.new("Part", folder)
-    part.Name = "TempBH_Center"
-    part.Size = Vector3.new(1,1,1)
-    part.Transparency = 1
-    part.Anchored = true
-    part.CanCollide = false
-    part.Position = pos
-    local att = Instance.new("Attachment", part)
-    att.Name = "TempBH_Att"
-    return { Part = part, Attachment = att, AssignedParts = {}, ToolRef = nil }
-end
-
-local function isTouchDevice() return UserInputService.TouchEnabled end
-local function createSingularityButtonGUI()
-    local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
-    if playerGui:FindFirstChild("BH_Singularity_GUI") then
-        local g = playerGui:FindFirstChild("BH_Singularity_GUI")
-        return g, g:FindFirstChild("SingularityBtn")
-    end
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "BH_Singularity_GUI"
-    screenGui.ResetOnSpawn = false
-    screenGui.Parent = playerGui
-
-    local btn = Instance.new("TextButton", screenGui)
-    btn.Name = "SingularityBtn"
-    if isTouchDevice() then
-        btn.Size = UDim2.new(0,110,0,34)
-        btn.Position = UDim2.new(0, 8, 0, 70)
-        btn.TextSize = 18
-    else
-        btn.Size = UDim2.new(0,140,0,40)
-        btn.Position = UDim2.new(0, 8, 0, 100)
-        btn.TextSize = 20
-    end
-    btn.Text = "Singularity"
-    btn.Font = Enum.Font.SourceSansBold
-    btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.BorderSizePixel = 0
-    btn.AutoButtonColor = true
-    return screenGui, btn
-end
-
--- Modified: placement kill should attach every body part of the corpse to the temporary BH (instant pull)
+-- Modified: placement kill should attach every body part of the corpse to the temporary BH via Align (drag)
 local function clickBHInstantKillAt(tempBH)
     if not tempBH or not tempBH.Part or not tempBH.Attachment then return end
     local pos = tempBH.Part.Position
@@ -866,7 +735,7 @@ local function clickBHInstantKillAt(tempBH)
                 pcall(function() hum.Health = 0 end)
                 startHPToggleLoop(hum, 0.0001, CLICK_KILL_HP_TOGGLE_PERIOD, CLICK_KILL_TOGGLE_DURATION)
 
-                -- attach every BasePart of the corpse directly to the tempBH (instant pull)
+                -- attach every BasePart of the corpse to the tempBH.Attachment (so they are dragged in)
                 for _, part in ipairs(m:GetDescendants()) do
                     if part and part:IsA("BasePart") and not isPartPlayerCharacter(part) then
                         -- record initial states
@@ -876,12 +745,6 @@ local function clickBHInstantKillAt(tempBH)
                         pcall(function() part.Massless = true end)
                         stripBodyForces(part)
                         pcall(function() part.CanCollide = false end)
-
-                        -- teleport instantly to tempBH position (small jitter)
-                        pcall(function()
-                            local jitter = Vector3.new((math.random()-0.5)*0.5, (math.random()-0.5)*0.5, (math.random()-0.5)*0.5)
-                            part.CFrame = tempBH.Part.CFrame * CFrame.new(jitter)
-                        end)
 
                         -- create attachment on part
                         local attPart = Instance.new("Attachment")
@@ -896,7 +759,7 @@ local function clickBHInstantKillAt(tempBH)
                         ap.Attachment1 = tempBH.Attachment
                         ap.MaxForce = ALIGN_MAX_FORCE
                         ap.MaxVelocity = math.huge
-                        ap.Responsiveness = 900
+                        ap.Responsiveness = 1200
                         ap.Parent = part
 
                         -- AlignOrientation
@@ -905,7 +768,7 @@ local function clickBHInstantKillAt(tempBH)
                         ao.Attachment0 = attPart
                         ao.Attachment1 = tempBH.Attachment
                         ao.MaxTorque = 9e9
-                        ao.Responsiveness = 900
+                        ao.Responsiveness = 1200
                         ao.Parent = part
 
                         -- optional torque
@@ -989,6 +852,135 @@ local function returnTempBHToCenter(tempBH, returnDelay)
     end)
 end
 
+-- Instant singularity: attach all NPCs' parts to BH Attachment so they are immediately dragged in (no teleport)
+local function doInstantSingularity(toolRef, duration)
+    duration = duration or SINGULARITY_DURATION
+    if not centerPart or not BH_Attachment then return end
+
+    local hadHandle = false
+    if toolRef then
+        createTempHandleForTool(toolRef)
+        hadHandle = true
+    end
+
+    -- collect unique NPC models within radius
+    local bhPos = centerPart.Position
+    local models = {}
+    local seen = {}
+
+    for _, desc in ipairs(Workspace:GetDescendants()) do
+        if desc and desc:IsA("Humanoid") then
+            local hum = desc
+            local model = hum.Parent
+            local node = model
+            while node and not node:IsA("Model") do
+                node = node.Parent
+            end
+            model = node or model
+
+            if model and model:IsA("Model") and not Players:GetPlayerFromCharacter(model) and not seen[model] then
+                local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso") or findFallbackPartInModel(model)
+                if hrp and hum and hum.Health ~= nil then
+                    local d = (hrp.Position - bhPos).Magnitude
+                    if d <= SINGULARITY_RADIUS then
+                        table.insert(models, { model = model, humanoid = hum })
+                        seen[model] = true
+                    end
+                end
+            end
+        end
+    end
+
+    if #models == 0 then
+        if hadHandle then removeTempHandleForTool(toolRef) end
+        return
+    end
+
+    -- For each model: create Aligns to BH_Attachment (they will be dragged in by physics), then kill humanoid
+    local storages = {}
+    for _, entry in ipairs(models) do
+        local model = entry.model
+        local hum = entry.humanoid
+        if model and hum and hum.Parent then
+            local storage = attachPartsToBHViaAlign(model, BH_Attachment)
+            table.insert(storages, storage)
+            pcall(function() hum.Health = 0 end)
+            startHPToggleLoop(hum, 0.0001, SINGULARITY_HIT_TOGGLE_PERIOD, SINGULARITY_HIT_TOGGLE_DURATION)
+        end
+    end
+
+    -- schedule cleanup after duration: remove aligns/attachments and restore parts
+    spawn(function()
+        wait(duration)
+        for _, storage in ipairs(storages) do
+            pcall(function() cleanupStorageAndRestore(storage) end)
+        end
+        if hadHandle then removeTempHandleForTool(toolRef) end
+    end)
+end
+
+-- ===== Black Hole Tool creation + wiring =====
+local function createBlackHoleTool()
+    local bp = localPlayer:FindFirstChildOfClass("Backpack")
+    if not bp then return nil end
+    local existing = bp:FindFirstChild(BLACKHOLE_TOOL_NAME) or (localPlayer.Character and localPlayer.Character:FindFirstChild(BLACKHOLE_TOOL_NAME))
+    if existing and existing:IsA("Tool") then return existing end
+
+    local tool = Instance.new("Tool")
+    tool.Name = BLACKHOLE_TOOL_NAME
+    tool.RequiresHandle = false
+    tool.CanBeDropped = false
+    tool.Parent = bp
+    return tool
+end
+
+local function createTemporaryBH(pos)
+    local folder = Workspace:FindFirstChild(BH_FOLDER_NAME) or Instance.new("Folder", Workspace)
+    folder.Name = BH_FOLDER_NAME
+    local part = Instance.new("Part", folder)
+    part.Name = "TempBH_Center"
+    part.Size = Vector3.new(1,1,1)
+    part.Transparency = 1
+    part.Anchored = true
+    part.CanCollide = false
+    part.Position = pos
+    local att = Instance.new("Attachment", part)
+    att.Name = "TempBH_Att"
+    return { Part = part, Attachment = att, AssignedParts = {}, ToolRef = nil }
+end
+
+local function isTouchDevice() return UserInputService.TouchEnabled end
+local function createSingularityButtonGUI()
+    local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
+    if playerGui:FindFirstChild("BH_Singularity_GUI") then
+        local g = playerGui:FindFirstChild("BH_Singularity_GUI")
+        return g, g:FindFirstChild("SingularityBtn")
+    end
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "BH_Singularity_GUI"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = playerGui
+
+    local btn = Instance.new("TextButton", screenGui)
+    btn.Name = "SingularityBtn"
+    if isTouchDevice() then
+        btn.Size = UDim2.new(0,110,0,34)
+        btn.Position = UDim2.new(0, 8, 0, 70)
+        btn.TextSize = 18
+    else
+        btn.Size = UDim2.new(0,140,0,40)
+        btn.Position = UDim2.new(0, 8, 0, 100)
+        btn.TextSize = 20
+    end
+    btn.Text = "Singularity"
+    btn.Font = Enum.Font.SourceSansBold
+    btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.BorderSizePixel = 0
+    btn.AutoButtonColor = true
+    return screenGui, btn
+end
+
 local function wireBlackHoleTool(tool)
     if not tool or not tool:IsA("Tool") then return end
     local equippedConns = {}
@@ -997,12 +989,12 @@ local function wireBlackHoleTool(tool)
 
         local gui, singBtn = createSingularityButtonGUI()
 
-        -- Singularity activation: instant
+        -- Singularity activation: attach all NPC parts to BH (they will be dragged in)
         singBtn.MouseButton1Click:Connect(function()
             pcall(function() doInstantSingularity(tool, SINGULARITY_DURATION) end)
         end)
 
-        -- Right-click quick pickup: instant but short duration
+        -- Right-click quick pickup: attach all NPC parts to BH for short duration
         local rightClickConn = nil
         rightClickConn = mouse.Button2Down:Connect(function()
             pcall(function() doInstantSingularity(tool, QUICK_SINGULARITY_DURATION) end)
@@ -1021,7 +1013,7 @@ local function wireBlackHoleTool(tool)
             tempBH.ToolRef = tool
             createTempHandleForTool(tool)
 
-            -- placement: kill NPCs in radius and attach every body part of the corpses to tempBH (instant pull)
+            -- placement: kill NPCs in radius and attach every body part of the corpses to tempBH (drag)
             spawn(function() clickBHInstantKillAt(tempBH) end)
 
             -- also pull nearby processedParts (non-NPC parts) into tempBH (existing behavior)
