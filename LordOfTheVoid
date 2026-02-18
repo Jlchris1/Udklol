@@ -2,6 +2,8 @@
 -- Place in StarterPlayerScripts (client).
 -- Singularity: INSTANTLY teleports + kills all NPCs within SINGULARITY_RADIUS,
 -- attaches their parts to the BH center for duration (10s main, 1s quick), then cleans up.
+-- Left-click placement: kills NPCs in a small radius and IMMEDIATELY pulls every body part
+-- of the corpses into the temporary BH (they travel with the temp BH back to center).
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -694,7 +696,6 @@ local function cleanupStorageAndRestore(storage)
             pcall(function() if initiallyAnchoredParts[p] ~= nil then p.Anchored = initiallyAnchoredParts[p] end end)
         end
         processedParts[p] = nil
-        -- clear recorded initial states (optional)
         initiallyMasslessParts[p] = nil
         initiallyAnchoredParts[p] = nil
     end
@@ -774,9 +775,7 @@ local function doInstantSingularity(toolRef, duration)
         if model and hum and hum.Parent then
             local storage = attachPartsDirectlyToBH(model)
             table.insert(storages, storage)
-            -- kill instantly
             pcall(function() hum.Health = 0 end)
-            -- optionally start HP toggle loop if you want the previous toggle behavior (keeps being dead)
             startHPToggleLoop(hum, 0.0001, SINGULARITY_HIT_TOGGLE_PERIOD, SINGULARITY_HIT_TOGGLE_DURATION)
         end
     end
@@ -853,8 +852,9 @@ local function createSingularityButtonGUI()
     return screenGui, btn
 end
 
+-- Modified: placement kill should attach every body part of the corpse to the temporary BH (instant pull)
 local function clickBHInstantKillAt(tempBH)
-    if not tempBH or not tempBH.Part then return end
+    if not tempBH or not tempBH.Part or not tempBH.Attachment then return end
     local pos = tempBH.Part.Position
     local radius = 8
     for _, m in ipairs(Workspace:GetChildren()) do
@@ -862,9 +862,69 @@ local function clickBHInstantKillAt(tempBH)
             local hum = m:FindFirstChildOfClass("Humanoid")
             local hrp = m:FindFirstChild("HumanoidRootPart") or m:FindFirstChild("UpperTorso") or m:FindFirstChild("Torso")
             if hum and hrp and (hrp.Position - pos).Magnitude <= radius then
-                -- kill only; do NOT attach to the temporary BH (black hole placement cannot pick up NPCs)
+                -- kill first
                 pcall(function() hum.Health = 0 end)
                 startHPToggleLoop(hum, 0.0001, CLICK_KILL_HP_TOGGLE_PERIOD, CLICK_KILL_TOGGLE_DURATION)
+
+                -- attach every BasePart of the corpse directly to the tempBH (instant pull)
+                for _, part in ipairs(m:GetDescendants()) do
+                    if part and part:IsA("BasePart") and not isPartPlayerCharacter(part) then
+                        -- record initial states
+                        if initiallyAnchoredParts[part] == nil then initiallyAnchoredParts[part] = part.Anchored end
+                        if initiallyMasslessParts[part] == nil then pcall(function() initiallyMasslessParts[part] = part.Massless end) end
+
+                        pcall(function() part.Massless = true end)
+                        stripBodyForces(part)
+                        pcall(function() part.CanCollide = false end)
+
+                        -- teleport instantly to tempBH position (small jitter)
+                        pcall(function()
+                            local jitter = Vector3.new((math.random()-0.5)*0.5, (math.random()-0.5)*0.5, (math.random()-0.5)*0.5)
+                            part.CFrame = tempBH.Part.CFrame * CFrame.new(jitter)
+                        end)
+
+                        -- create attachment on part
+                        local attPart = Instance.new("Attachment")
+                        attPart.Name = "TempBH_Att_Part"
+                        attPart.Parent = part
+                        pcall(function() attPart.WorldCFrame = part.CFrame end)
+
+                        -- create AlignPosition pointing to tempBH.Attachment
+                        local ap = Instance.new("AlignPosition")
+                        ap.Name = "TempBH_Align"
+                        ap.Attachment0 = attPart
+                        ap.Attachment1 = tempBH.Attachment
+                        ap.MaxForce = ALIGN_MAX_FORCE
+                        ap.MaxVelocity = math.huge
+                        ap.Responsiveness = 900
+                        ap.Parent = part
+
+                        -- AlignOrientation
+                        local ao = Instance.new("AlignOrientation")
+                        ao.Name = "TempBH_AlignOri"
+                        ao.Attachment0 = attPart
+                        ao.Attachment1 = tempBH.Attachment
+                        ao.MaxTorque = 9e9
+                        ao.Responsiveness = 900
+                        ao.Parent = part
+
+                        -- optional torque
+                        local ok, Torque = pcall(function() return Instance.new("Torque") end)
+                        if ok and Torque then
+                            local tAtt = Instance.new("Attachment", part)
+                            tAtt.Name = "TempBH_Torque_Att"
+                            Torque.Attachment0 = tAtt
+                            Torque.Parent = part
+                            Torque.Torque = BH_TORQUE
+                        else
+                            pcall(function() part.AssemblyAngularVelocity = Vector3.new(0, 40, 0) end)
+                        end
+
+                        -- mark as processed & add to tempBH AssignedParts
+                        processedParts[part] = true
+                        table.insert(tempBH.AssignedParts, part)
+                    end
+                end
             end
         end
     end
@@ -890,10 +950,31 @@ local function returnTempBHToCenter(tempBH, returnDelay)
 
         for _, p in ipairs(tempBH.AssignedParts) do
             if p and p.Parent then
-                local ap = p:FindFirstChildWhichIsA("AlignPosition")
+                -- find the align we created and point it to the persistent BH attachment
+                local ap = nil
+                for _, child in ipairs(p:GetChildren()) do
+                    if child:IsA("AlignPosition") and (child.Name == "TempBH_Align" or child.Name == "Sing_Align" or child.Name == "DevourBH_Align") then
+                        ap = child
+                        break
+                    end
+                end
                 if ap then
                     pcall(function() ap.Attachment1 = BH_Attachment end)
                     p.CanCollide = false
+                else
+                    -- fallback: create a new AlignPosition to BH_Attachment
+                    pcall(function()
+                        local att = p:FindFirstChildWhichIsA("Attachment")
+                        if att then
+                            local nap = Instance.new("AlignPosition")
+                            nap.Attachment0 = att
+                            nap.Attachment1 = BH_Attachment
+                            nap.MaxForce = ALIGN_MAX_FORCE
+                            nap.MaxVelocity = math.huge
+                            nap.Responsiveness = 900
+                            nap.Parent = p
+                        end
+                    end)
                 end
             end
         end
@@ -940,9 +1021,10 @@ local function wireBlackHoleTool(tool)
             tempBH.ToolRef = tool
             createTempHandleForTool(tool)
 
-            -- placement kill (NO attachment of NPCs)
+            -- placement: kill NPCs in radius and attach every body part of the corpses to tempBH (instant pull)
             spawn(function() clickBHInstantKillAt(tempBH) end)
 
+            -- also pull nearby processedParts (non-NPC parts) into tempBH (existing behavior)
             spawn(function()
                 local radius = 80
                 for part, _ in pairs(processedParts) do
