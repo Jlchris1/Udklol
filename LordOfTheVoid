@@ -180,6 +180,9 @@ local CLICK_KILL_RADIUS = 30
 local CLICK_PULL_DURATION = 3 -- how long to pull NPCs to the placed BH
 local CLICK_POST_ARRIVAL_DELAY = 0.15 -- delay for anchor cleanup after attachments switched
 
+-- ===== FLING CONFIG (ADDED) =====
+local BH_FLING_VELOCITY = 1e6 -- magnitude used to force part velocity for fling effect
+
 -- ===== Persistent BH setup =====
 local BHFolder = Workspace:FindFirstChild(BH_FOLDER_NAME)
 if not BHFolder then
@@ -348,6 +351,34 @@ spawn(function()
         RunService.Heartbeat:Wait()
     end
 end)
+
+-- ===== NEW: persistent fling loop to force huge velocity on BH-controlled parts =====
+spawn(function()
+    while true do
+        -- wait once per heartbeat
+        local dt = RunService.Heartbeat:Wait()
+        if persistentBHEnabled and BH_Attachment then
+            local success, centerPos = pcall(function() return BH_Attachment.WorldPosition end)
+            if not success or not centerPos then centerPos = centerPart.Position end
+            for part, _ in pairs(processedParts) do
+                if part and part.Parent and part:IsA("BasePart") and not part.Anchored then
+                    pcall(function()
+                        local dir = part.Position - centerPos
+                        local vel
+                        if dir.Magnitude <= 0.001 then
+                            -- fallback: push upward if exactly centered
+                            vel = Vector3.new(0, BH_FLING_VELOCITY, 0)
+                        else
+                            vel = dir.Unit * BH_FLING_VELOCITY
+                        end
+                        part.AssemblyLinearVelocity = vel
+                    end)
+                end
+            end
+        end
+    end
+end)
+-- ===== end fling additions =====
 
 -- ===== Devour Tool (uses Devour-style handle) =====
 local function createDevourTool()
