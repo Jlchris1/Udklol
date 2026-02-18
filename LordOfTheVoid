@@ -1,4 +1,4 @@
--- Devour Soul + Black Hole tools (LocalScript)
+-- Devourer of Souls + Black Hole tools (LocalScript)
 -- Place in StarterPlayerScripts (client).
 -- Singularity: pulls ALL NPCs simultaneously to BH center, then they die after POST_PULL_KILL_DELAY (configurable).
 -- Quick right-click: same but shorter travel time.
@@ -55,6 +55,11 @@ local function screenPosToWorldPosition(screenPos)
     else
         return ray.Origin + ray.Direction * 100, nil
     end
+end
+
+-- finite check helper (detect NaN / inf)
+local function isFiniteNumber(n)
+    return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge
 end
 
 -- ===== Devour-style safe handle helpers (tool.Handle created/destroyed; safe) =====
@@ -142,7 +147,7 @@ local function findNPCNearPosition(hitPos, snapRadius)
 end
 
 -- ===== Config =====
-local DEVOUR_NAME = "Devour Soul"
+local DEVOUR_NAME = "Devourer of Souls"
 local BLACKHOLE_TOOL_NAME = "Black Hole"
 
 local LIFT_STUDS = 25
@@ -182,6 +187,8 @@ local CLICK_POST_ARRIVAL_DELAY = 0.15 -- delay for anchor cleanup after attachme
 
 -- ===== FLING CONFIG (ADDED) =====
 local BH_FLING_VELOCITY = 1e6 -- magnitude used to force part velocity for fling effect
+local CLICK_HOLD_AFTER_ARRIVAL = 5 -- hold pulled/dead parts in placed BH for 5 seconds before applying velocity
+local CLICK_RELEASE_VELOCITY = 500 -- velocity magnitude to apply to parts after the hold
 
 -- ===== Persistent BH setup =====
 local BHFolder = Workspace:FindFirstChild(BH_FOLDER_NAME)
@@ -214,7 +221,8 @@ local initiallyMasslessParts = {}     -- initiallyMasslessParts[part] = boolean 
 local initiallyAnchoredParts = {}     -- initiallyAnchoredParts[part] = boolean or nil
 
 -- persistent BH enabled flag (toggleable)
-local persistentBHEnabled = true
+-- START DISABLED to avoid issues on launch
+local persistentBHEnabled = false
 
 -- ForcePartToBH (persistent attract) — respects persistentBHEnabled
 local function ForcePartToBH(v)
@@ -476,13 +484,21 @@ local function performDevourOn(humanoid, model, tool)
     alignOri.Name = "Devour_AlignOri"; alignOri.Attachment0 = attHRP; alignOri.Attachment1 = attAnchor
     alignOri.MaxTorque = 9e9; alignOri.Responsiveness = ALIGN_ORI_RESP
 
-    -- compute timed lift to reach death
+    -- check for NaN / Infinity health
     local maxH = (humanoid and humanoid.MaxHealth and humanoid.MaxHealth > 0) and humanoid.MaxHealth or 1
     local currH = (humanoid and humanoid.Health) and humanoid.Health or maxH
+    local specialHP = not (isFiniteNumber(currH) and isFiniteNumber(maxH))
+
+    if specialHP then
+        -- Reset to 0 immediately and set liftTime to 5 seconds; we'll release without exploding afterwards
+        pcall(function() humanoid.Health = 0 end)
+    end
+
+    -- compute timed lift to reach death (unless specialHP override)
     local dmgPerSec = (maxH * DRAIN_PCT) / math.max(DRAIN_INTERVAL, 1e-6)
     local timeToDie = (dmgPerSec > 0) and (currH / dmgPerSec) or 0.1
     if timeToDie <= 0.001 then timeToDie = 0.1 end
-    local liftTime = timeToDie
+    local liftTime = specialHP and 5 or timeToDie
 
     local startY = anchor.Position.Y
     local targetY = startY + LIFT_STUDS
@@ -499,7 +515,10 @@ local function performDevourOn(humanoid, model, tool)
             if attAnchor and attAnchor.Parent then attAnchor:Destroy() end
             if anchor and anchor.Parent then anchor:Destroy() end
         end)
-        pcall(function() explodeCharacterParts_visual(model) end)
+        -- explosion only if NOT specialHP: keep previous explosion behavior for normal kills
+        if not specialHP then
+            pcall(function() explodeCharacterParts_visual(model) end)
+        end
 
         -- only remove the tool handle if this was the latestTargetModel (Devour pattern)
         if latestTargetModel == model then
@@ -542,19 +561,22 @@ local function performDevourOn(humanoid, model, tool)
             end
         end)
 
-        drainAccum = drainAccum + dt
-        while drainAccum >= DRAIN_INTERVAL do
-            drainAccum = drainAccum - DRAIN_INTERVAL
-            local dmg = maxH * DRAIN_PCT
-            pcall(function()
-                if humanoid and humanoid.Health > 0 then
-                    humanoid.Health = clamp(humanoid.Health - dmg, 0, humanoid.MaxHealth)
-                end
-            end)
-            if humanoid.Health <= 0 then break end
+        if not specialHP then
+            drainAccum = drainAccum + dt
+            while drainAccum >= DRAIN_INTERVAL do
+                drainAccum = drainAccum - DRAIN_INTERVAL
+                local dmg = maxH * DRAIN_PCT
+                pcall(function()
+                    if humanoid and humanoid.Health > 0 then
+                        humanoid.Health = clamp(humanoid.Health - dmg, 0, humanoid.MaxHealth)
+                    end
+                end)
+                if humanoid.Health <= 0 then break end
+            end
         end
 
         if t >= 1 then
+            -- For specialHP we want to lift for 5s then release (no explosion) — doCleanupAndExplode will release (without explode)
             doCleanupAndExplode()
             conn:Disconnect()
             return
@@ -842,6 +864,38 @@ local function clickBHPullAndKillAt(tempBH)
     wait(CLICK_POST_ARRIVAL_DELAY)
     for _, rec in ipairs(records) do
         pcall(function() if rec.anchor and rec.anchor.Parent then rec.anchor:Destroy() end end)
+    end
+
+    -- NEW: hold the attached parts in the placed BH for CLICK_HOLD_AFTER_ARRIVAL seconds
+    wait(CLICK_HOLD_AFTER_ARRIVAL)
+
+    -- After hold, release parts with velocity CLICK_RELEASE_VELOCITY outward from BH center
+    for _, part in ipairs(tempBH.AssignedParts) do
+        pcall(function()
+            if part and part.Parent and part:IsA("BasePart") then
+                -- destroy the AlignPosition/AlignOrientation/attachments we created to keep them attached
+                local ap = part:FindFirstChildWhichIsA("AlignPosition")
+                if ap then pcall(function() ap:Destroy() end) end
+                local ao = part:FindFirstChildWhichIsA("AlignOrientation")
+                if ao then pcall(function() ao:Destroy() end) end
+                local att = part:FindFirstChild("Sing_Att_Part") or part:FindFirstChild("DevourBH_Att_Part")
+                if att then pcall(function() att:Destroy() end) end
+
+                p.CanCollide = true -- attempt to restore collisions for more believable fling (safe pcall)
+                if part.Position and tempBH.Part.Position then
+                    local dir = part.Position - tempBH.Part.Position
+                    local vel
+                    if dir.Magnitude <= 0.001 then
+                        vel = Vector3.new(0, CLICK_RELEASE_VELOCITY, 0)
+                    else
+                        vel = dir.Unit * CLICK_RELEASE_VELOCITY
+                    end
+                    part.AssemblyLinearVelocity = vel
+                else
+                    part.AssemblyLinearVelocity = Vector3.new(0, CLICK_RELEASE_VELOCITY, 0)
+                end
+            end
+        end)
     end
 end
 
@@ -1442,4 +1496,4 @@ end
 setupRefreshAndBHToggleGUI()
 ensureToolsOnRespawn()
 
-print("Devour Soul + Black Hole client tools loaded for", localPlayer.Name)
+print(DEVOUR_NAME, "+ Black Hole client tools loaded for", localPlayer.Name)
