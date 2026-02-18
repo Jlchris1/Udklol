@@ -1,8 +1,8 @@
 -- Devour Soul + Black Hole tools (LocalScript)
 -- Place in StarterPlayerScripts (client).
--- Singularity: pulls ALL NPCs simultaneously to BH center, then they die AFTER 3 seconds.
--- Quick right-click: same but shorter travel time (1s).
--- BH placement (left click) will pull NPCs within 30 studs, attach them to the temporary BH, then they are killed INSTANTLY upon arrival.
+-- Singularity: pulls ALL NPCs simultaneously to BH center, then they die after 3 seconds.
+-- Quick right-click: same but shorter travel time.
+-- BH placement (left click) will pull NPCs within 30 studs to the placed BH, hold them for 3s, then kill.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -15,7 +15,7 @@ if not localPlayer then return end
 local Camera = Workspace.CurrentCamera
 
 -- ===== Helpers =====
-local function clamp(v,a,b) if v < a then return a elseif v > b then return b end return v end
+local function clamp(v,a,b) if v < a then return a elseif v > b then return v end return v end
 local function isPlayerCharacter(model) return model and Players:GetPlayerFromCharacter(model) ~= nil end
 local function isNPC(character)
     if not character or not character:IsA("Model") then return false end
@@ -165,7 +165,7 @@ local TEMP_BH_LIFETIME = 1
 local CLICK_KILL_HP_TOGGLE_PERIOD = 0.3
 local CLICK_KILL_TOGGLE_DURATION = 5
 local SINGULARITY_RADIUS = 200
-local SINGULARITY_TRAVEL_TIME = 3        -- pull time before arrival for Singularity (3s travel)
+local SINGULARITY_TRAVEL_TIME = 3        -- pull time before death (3s) (unchanged)
 local QUICK_SINGULARITY_TRAVEL_TIME = 1  -- right-click quick pull time (1s)
 local SINGULARITY_HIT_TOGGLE_PERIOD = 0.5
 local SINGULARITY_HIT_TOGGLE_DURATION = 5
@@ -173,10 +173,10 @@ local SINGULARITY_ARRIVAL_KILL_DISTANCE = 3
 local SINGULARITY_HANDLE_LIFETIME = 10 -- seconds
 local QUICK_SINGULARITY_HANDLE_LIFETIME = 1
 
--- New: click-BH NPC pull radius (user requested 30 studs)
-local CLICK_BH_NPC_RADIUS = 30
--- After arrival, wait this many seconds before killing (used by Singularity)
-local POST_PULL_KILL_DELAY = 3
+-- NEW: timing & click radius configuration
+local POST_PULL_KILL_DELAY = 3 -- seconds after arrival before setting Health = 0
+local CLICK_KILL_RADIUS = 30
+local CLICK_PULL_DURATION = 3 -- how long to pull NPCs to the placed BH
 
 -- ===== Persistent BH setup =====
 local BHFolder = Workspace:FindFirstChild(BH_FOLDER_NAME)
@@ -699,10 +699,161 @@ local function startHPToggleLoop(humanoid, smallHP, interval, duration)
     end)
 end
 
--- Pull multiple NPCs together to BH over `duration` seconds,
--- then ATTACH to provided BH and KILL after `killDelay` seconds.
--- killDelay = 0 => kill immediately on arrival.
-local function pullMultipleNPCsToBH(models, bhPos, duration, afterKillAttachToBH, killDelay)
+-- Modified: placement kill should pull NPCs in to the placed BH (radius 30), hold them for CLICK_PULL_DURATION,
+-- then after POST_PULL_KILL_DELAY set Health to 0 and attach parts to the placed BH for the temp lifetime.
+local function clickBHPullAndKillAt(tempBH)
+    if not tempBH or not tempBH.Part then return end
+    local pos = tempBH.Part.Position
+    local radius = CLICK_KILL_RADIUS
+
+    -- gather NPC models within radius
+    local records = {}
+    local seen = {}
+    for _, desc in ipairs(Workspace:GetDescendants()) do
+        if desc and desc:IsA("Humanoid") then
+            local hum = desc
+            local model = hum.Parent
+            local node = model
+            while node and not node:IsA("Model") do
+                node = node.Parent
+            end
+            model = node or model
+            if model and model:IsA("Model") and not Players:GetPlayerFromCharacter(model) and not seen[model] then
+                local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso") or findFallbackPartInModel(model)
+                if hrp and hum and hum.Health ~= nil then
+                    local d = (hrp.Position - pos).Magnitude
+                    if d <= radius then
+                        table.insert(records, { model = model, hum = hum, hrp = hrp, startPos = hrp.Position })
+                        seen[model] = true
+                    end
+                end
+            end
+        end
+    end
+
+    if #records == 0 then
+        -- nothing to pull / kill
+        return
+    end
+
+    -- for each model create anchor + attach everything
+    for _, rec in ipairs(records) do
+        local anchor = Instance.new("Part")
+        anchor.Name = "TempBH_ClickAnchor"
+        anchor.Size = Vector3.new(1,1,1)
+        anchor.Transparency = 1
+        anchor.Anchored = true
+        anchor.CanCollide = false
+        anchor.Massless = true
+        anchor.Parent = Workspace
+        anchor.Position = rec.startPos
+
+        rec.anchor = anchor
+        rec.storage = { parts = {}, attachments = {}, aligns = {}, orients = {} }
+        attachAllPartsToAnchor(rec.model, anchor, rec.storage)
+
+        -- mark parts as processed so persistent BH won't re-process them
+        for _, part in ipairs(rec.storage.parts or {}) do
+            if part then processedParts[part] = true end
+            -- also track so they can be carried by the tempBH
+            table.insert(tempBH.AssignedParts, part)
+        end
+    end
+
+    -- animate anchors toward tempBH over CLICK_PULL_DURATION seconds
+    local elapsed = 0
+    while elapsed < CLICK_PULL_DURATION do
+        local dt = RunService.Heartbeat:Wait()
+        elapsed = elapsed + dt
+        local alpha = clamp(elapsed / math.max(CLICK_PULL_DURATION, 1e-6), 0, 1)
+        local eased = alpha < 0.5 and 8 * alpha^4 or 1 - (-2 * alpha + 2)^4 / 2
+        for _, rec in ipairs(records) do
+            pcall(function()
+                if rec.anchor and rec.startPos then
+                    local targetPos = rec.startPos:Lerp(tempBH.Part.Position, eased)
+                    rec.anchor.Position = targetPos
+                end
+                for _, part in ipairs(rec.storage.parts or {}) do
+                    pcall(function()
+                        if part and part:IsA("BasePart") then
+                            part.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                            part.AssemblyAngularVelocity = Vector3.new(0,0,0)
+                        end
+                    end)
+                end
+            end)
+        end
+    end
+
+    -- after arrival, wait POST_PULL_KILL_DELAY seconds, then kill humanoids and switch aligns to tempBH
+    spawn(function()
+        wait(POST_PULL_KILL_DELAY)
+        for _, rec in ipairs(records) do
+            pcall(function()
+                if rec.hum and rec.hum.Parent then
+                    rec.hum.Health = 0
+                    -- keep toggle loop to preserve some "death flicker" behavior if you want it
+                    startHPToggleLoop(rec.hum, 0.0001, CLICK_KILL_HP_TOGGLE_PERIOD, CLICK_KILL_TOGGLE_DURATION)
+                end
+                if rec.storage then
+                    -- attach their aligns to the temp BH so parts stay attached to the placed BH part
+                    cleanupAnchorAttachments(rec.storage, { Attachment = tempBH.Attachment })
+                end
+            end)
+        end
+        wait(0.15)
+        -- destroy anchors
+        for _, rec in ipairs(records) do
+            pcall(function() if rec.anchor and rec.anchor.Parent then rec.anchor:Destroy() end end)
+        end
+    end)
+end
+
+-- Keep old name around for compatibility but replace implementation with the pulling version
+local function clickBHInstantKillAt(tempBH)
+    clickBHPullAndKillAt(tempBH)
+end
+
+local function returnTempBHToCenter(tempBH, returnDelay)
+    spawn(function()
+        wait(returnDelay or TEMP_BH_LIFETIME)
+        if not tempBH or not tempBH.Part then return end
+        local targetPos = centerPart.Position
+        local t = 0
+        local dur = 0.25
+        local startPos = tempBH.Part.Position
+        while t < dur do
+            local alpha = t/dur
+            tempBH.Part.Position = startPos:Lerp(targetPos, alpha)
+            if tempBH.Attachment then tempBH.Attachment.WorldPosition = tempBH.Part.Position end
+            RunService.Heartbeat:Wait()
+            t = t + RunService.Heartbeat:Wait()
+        end
+        tempBH.Part.Position = targetPos
+        if tempBH.Attachment then tempBH.Attachment.WorldPosition = targetPos end
+
+        for _, p in ipairs(tempBH.AssignedParts) do
+            if p and p.Parent then
+                local ap = p:FindFirstChildWhichIsA("AlignPosition")
+                if ap then
+                    pcall(function() ap.Attachment1 = BH_Attachment end)
+                    p.CanCollide = false
+                end
+            end
+        end
+
+        -- cleanup handle on tool for this temp BH if set
+        if tempBH.ToolRef then
+            pcall(function() removeTempHandleForTool(tempBH.ToolRef) end)
+        end
+
+        wait(0.35)
+        if tempBH and tempBH.Part and tempBH.Part.Parent then pcall(function() tempBH.Part:Destroy() end) end
+    end)
+end
+
+-- Pull multiple NPCs together to BH over `duration` seconds, then wait POST_PULL_KILL_DELAY and kill and attach to persistent BH.
+local function pullMultipleNPCsToBH(models, bhPos, duration, afterKillAttachToBH)
     if not models or #models == 0 then return end
     duration = duration or 1
     local records = {}
@@ -771,36 +922,24 @@ local function pullMultipleNPCsToBH(models, bhPos, duration, afterKillAttachToBH
         end
     end
 
-    -- upon arrival, ATTACH each model's aligns to afterKillAttachToBH (if provided),
-    -- then kill them after killDelay seconds (immediately if killDelay == 0).
-    for _, rec in ipairs(records) do
-        pcall(function()
-            -- attach storage aligns to the afterKillAttachToBH (temp BH or persistent BH)
-            cleanupAnchorAttachments(rec.storage, afterKillAttachToBH)
+    -- upon arrival, WAIT POST_PULL_KILL_DELAY seconds, then kill each humanoid, start HP toggle, switch aligns to persistent BH
+    spawn(function()
+        wait(POST_PULL_KILL_DELAY)
+        for _, rec in ipairs(records) do
+            pcall(function()
+                if rec.hum and rec.hum.Parent then
+                    rec.hum.Health = 0
+                    startHPToggleLoop(rec.hum, 0.0001, SINGULARITY_HIT_TOGGLE_PERIOD, SINGULARITY_HIT_TOGGLE_DURATION)
+                end
+                cleanupAnchorAttachments(rec.storage, afterKillAttachToBH)
+            end)
+        end
 
-            -- ensure we actually zero out humanoid.Health at the scheduled time
-            if rec.hum and rec.hum.Parent then
-                spawn(function()
-                    if killDelay and killDelay > 0 then
-                        wait(killDelay)
-                    end
-                    pcall(function()
-                        if rec.hum and rec.hum.Parent then
-                            -- set to zero explicitly
-                            rec.hum.Health = 0
-                            -- optional: keep toggle loop for "dead" effect; comment out if not needed
-                            startHPToggleLoop(rec.hum, 0.0001, SINGULARITY_HIT_TOGGLE_PERIOD, SINGULARITY_HIT_TOGGLE_DURATION)
-                        end
-                    end)
-                end)
-            end
-        end)
-    end
-
-    wait(0.15)
-    for _, rec in ipairs(records) do
-        pcall(function() if rec.anchor and rec.anchor.Parent then rec.anchor:Destroy() end end)
-    end
+        wait(0.15)
+        for _, rec in ipairs(records) do
+            pcall(function() if rec.anchor and rec.anchor.Parent then rec.anchor:Destroy() end end)
+        end
+    end)
 end
 
 -- ===== Black Hole Tool creation + wiring =====
@@ -941,8 +1080,7 @@ local function wireBlackHoleTool(tool)
 
             -- run a single coordinated pull for all collected models
             spawn(function()
-                -- singularity should kill after POST_PULL_KILL_DELAY seconds
-                pullMultipleNPCsToBH(models, bhPos, travelTime or SINGULARITY_TRAVEL_TIME, { Attachment = BH_Attachment }, POST_PULL_KILL_DELAY)
+                pullMultipleNPCsToBH(models, bhPos, travelTime or SINGULARITY_TRAVEL_TIME, { Attachment = BH_Attachment })
                 -- after travel finishes, schedule removal check
                 spawn(function()
                     wait(0.25)
@@ -974,35 +1112,11 @@ local function wireBlackHoleTool(tool)
             tempBH.ToolRef = tool
             createTempHandleForTool(tool)
 
-            -- placement: pull nearby NPCs (within CLICK_BH_NPC_RADIUS) and kill them INSTANTLY on arrival
-            spawn(function()
-                -- collect NPC models within radius
-                local models = {}
-                local seen = {}
-                for _, m in ipairs(Workspace:GetChildren()) do
-                    if m:IsA("Model") and isNPC(m) then
-                        local hum = m:FindFirstChildOfClass("Humanoid")
-                        local hrp = m:FindFirstChild("HumanoidRootPart") or m:FindFirstChild("UpperTorso") or m:FindFirstChild("Torso") or findFallbackPartInModel(m)
-                        if hum and hrp then
-                            if (hrp.Position - placePos).Magnitude <= CLICK_BH_NPC_RADIUS then
-                                if not seen[m] then
-                                    table.insert(models, m)
-                                    seen[m] = true
-                                end
-                            end
-                        end
-                    end
-                end
+            -- NEW: pull NPCs into the placed BH and kill after a delay
+            spawn(function() clickBHInstantKillAt(tempBH) end)
 
-                if #models > 0 then
-                    -- quick travel (fast pull) but kill instantly upon arrival (killDelay = 0)
-                    pullMultipleNPCsToBH(models, placePos, 0.6, { Attachment = tempBH.Attachment }, 0)
-                end
-            end)
-
-            -- attach processed parts (non-NPC parts the persistent BH was handling) within the same radius to the temp BH
             spawn(function()
-                local radius = CLICK_BH_NPC_RADIUS
+                local radius = 80
                 for part, _ in pairs(processedParts) do
                     if part and part.Parent and (part.Position - placePos).Magnitude <= radius then
                         local ap = part:FindFirstChildWhichIsA("AlignPosition")
