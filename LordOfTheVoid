@@ -1,8 +1,9 @@
 -- Devour Soul + Black Hole tools (LocalScript)
 -- Place in StarterPlayerScripts (client).
--- Singularity: pulls ALL NPCs simultaneously to BH center, then they die after 3 seconds.
+-- Singularity: pulls ALL NPCs simultaneously to BH center, then they die after POST_PULL_KILL_DELAY (configurable).
 -- Quick right-click: same but shorter travel time.
--- BH placement (left click) will pull NPCs within 30 studs to the placed BH, hold them for 3s, then kill.
+-- BH placement (left click) will pull NPCs within CLICK_KILL_RADIUS to the placed BH, set their Health to 0 at pull start,
+-- hold/attach them to the placed BH, and preserve the visual attachments.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -165,7 +166,7 @@ local TEMP_BH_LIFETIME = 1
 local CLICK_KILL_HP_TOGGLE_PERIOD = 0.3
 local CLICK_KILL_TOGGLE_DURATION = 5
 local SINGULARITY_RADIUS = 200
-local SINGULARITY_TRAVEL_TIME = 3        -- pull time before death (3s) (unchanged)
+local SINGULARITY_TRAVEL_TIME = 3        -- pull time before death (3s)
 local QUICK_SINGULARITY_TRAVEL_TIME = 1  -- right-click quick pull time (1s)
 local SINGULARITY_HIT_TOGGLE_PERIOD = 0.5
 local SINGULARITY_HIT_TOGGLE_DURATION = 5
@@ -174,9 +175,10 @@ local SINGULARITY_HANDLE_LIFETIME = 10 -- seconds
 local QUICK_SINGULARITY_HANDLE_LIFETIME = 1
 
 -- NEW: timing & click radius configuration
-local POST_PULL_KILL_DELAY = 3 -- seconds after arrival before setting Health = 0
+local POST_PULL_KILL_DELAY = 3 -- seconds after arrival before setting Health = 0 for Singularity (kept for singularity path)
 local CLICK_KILL_RADIUS = 30
 local CLICK_PULL_DURATION = 3 -- how long to pull NPCs to the placed BH
+local CLICK_POST_ARRIVAL_DELAY = 0.15 -- delay for anchor cleanup after attachments switched
 
 -- ===== Persistent BH setup =====
 local BHFolder = Workspace:FindFirstChild(BH_FOLDER_NAME)
@@ -699,8 +701,8 @@ local function startHPToggleLoop(humanoid, smallHP, interval, duration)
     end)
 end
 
--- Modified: placement kill should pull NPCs in to the placed BH (radius 30), hold them for CLICK_PULL_DURATION,
--- then after POST_PULL_KILL_DELAY set Health to 0 and attach parts to the placed BH for the temp lifetime.
+-- Modified: placement kill will pull NPCs in to the placed BH (radius CLICK_KILL_RADIUS),
+-- set their Health = 0 immediately when the pull starts, attach parts to the temp BH, then keep attachments.
 local function clickBHPullAndKillAt(tempBH)
     if not tempBH or not tempBH.Part then return end
     local pos = tempBH.Part.Position
@@ -736,7 +738,18 @@ local function clickBHPullAndKillAt(tempBH)
         return
     end
 
-    -- for each model create anchor + attach everything
+    -- Immediately set NPCs' Health to 0 at pull start (this is the requested fix)
+    for _, rec in ipairs(records) do
+        pcall(function()
+            if rec.hum and rec.hum.Parent then
+                rec.hum.Health = 0
+                -- start short HP toggle flicker for visual consistency after death
+                startHPToggleLoop(rec.hum, 0.0001, CLICK_KILL_HP_TOGGLE_PERIOD, CLICK_KILL_TOGGLE_DURATION)
+            end
+        end)
+    end
+
+    -- for each model create anchor + attach everything and collect parts to tempBH.AssignedParts
     for _, rec in ipairs(records) do
         local anchor = Instance.new("Part")
         anchor.Name = "TempBH_ClickAnchor"
@@ -752,11 +765,12 @@ local function clickBHPullAndKillAt(tempBH)
         rec.storage = { parts = {}, attachments = {}, aligns = {}, orients = {} }
         attachAllPartsToAnchor(rec.model, anchor, rec.storage)
 
-        -- mark parts as processed so persistent BH won't re-process them
+        -- mark parts as processed so persistent BH won't re-process them & track assigned parts
         for _, part in ipairs(rec.storage.parts or {}) do
-            if part then processedParts[part] = true end
-            -- also track so they can be carried by the tempBH
-            table.insert(tempBH.AssignedParts, part)
+            if part then
+                processedParts[part] = true
+                table.insert(tempBH.AssignedParts, part)
+            end
         end
     end
 
@@ -785,28 +799,19 @@ local function clickBHPullAndKillAt(tempBH)
         end
     end
 
-    -- after arrival, wait POST_PULL_KILL_DELAY seconds, then kill humanoids and switch aligns to tempBH
-    spawn(function()
-        wait(POST_PULL_KILL_DELAY)
-        for _, rec in ipairs(records) do
-            pcall(function()
-                if rec.hum and rec.hum.Parent then
-                    rec.hum.Health = 0
-                    -- keep toggle loop to preserve some "death flicker" behavior if you want it
-                    startHPToggleLoop(rec.hum, 0.0001, CLICK_KILL_HP_TOGGLE_PERIOD, CLICK_KILL_TOGGLE_DURATION)
-                end
-                if rec.storage then
-                    -- attach their aligns to the temp BH so parts stay attached to the placed BH part
-                    cleanupAnchorAttachments(rec.storage, { Attachment = tempBH.Attachment })
-                end
-            end)
-        end
-        wait(0.15)
-        -- destroy anchors
-        for _, rec in ipairs(records) do
-            pcall(function() if rec.anchor and rec.anchor.Parent then rec.anchor:Destroy() end end)
-        end
-    end)
+    -- after arrival, switch aligns to tempBH so parts remain attached; anchors then cleaned up
+    for _, rec in ipairs(records) do
+        pcall(function()
+            if rec.storage then
+                cleanupAnchorAttachments(rec.storage, { Attachment = tempBH.Attachment })
+            end
+        end)
+    end
+
+    wait(CLICK_POST_ARRIVAL_DELAY)
+    for _, rec in ipairs(records) do
+        pcall(function() if rec.anchor and rec.anchor.Parent then rec.anchor:Destroy() end end)
+    end
 end
 
 -- Keep old name around for compatibility but replace implementation with the pulling version
@@ -1112,7 +1117,7 @@ local function wireBlackHoleTool(tool)
             tempBH.ToolRef = tool
             createTempHandleForTool(tool)
 
-            -- NEW: pull NPCs into the placed BH and kill after a delay
+            -- NEW: pull NPCs into the placed BH and set their Health to 0 at pull start
             spawn(function() clickBHInstantKillAt(tempBH) end)
 
             spawn(function()
