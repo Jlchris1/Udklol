@@ -1,3 +1,9 @@
+-- Devour Soul + Black Hole tools (LocalScript)
+-- Place in StarterPlayerScripts (client).
+-- Black Hole placement will NOT pick up NPCs.
+-- Singularity button picks up NPCs for 10s.
+-- Right-click (secondary click) picks up NPCs for 1s.
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -163,7 +169,12 @@ local SINGULARITY_TRAVEL_TIME = 3
 local SINGULARITY_HIT_TOGGLE_PERIOD = 0.5
 local SINGULARITY_HIT_TOGGLE_DURATION = 5
 local SINGULARITY_ARRIVAL_KILL_DISTANCE = 3
-local SINGULARITY_HANDLE_LIFETIME = 10 -- seconds
+local SINGULARITY_HANDLE_LIFETIME = 10 -- seconds (used as default)
+local QUICK_SINGULARITY_HANDLE_LIFETIME = 1 -- right-click quick pickup
+
+-- durations (configurable)
+local SINGULARITY_DURATION = 10
+local QUICK_SINGULARITY_DURATION = 1
 
 -- ===== Persistent BH setup =====
 local BHFolder = Workspace:FindFirstChild(BH_FOLDER_NAME)
@@ -686,6 +697,7 @@ local function startHPToggleLoop(humanoid, smallHP, interval, duration)
     end)
 end
 
+-- Modified: placement kill should NOT attach NPCs anymore
 local function clickBHInstantKillAt(tempBH)
     if not tempBH or not tempBH.Part then return end
     local pos = tempBH.Part.Position
@@ -695,10 +707,8 @@ local function clickBHInstantKillAt(tempBH)
             local hum = m:FindFirstChildOfClass("Humanoid")
             local hrp = m:FindFirstChild("HumanoidRootPart") or m:FindFirstChild("UpperTorso") or m:FindFirstChild("Torso")
             if hum and hrp and (hrp.Position - pos).Magnitude <= radius then
+                -- kill only; do NOT attach to the temporary BH (black hole placement cannot pick up NPCs)
                 pcall(function() hum.Health = 0 end)
-                local storage = {}
-                attachAllPartsToAnchor(m, tempBH.Part, storage)
-                for _, part in ipairs(storage.parts or {}) do table.insert(tempBH.AssignedParts, part) end
                 startHPToggleLoop(hum, 0.0001, CLICK_KILL_HP_TOGGLE_PERIOD, CLICK_KILL_TOGGLE_DURATION)
             end
         end
@@ -789,6 +799,82 @@ local function pullNPCToBHOverTime(model, bhPos, duration, afterKillAttachToBH)
     pcall(function() if anchor and anchor.Parent then anchor:Destroy() end end)
 end
 
+-- New helper: instant pickup of NPCs (duration seconds) at centerPos.
+-- If attachToCenter is true, aligns will be switched to BH_Attachment so they stick to the persistent center.
+-- toolRef: optional tool reference — if provided, a handle is created during the pickup and removed after duration.
+local function doNPCPickup(duration, centerPos, attachToCenter, toolRef)
+    if not centerPos then centerPos = centerPart.Position end
+    local picked = false
+    local pulledHumanoids = {}
+
+    -- optionally create a handle on the tool while pickup runs
+    if toolRef then
+        createTempHandleForTool(toolRef)
+    end
+
+    for _, desc in ipairs(Workspace:GetDescendants()) do
+        if desc and desc:IsA("Humanoid") then
+            local hum = desc
+            local model = hum.Parent
+            local node = model
+            while node and not node:IsA("Model") do
+                node = node.Parent
+            end
+            model = node or model
+
+            if model and model:IsA("Model") and not Players:GetPlayerFromCharacter(model) then
+                local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso") or findFallbackPartInModel(model)
+                if hrp and hum and hum.Health ~= nil then
+                    local d = (hrp.Position - centerPos).Magnitude
+                    if d <= SINGULARITY_RADIUS then
+                        picked = true
+                        -- attach parts to anchor (we'll switch aligns to BH_Attachment if desired)
+                        local storage = { parts = {}, attachments = {}, aligns = {}, orients = {} }
+                        attachAllPartsToAnchor(model, centerPart, storage)
+
+                        if attachToCenter and BH_Attachment then
+                            for _, ap in ipairs(storage.aligns or {}) do
+                                pcall(function()
+                                    if ap and ap.Parent then
+                                        ap.Attachment1 = BH_Attachment
+                                    end
+                                end)
+                            end
+                        end
+
+                        -- mark parts as processed so persistent BH won't re-process them later
+                        for _, part in ipairs(storage.parts or {}) do
+                            if part then processedParts[part] = true end
+                        end
+
+                        -- kill and start HP toggle loop
+                        pcall(function() hum.Health = 0 end)
+                        startHPToggleLoop(hum, 0.0001, SINGULARITY_HIT_TOGGLE_PERIOD, SINGULARITY_HIT_TOGGLE_DURATION)
+
+                        -- track death for cleanup of temporary handle later
+                        local deathConn
+                        deathConn = hum.Died:Connect(function()
+                            pcall(function() if deathConn then deathConn:Disconnect() end end)
+                            pulledHumanoids[hum] = nil
+                        end)
+                        pulledHumanoids[hum] = deathConn
+                    end
+                end
+            end
+        end
+    end
+
+    -- remove temporary tool handle after duration (if we created one)
+    spawn(function()
+        wait(duration or 0.1)
+        if toolRef then
+            pcall(function() removeTempHandleForTool(toolRef) end)
+        end
+    end)
+
+    return picked, pulledHumanoids
+end
+
 -- ===== Black Hole Tool creation + wiring =====
 local function createBlackHoleTool()
     local bp = localPlayer:FindFirstChildOfClass("Backpack")
@@ -863,108 +949,57 @@ local function wireBlackHoleTool(tool)
         local singularityActiveHandleCreated = false
         local pulledHumanoids = {}
 
-        local function destroySingularityHandleIfDone()
-            for hum, conn in pairs(pulledHumanoids) do
-                if (not hum) or (not hum.Parent) or hum.Health <= 0 then
-                    pcall(function() if conn then conn:Disconnect() end end)
-                    pulledHumanoids[hum] = nil
-                end
-            end
+        local function destroySingularityHandleIfDone(pulledMap)
+            -- if there are no tracked humanoids, remove handle
             local count = 0
-            for hum,_ in pairs(pulledHumanoids) do count = count + 1 end
+            for hum,_ in pairs(pulledMap or {}) do count = count + 1 end
             if count == 0 and singularityActiveHandleCreated then
                 removeTempHandleForTool(tool)
                 singularityActiveHandleCreated = false
             end
         end
 
-        local function startSingularity()
+        -- startSingularity now takes duration
+        local function startSingularityWithDuration(duration)
             local bhPos = centerPart.Position
-            createTempHandleForTool(tool)
             singularityActiveHandleCreated = true
+            createTempHandleForTool(tool)
 
+            -- clean up handle after duration
             spawn(function()
-                wait(SINGULARITY_HANDLE_LIFETIME)
+                wait(duration or SINGULARITY_DURATION)
                 if singularityActiveHandleCreated then
                     removeTempHandleForTool(tool)
                     singularityActiveHandleCreated = false
                 end
             end)
 
-            -- Robust, instant pickup implementation:
-            local anyFound = false
-            local processedModels = {}
-
-            -- Iterate all Humanoids in Workspace descendants to ensure nested NPCs are found
-            for _, desc in ipairs(Workspace:GetDescendants()) do
-                if desc and desc:IsA("Humanoid") then
-                    local hum = desc
-                    -- find the model ancestor (some Humanoids might be nested)
-                    local model = hum.Parent
-                    local node = model
-                    while node and not node:IsA("Model") do
-                        node = node.Parent
-                    end
-                    model = node or model
-
-                    if model and model:IsA("Model") then
-                        -- skip players
-                        if not Players:GetPlayerFromCharacter(model) then
-                            -- find a suitable basepart for distance checks
-                            local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso") or findFallbackPartInModel(model)
-                            if hrp and hum and hum.Health ~= nil then
-                                local d = (hrp.Position - bhPos).Magnitude
-                                if d <= SINGULARITY_RADIUS then
-                                    if not processedModels[model] then
-                                        processedModels[model] = true
-                                        anyFound = true
-
-                                        -- Attach all parts of this NPC to the persistent centerPart instantly
-                                        local storage = { parts = {}, attachments = {}, aligns = {}, orients = {} }
-                                        attachAllPartsToAnchor(model, centerPart, storage)
-
-                                        -- Force all aligns to use the canonical BH_Attachment (center) so they snap consistently
-                                        for _, ap in ipairs(storage.aligns or {}) do
-                                            pcall(function()
-                                                if ap and ap.Parent and BH_Attachment then
-                                                    ap.Attachment1 = BH_Attachment
-                                                end
-                                            end)
-                                        end
-
-                                        -- mark parts as processed so persistent BH won't re-process them later
-                                        for _, part in ipairs(storage.parts or {}) do
-                                            if part then processedParts[part] = true end
-                                        end
-
-                                        -- kill/toggle HP as before
-                                        pcall(function() hum.Health = 0 end)
-                                        startHPToggleLoop(hum, 0.0001, SINGULARITY_HIT_TOGGLE_PERIOD, SINGULARITY_HIT_TOGGLE_DURATION)
-
-                                        -- connect death to cleanup bookkeeping
-                                        local deathConn = hum.Died:Connect(function()
-                                            pcall(function() if deathConn then deathConn:Disconnect() end end)
-                                            pulledHumanoids[hum] = nil
-                                            destroySingularityHandleIfDone()
-                                        end)
-                                        pulledHumanoids[hum] = deathConn
-                                    end
-                                end
-                            end
-                        end
-                    end
+            -- perform instant pickup
+            local picked, pulledMap = doNPCPickup(duration or SINGULARITY_DURATION, bhPos, true, tool)
+            pulledHumanoids = pulledMap or {}
+            if not picked then
+                -- nothing found -> remove handle immediately
+                if singularityActiveHandleCreated then
+                    removeTempHandleForTool(tool)
+                    singularityActiveHandleCreated = false
                 end
             end
 
-            if not anyFound then
-                -- nothing found -> remove handle immediately
-                removeTempHandleForTool(tool)
-                singularityActiveHandleCreated = false
-            end
+            -- schedule cleanup check (in case all die)
+            spawn(function()
+                wait(0.25)
+                destroySingularityHandleIfDone(pulledHumanoids)
+            end)
         end
 
         singBtn.MouseButton1Click:Connect(function()
-            pcall(startSingularity)
+            pcall(function() startSingularityWithDuration(SINGULARITY_DURATION) end)
+        end)
+
+        -- Right-click quick pickup: perform 1 second pickup at center
+        local rightClickConn = nil
+        rightClickConn = mouse.Button2Down:Connect(function()
+            pcall(function() startSingularityWithDuration(QUICK_SINGULARITY_DURATION) end)
         end)
 
         -- Placement handlers (mouse & touch) - improved tap detection
@@ -980,6 +1015,7 @@ local function wireBlackHoleTool(tool)
             tempBH.ToolRef = tool
             createTempHandleForTool(tool)
 
+            -- placement kill (NO attachment of NPCs)
             spawn(function() clickBHInstantKillAt(tempBH) end)
 
             spawn(function()
@@ -1036,12 +1072,14 @@ local function wireBlackHoleTool(tool)
         end)
 
         equippedConns.mouseConn = mouseConn
+        equippedConns.rightClickConn = rightClickConn
         equippedConns.touchBeganConn = touchBeganConn
         equippedConns.touchChangedConn = touchChangedConn
         equippedConns.touchEndedConn = touchEndedConn
 
         tool.Unequipped:Connect(function()
             if equippedConns.mouseConn then equippedConns.mouseConn:Disconnect(); equippedConns.mouseConn = nil end
+            if equippedConns.rightClickConn then equippedConns.rightClickConn:Disconnect(); equippedConns.rightClickConn = nil end
             if equippedConns.touchBeganConn then equippedConns.touchBeganConn:Disconnect(); equippedConns.touchBeganConn = nil end
             if equippedConns.touchChangedConn then equippedConns.touchChangedConn:Disconnect(); equippedConns.touchChangedConn = nil end
             if equippedConns.touchEndedConn then equippedConns.touchEndedConn:Disconnect(); equippedConns.touchEndedConn = nil end
