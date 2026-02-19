@@ -1,0 +1,1173 @@
+-- Emporer kit v5 (client LocalScript) - Modified Come To Me + Drag toggle
+-- Place in StarterPlayerScripts
+-- Drag release now only occurs on an actual click/tap (not on touch camera movement).
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+
+local localPlayer = Players.LocalPlayer
+if not localPlayer then return end
+local Camera = Workspace.CurrentCamera
+
+-- ===== CONFIG =====
+local TOOL_EMPEROR_SLAM = "Emporer Slam"
+local TOOL_COME_TO_ME = "Come To Me"
+local TOOL_EMPEROR_POWER = "Emporer's Power"
+
+local LIFT_HEIGHT = 30
+local LIFT_TIME_SLAM = 0.35
+local SLAM_TIME = 0.15
+local COME_TO_ME_PULL_SPEED = 80
+local COME_TO_ME_WAIT = 0.8
+local COME_TO_ME_BLAST_VEL = 400
+
+local TORMENT_LIFT_TIME = 0.3
+local TORMENT_SLAM_TIME = 0.3
+local TORMENT_DAMAGE_PCT = 0.10
+local TORMENT_MAX_CYCLES = 200
+
+local EMPEROR_POWER_RADIUS = 25
+local BE_GONE_RADIUS = 125
+local WRATH_RADIUS = 250
+local EMPEROR_POWER_VEL = 300
+local WRATH_SLAM_PCT = 0.10
+local WRATH_CYCLE_INTERVAL = 0.5
+local WRATH_DURATION_SECONDS = 8
+local BEGONE_TELEPORT_POS = Vector3.new(9e37, 9e37, 9e37)
+
+-- Ground Slam tuning (fixed velocities per your request)
+local GROUND_SLAM_UP_VEL = 150
+local GROUND_SLAM_HORIZ_SPEED = 100
+local GROUND_SLAM_AREA_RADIUS = 35
+local GROUND_SLAM_FLING_VEL = 400
+
+local FALLBACK_TOSS_VELOCITY = 5000
+
+-- Come To Me distances
+local COME_TO_ME_BASE_DISTANCE = 4     -- base distance in front of arm for normal Come To Me
+local COME_TO_ME_DRAG_BASE_DISTANCE = 5 -- base distance while dragging
+
+-- Estimate used to determine scale; if model bounding magnitude is larger than this,
+-- distance will scale up proportionally. (reasonable heuristic)
+local DEFAULT_NPC_AVG_BOUND = 6.0
+
+-- Tap detection thresholds (for mobile)
+local TAP_MAX_TIME = 0.25        -- seconds
+local TAP_MOVE_THRESHOLD = 30    -- pixels (screen-space distance)
+
+-- ===== GUI + STATE =====
+local storedGUIs = {
+    PowerGUI = nil,
+    Power_WrathBtn = nil,
+    Power_BeGoneBtn = nil,
+    SlamGUI = nil,
+    Slam_GroundBtn = nil,
+    Slam_TormentToggle = nil,
+    ComeGUI = nil,
+    Come_DragToggle = nil,
+}
+local tormentEnabled = false
+local comeDragEnabled = false
+
+-- ===== HELPERS =====
+local function isPlayerCharacter(model) return model and Players:GetPlayerFromCharacter(model) ~= nil end
+local function isNPC(model)
+    if not model or not model:IsA("Model") then return false end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    return hum and not Players:GetPlayerFromCharacter(model)
+end
+
+local function createTempHandleForTool(tool)
+    if not tool or not tool:IsA("Tool") then return nil end
+    local existing = tool:FindFirstChild("Handle")
+    if existing then pcall(function() existing:Destroy() end) end
+    local handle = Instance.new("Part")
+    handle.Name = "Handle"
+    handle.Size = Vector3.new(1,1,1)
+    handle.Transparency = 0.5
+    handle.CanCollide = false
+    handle.Massless = true
+    handle.Parent = tool
+    return handle
+end
+local function removeTempHandleForTool(tool)
+    if not tool or not tool:IsA("Tool") then return end
+    local h = tool:FindFirstChild("Handle")
+    if h then pcall(function() h:Destroy() end) end
+end
+
+local function findHumanoidFromDescendant(descendant)
+    local node = descendant
+    for i=1,10 do
+        if not node then break end
+        local hum = node:FindFirstChildOfClass("Humanoid")
+        if hum then return hum, node end
+        node = node.Parent
+    end
+    return nil, nil
+end
+
+local function findClosestNPCAtPoint(point, maxRadius)
+    local best, bestDist = nil, math.huge
+    for _,desc in ipairs(Workspace:GetDescendants()) do
+        if desc:IsA("Humanoid") then
+            local model = desc.Parent
+            if model and isNPC(model) then
+                local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
+                if hrp then
+                    local d = (hrp.Position - point).Magnitude
+                    if d <= (maxRadius or 12) and d < bestDist then
+                        best = desc.Parent
+                        bestDist = d
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function pickNPCFromMouse(mouse, snapRadius)
+    snapRadius = snapRadius or 12
+    if not mouse then return nil, nil end
+    local target = mouse.Target
+    local hitPos = mouse.Hit and mouse.Hit.p
+    if target then
+        local hum, model = findHumanoidFromDescendant(target)
+        if hum and model and isNPC(model) then return hum, model end
+    end
+    if hitPos then
+        local npc = findClosestNPCAtPoint(hitPos, snapRadius)
+        if npc then
+            local hum = npc:FindFirstChildOfClass("Humanoid")
+            return hum, npc
+        end
+    end
+    return nil, nil
+end
+
+local function attachModelToAnchor(model, anchor)
+    local storage = { parts = {}, attachments = {}, aligns = {}, orients = {} }
+    for _,v in ipairs(model:GetDescendants()) do
+        if v:IsA("BasePart") then
+            pcall(function() v.CanCollide = false; v.Massless = true end)
+            for _,c in ipairs(v:GetChildren()) do
+                if c:IsA("BodyPosition") or c:IsA("BodyGyro") or c:IsA("BodyVelocity") or c:IsA("BodyForce") or c:IsA("BodyAngularVelocity") then
+                    pcall(function() c:Destroy() end)
+                end
+            end
+            local att = Instance.new("Attachment")
+            att.Name = "Emp_Anchor_Att"
+            att.Parent = v
+            pcall(function() att.WorldCFrame = v.CFrame end)
+            table.insert(storage.attachments, att)
+            table.insert(storage.parts, v)
+
+            local aAtt = Instance.new("Attachment", anchor); aAtt.Name = "Emp_TargetAtt"
+            local ap = Instance.new("AlignPosition")
+            ap.Attachment0 = att; ap.Attachment1 = aAtt
+            ap.MaxForce = 9e9; ap.Responsiveness = 900; ap.MaxVelocity = math.huge
+            ap.Parent = v
+            table.insert(storage.aligns, ap)
+
+            local ao = Instance.new("AlignOrientation")
+            ao.Attachment0 = att; ao.Attachment1 = aAtt
+            ao.MaxTorque = 9e9; ao.Responsiveness = 900
+            ao.Parent = v
+            table.insert(storage.orients, ao)
+        end
+    end
+    return storage
+end
+
+local function cleanupStorage(storage)
+    if not storage then return end
+    for _,ap in ipairs(storage.aligns or {}) do pcall(function() ap:Destroy() end) end
+    for _,ao in ipairs(storage.orients or {}) do pcall(function() ao:Destroy() end) end
+    for _,att in ipairs(storage.attachments or {}) do pcall(function() att:Destroy() end) end
+end
+
+local function moveAnchor(anchor, startPos, targetPos, duration)
+    if not anchor or not anchor.Parent then return end
+    duration = math.max(duration or 0.01, 0.001)
+    local elapsed = 0
+    while elapsed < duration and anchor and anchor.Parent do
+        local dt = RunService.Heartbeat:Wait()
+        elapsed = elapsed + dt
+        local alpha = math.min(elapsed / duration, 1)
+        anchor.Position = startPos:Lerp(targetPos, alpha)
+    end
+    if anchor and anchor.Parent then anchor.Position = targetPos end
+end
+
+-- raycast down ignoring the model
+local function findImpactPartBelow(position, ignoreModel)
+    local rp = RaycastParams.new()
+    rp.FilterType = Enum.RaycastFilterType.Blacklist
+    rp.FilterDescendantsInstances = { (ignoreModel and ignoreModel) or localPlayer.Character }
+    rp.IgnoreWater = true
+    local res = Workspace:Raycast(position, Vector3.new(0, -2000, 0), rp)
+    if res and res.Instance and res.Instance:IsA("BasePart") then
+        return res.Instance, res.Position
+    end
+    -- fallback: nearest part not inside ignoreModel or player
+    local best, bestDist = nil, math.huge
+    for _,p in ipairs(Workspace:GetDescendants()) do
+        if p:IsA("BasePart") and (not p:IsDescendantOf(ignoreModel)) and (not p:IsDescendantOf(localPlayer.Character)) then
+            if p.CanCollide then
+                local d = (p.Position - position).Magnitude
+                if d < bestDist then bestDist = d; best = p end
+            end
+        end
+    end
+    return best, best and best.Position or nil
+end
+
+local function gatherNPCsInRadius(center, radius)
+    local out = {}
+    local r2 = radius * radius
+    for _,desc in ipairs(Workspace:GetDescendants()) do
+        if desc:IsA("Humanoid") then
+            local model = desc.Parent
+            if model and isNPC(model) then
+                local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
+                if hrp then
+                    local d2 = (hrp.Position - center).Magnitude^2
+                    if d2 <= r2 then
+                        table.insert(out, {hum = desc, model = model, hrp = hrp})
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
+local function applyKillOrDamageAfterImpact(humanoid, model, hrp, wasInstantKill, damageAmount)
+    local impactPart, impactPos = findImpactPartBelow(hrp.Position, model)
+    if impactPart and impactPos then
+        if wasInstantKill then
+            pcall(function() humanoid.BreakJointsOnDeath = false end)
+            pcall(function() humanoid.Health = 0 end)
+        else
+            pcall(function()
+                if humanoid and humanoid.Parent then
+                    humanoid.Health = math.max(0, (humanoid.Health or 0) - (damageAmount or 1))
+                end
+            end)
+        end
+        return
+    else
+        local nearestPart, pos = findImpactPartBelow(hrp.Position, nil)
+        if nearestPart and pos then
+            if humanoid and humanoid.Parent then
+                pcall(function() humanoid.BreakJointsOnDeath = false; humanoid.Health = 0 end)
+            end
+            local dir = (nearestPart.Position - hrp.Position)
+            if dir.Magnitude > 0 then dir = dir.Unit else dir = Vector3.new(0,-1,0) end
+            for _,p in ipairs(model:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    p.AssemblyLinearVelocity = dir * 500
+                end
+            end
+            return
+        else
+            pcall(function() if humanoid and humanoid.Parent then humanoid.BreakJointsOnDeath = false; humanoid.Health = 0 end end)
+            for _,p in ipairs(model:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    p.AssemblyLinearVelocity = Vector3.new(0, -FALLBACK_TOSS_VELOCITY, 0)
+                end
+            end
+            return
+        end
+    end
+end
+
+-- ===== GUI helpers =====
+local function hideAllStoredGUIs()
+    if storedGUIs.PowerGUI then storedGUIs.PowerGUI.Enabled = false end
+    if storedGUIs.SlamGUI then storedGUIs.SlamGUI.Enabled = false end
+    if storedGUIs.ComeGUI then storedGUIs.ComeGUI.Enabled = false end
+end
+
+local function createPowerToolGUIIfNeeded()
+    local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
+    if storedGUIs.PowerGUI and storedGUIs.PowerGUI.Parent == playerGui then
+        return storedGUIs.PowerGUI, storedGUIs.Power_WrathBtn, storedGUIs.Power_BeGoneBtn
+    end
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "Empower_Power_GUI"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = playerGui
+
+    local container = Instance.new("Frame", screenGui)
+    container.Name = "PowerContainer"
+    container.Size = UDim2.new(0,220,0,88)
+    container.Position = UDim2.new(1, -240, 0, 10) -- top-right
+    container.BackgroundTransparency = 0.15
+    container.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    container.BorderSizePixel = 0
+    container.ClipsDescendants = true
+
+    local btn1 = Instance.new("TextButton", container)
+    btn1.Name = "WrathBtn"
+    btn1.Size = UDim2.new(0,200,0,36)
+    btn1.Position = UDim2.new(0,10,0,8)
+    btn1.Text = "Emporer's Wrath"
+    btn1.Font = Enum.Font.SourceSansBold
+    btn1.TextSize = 16
+    btn1.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    btn1.TextColor3 = Color3.new(1,1,1)
+    btn1.BorderSizePixel = 0
+
+    local btn2 = Instance.new("TextButton", container)
+    btn2.Name = "BeGoneBtn"
+    btn2.Size = UDim2.new(0,200,0,36)
+    btn2.Position = UDim2.new(0,10,0,48)
+    btn2.Text = "Be Gone"
+    btn2.Font = Enum.Font.SourceSansBold
+    btn2.TextSize = 16
+    btn2.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    btn2.TextColor3 = Color3.new(1,1,1)
+    btn2.BorderSizePixel = 0
+
+    storedGUIs.PowerGUI = screenGui
+    storedGUIs.Power_WrathBtn = btn1
+    storedGUIs.Power_BeGoneBtn = btn2
+    return screenGui, btn1, btn2
+end
+
+local function createSlamGUIIfNeeded()
+    local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
+    if storedGUIs.SlamGUI and storedGUIs.SlamGUI.Parent == playerGui then
+        return storedGUIs.SlamGUI, storedGUIs.Slam_GroundBtn, storedGUIs.Slam_TormentToggle
+    end
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "Emporer_Slam_GUI"
+    sg.ResetOnSpawn = false
+    sg.Parent = playerGui
+
+    local frame = Instance.new("Frame", sg)
+    frame.Name = "SlamContainer"; frame.Size = UDim2.new(0,220,0,88)
+    frame.Position = UDim2.new(1, -240, 0, 10) -- top-right
+    frame.BackgroundTransparency = 0.15; frame.BackgroundColor3 = Color3.fromRGB(30,30,30); frame.BorderSizePixel = 0
+
+    local gsBtn = Instance.new("TextButton", frame)
+    gsBtn.Name = "GroundSlamBtn"; gsBtn.Size = UDim2.new(0,200,0,36); gsBtn.Position = UDim2.new(0,10,0,8)
+    gsBtn.Text = "Ground Slam"; gsBtn.Font = Enum.Font.SourceSansBold; gsBtn.TextSize = 16
+    gsBtn.BackgroundColor3 = Color3.fromRGB(50,50,50); gsBtn.TextColor3 = Color3.new(1,1,1); gsBtn.BorderSizePixel = 0
+
+    local tBtn = Instance.new("TextButton", frame)
+    tBtn.Name = "TormentToggle"; tBtn.Size = UDim2.new(0,200,0,36); tBtn.Position = UDim2.new(0,10,0,48)
+    tBtn.Text = "Torment: Off"; tBtn.Font = Enum.Font.SourceSansBold; tBtn.TextSize = 16
+    tBtn.BackgroundColor3 = Color3.fromRGB(50,50,50); tBtn.TextColor3 = Color3.new(1,1,1); tBtn.BorderSizePixel = 0
+
+    storedGUIs.SlamGUI = sg
+    storedGUIs.Slam_GroundBtn = gsBtn
+    storedGUIs.Slam_TormentToggle = tBtn
+    return sg, gsBtn, tBtn
+end
+
+-- Come To Me GUI (Drag toggle)
+local function createComeGUIIfNeeded()
+    local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
+    if storedGUIs.ComeGUI and storedGUIs.ComeGUI.Parent == playerGui then
+        return storedGUIs.ComeGUI, storedGUIs.Come_DragToggle
+    end
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "Emporer_Come_GUI"
+    sg.ResetOnSpawn = false
+    sg.Parent = playerGui
+
+    local frame = Instance.new("Frame", sg)
+    frame.Name = "ComeContainer"; frame.Size = UDim2.new(0,220,0,48)
+    frame.Position = UDim2.new(1, -240, 0, 10) -- top-right (same area for consistency)
+    frame.BackgroundTransparency = 0.15; frame.BackgroundColor3 = Color3.fromRGB(30,30,30); frame.BorderSizePixel = 0
+
+    local dBtn = Instance.new("TextButton", frame)
+    dBtn.Name = "DragToggle"; dBtn.Size = UDim2.new(0,200,0,36); dBtn.Position = UDim2.new(0,10,0,6)
+    dBtn.Text = "Drag: Off"; dBtn.Font = Enum.Font.SourceSansBold; dBtn.TextSize = 16
+    dBtn.BackgroundColor3 = Color3.fromRGB(50,50,50); dBtn.TextColor3 = Color3.new(1,1,1); dBtn.BorderSizePixel = 0
+
+    storedGUIs.ComeGUI = sg
+    storedGUIs.Come_DragToggle = dBtn
+    return sg, dBtn
+end
+
+-- ===== EMPEROR SLAM (targeted) =====
+local function doEmporerSlamOn(humanoid, model, tool)
+    if not humanoid or not model or humanoid.Health == nil then return end
+    if isPlayerCharacter(model) then return end
+    local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("UpperTorso")
+    if not hrp then return end
+
+    createTempHandleForTool(tool)
+
+    local anchor = Instance.new("Part")
+    anchor.Name = "Emp_Slam_Anchor"
+    anchor.Size = Vector3.new(1,1,1); anchor.Anchored = true; anchor.CanCollide = false; anchor.Transparency = 1
+    anchor.Position = hrp.Position; anchor.Parent = Workspace
+
+    local storage = attachModelToAnchor(model, anchor)
+
+    local startPos = anchor.Position
+    local upPos = startPos + Vector3.new(0, LIFT_HEIGHT, 0)
+    moveAnchor(anchor, startPos, upPos, LIFT_TIME_SLAM)
+
+    removeTempHandleForTool(tool)
+
+    local impactPart, impactPos = findImpactPartBelow(hrp.Position, model)
+    local slamTarget
+    if impactPos then slamTarget = Vector3.new(hrp.Position.X, impactPos.Y + 1, hrp.Position.Z)
+    else slamTarget = Vector3.new(hrp.Position.X, hrp.Position.Y - 20, hrp.Position.Z) end
+
+    moveAnchor(anchor, upPos, slamTarget, SLAM_TIME)
+
+    applyKillOrDamageAfterImpact(humanoid, model, hrp, true, nil)
+
+    wait(0.12)
+    cleanupStorage(storage)
+    if anchor and anchor.Parent then pcall(function() anchor:Destroy() end) end
+end
+
+-- ===== TORMENT (reused routine, called when toggle ON) =====
+local function doTormentOn(humanoid, model, tool)
+    if not humanoid or not model then return end
+    if isPlayerCharacter(model) then return end
+    local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
+    if not hrp then return end
+
+    local cycle = 0
+    while humanoid and humanoid.Parent and humanoid.Health > 0 and cycle < TORMENT_MAX_CYCLES do
+        cycle = cycle + 1
+        createTempHandleForTool(tool)
+
+        local anchor = Instance.new("Part")
+        anchor.Name = "Torment_Anchor"; anchor.Size = Vector3.new(1,1,1); anchor.Anchored = true; anchor.CanCollide = false; anchor.Transparency = 1
+        anchor.Position = hrp.Position; anchor.Parent = Workspace
+
+        local storage = attachModelToAnchor(model, anchor)
+
+        local startPos = anchor.Position
+        local upPos = startPos + Vector3.new(0, LIFT_HEIGHT * 0.6, 0)
+        moveAnchor(anchor, startPos, upPos, TORMENT_LIFT_TIME)
+
+        removeTempHandleForTool(tool)
+
+        local impactPart, impactPos = findImpactPartBelow(hrp.Position, model)
+        local slamTarget
+        if impactPos then slamTarget = Vector3.new(hrp.Position.X, impactPos.Y + 1, hrp.Position.Z)
+        else slamTarget = Vector3.new(hrp.Position.X, hrp.Position.Y - 20, hrp.Position.Z) end
+
+        moveAnchor(anchor, upPos, slamTarget, TORMENT_SLAM_TIME)
+
+        pcall(function()
+            if humanoid and humanoid.Parent then
+                local maxH = humanoid.MaxHealth or 1
+                local dmg = math.max(1, maxH * TORMENT_DAMAGE_PCT)
+                humanoid.Health = math.max(0, (humanoid.Health or 0) - dmg)
+            end
+        end)
+
+        cleanupStorage(storage)
+        if anchor and anchor.Parent then pcall(function() anchor:Destroy() end) end
+
+        RunService.Heartbeat:Wait()
+    end
+end
+
+-- ===== GROUND SLAM (fixed velocities + impact detection + mid-air steering) =====
+local function currentCameraHorizontalDirection()
+    if not Camera or not Camera.CFrame then return Vector3.new(0,0,1) end
+    local lv = Camera.CFrame.LookVector
+    lv = Vector3.new(lv.X, 0, lv.Z)
+    if lv.Magnitude <= 0.001 then return Vector3.new(0,0,1) end
+    return lv.Unit
+end
+
+local function doGroundSlam(tool)
+    local char = localPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    -- apply fixed upward velocity and initial horizontal velocity
+    local camDir = currentCameraHorizontalDirection()
+    local initialVel = Vector3.new(camDir.X * GROUND_SLAM_HORIZ_SPEED, GROUND_SLAM_UP_VEL, camDir.Z * GROUND_SLAM_HORIZ_SPEED)
+    pcall(function() hrp.AssemblyLinearVelocity = initialVel end)
+
+    -- mid-air steering: update horizontal velocity to camera direction each frame while preserving vertical velocity
+    local hitDetected = false
+    local hitPos = nil
+    local touchedConn
+    touchedConn = hrp.Touched:Connect(function(part)
+        if not part then return end
+        if not part:IsA("BasePart") then return end
+        if part:IsDescendantOf(char) then return end
+        local ok, vel = pcall(function() return hrp.AssemblyLinearVelocity end)
+        if not ok or not vel then return end
+        if vel.Y > 1 then return end
+        if not hitDetected then
+            hitDetected = true
+            hitPos = hrp.Position
+        end
+    end)
+
+    local timeout = 4
+    local elapsed = 0
+    while not hitDetected and elapsed < timeout do
+        local dt = RunService.Heartbeat:Wait()
+        elapsed = elapsed + dt
+        local ok, curVel = pcall(function() return hrp.AssemblyLinearVelocity end)
+        local curY = (ok and curVel) and curVel.Y or 0
+        local camH = currentCameraHorizontalDirection()
+        local newVel = Vector3.new(camH.X * GROUND_SLAM_HORIZ_SPEED, curY, camH.Z * GROUND_SLAM_HORIZ_SPEED)
+        pcall(function() hrp.AssemblyLinearVelocity = newVel end)
+
+        -- fallback: raycast short distance below while falling
+        if curY and curY < -1 then
+            local rp = RaycastParams.new()
+            rp.FilterDescendantsInstances = { char }
+            rp.FilterType = Enum.RaycastFilterType.Blacklist
+            local res = Workspace:Raycast(hrp.Position, Vector3.new(0, -3, 0), rp)
+            if res and res.Instance and not res.Instance:IsDescendantOf(char) then
+                hitDetected = true
+                hitPos = res.Position
+                break
+            end
+        end
+    end
+
+    if touchedConn then touchedConn:Disconnect(); touchedConn = nil end
+
+    if not hitDetected then
+        local rp = RaycastParams.new()
+        rp.FilterDescendantsInstances = { char }
+        rp.FilterType = Enum.RaycastFilterType.Blacklist
+        local res = Workspace:Raycast(hrp.Position, Vector3.new(0, -2000, 0), rp)
+        if res and res.Instance then
+            hitDetected = true
+            hitPos = res.Position
+        end
+    end
+
+    local centerPoint = (hitPos and hitPos) or hrp.Position
+    local records = gatherNPCsInRadius(centerPoint, GROUND_SLAM_AREA_RADIUS)
+    if #records > 0 then
+        for _,r in ipairs(records) do pcall(function() r.hum.BreakJointsOnDeath = false end) end
+        for _,r in ipairs(records) do pcall(function() if r.hum and r.hum.Parent then r.hum.Health = 0 end end) end
+        for _,r in ipairs(records) do
+            pcall(function()
+                for _,part in ipairs(r.model:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        local dir = (part.Position - centerPoint)
+                        local vel = (dir.Magnitude <= 0.001) and Vector3.new(0, GROUND_SLAM_FLING_VEL, 0) or dir.Unit * GROUND_SLAM_FLING_VEL
+                        part.AssemblyLinearVelocity = vel
+                    end
+                end
+            end)
+        end
+    end
+end
+
+-- ===== COME TO ME (modified) =====
+
+-- Helper: robustly find a suitable "arm" or fallback part/cframe for anchoring
+local function findPlayerArmPartOrFallback()
+    local char = localPlayer.Character
+    if not char then return nil end
+
+    -- try common arm/hand names
+    local arm = char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm") or char:FindFirstChild("LeftHand") or char:FindFirstChild("Left Arm")
+    if arm and arm:IsA("BasePart") then
+        return arm, arm.CFrame
+    end
+
+    -- fallback to Head or HumanoidRootPart
+    local head = char:FindFirstChild("Head")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if head and head:IsA("BasePart") then
+        return head, head.CFrame
+    elseif hrp and hrp:IsA("BasePart") then
+        return hrp, hrp.CFrame
+    end
+
+    -- final fallback: use camera in front of character (camera CFrame with position near character if possible)
+    if Camera and Camera.CFrame then
+        local pos = (hrp and hrp.Position) or (head and head.Position) or Vector3.new(0,3,0)
+        local camCF = Camera.CFrame
+        local fallbackCF = CFrame.new(pos + camCF.LookVector * 2, pos)
+        return nil, fallbackCF
+    end
+
+    return nil, nil
+end
+
+-- Helper: estimate model bounding extents; tries Model:GetExtentsSize, else computes bounding box
+local function getModelExtents(model)
+    if not model or not model:IsA("Model") then return Vector3.new(0,0,0) end
+    local ok, ext = pcall(function() return model:GetExtentsSize() end)
+    if ok and ext then
+        return ext
+    end
+    -- manual bounding box
+    local minp, maxp = nil, nil
+    for _,v in ipairs(model:GetDescendants()) do
+        if v:IsA("BasePart") then
+            local size = v.Size
+            local c = v.Position
+            local a = c - size * 0.5
+            local b = c + size * 0.5
+            if not minp then minp = a; maxp = b
+            else
+                minp = Vector3.new(math.min(minp.X, a.X), math.min(minp.Y, a.Y), math.min(minp.Z, a.Z))
+                maxp = Vector3.new(math.max(maxp.X, b.X), math.max(maxp.Y, b.Y), math.max(maxp.Z, b.Z))
+            end
+        end
+    end
+    if minp and maxp then
+        return maxp - minp
+    end
+    return Vector3.new(0,0,0)
+end
+
+-- Compute desired distance (baseDist) adjusted for model size so NPC won't overlap/touch player
+local function computeSafeDistanceForModel(baseDist, model)
+    local ext = getModelExtents(model)
+    local sizeMag = ext.Magnitude
+    local scale = 1
+    if sizeMag > DEFAULT_NPC_AVG_BOUND then
+        scale = sizeMag / DEFAULT_NPC_AVG_BOUND
+    end
+    -- also add half-width of the model in X/Z to ensure edges don't touch
+    local halfWidth = math.max(ext.X, ext.Z) * 0.5
+    local final = baseDist * scale + halfWidth
+    -- clamp to a reasonable maximum to avoid teleports absurd distances
+    final = math.clamp(final, baseDist, 60)
+    return final
+end
+
+-- Core: Come To Me behavior (normal mode - arrives then blast/kills)
+local function doComeToMeOn(humanoid, model, tool)
+    if not humanoid or not model then return end
+    if isPlayerCharacter(model) then return end
+
+    -- find player anchor (arm or fallback)
+    local armPart, armCFrame = findPlayerArmPartOrFallback()
+    local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
+    if not hrp then return end
+
+    createTempHandleForTool(tool)
+
+    local anchor = Instance.new("Part")
+    anchor.Name = "Emp_ComeToMe_Anchor"
+    anchor.Size = Vector3.new(1,1,1); anchor.Anchored = true; anchor.CanCollide = false; anchor.Transparency = 1
+    anchor.Position = hrp.Position; anchor.Parent = Workspace
+
+    local storage = attachModelToAnchor(model, anchor)
+
+    -- compute desired final point in front of the arm based on model size
+    local baseDist = COME_TO_ME_BASE_DISTANCE
+    local safeDist = computeSafeDistanceForModel(baseDist, model)
+
+    -- determine function to get current desired point (to support dynamic movement of player)
+    local function getDesiredPoint()
+        if armPart and armPart.Parent then
+            local forward = armPart.CFrame.LookVector
+            return armPart.Position + forward * safeDist
+        elseif armCFrame then
+            local forward = armCFrame.LookVector
+            return armCFrame.Position + forward * safeDist
+        else
+            local fallback = (localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")) or nil
+            if fallback then
+                local fwd = (Camera and Camera.CFrame and Camera.CFrame.LookVector) or Vector3.new(0,0,-1)
+                return fallback.Position + fwd * safeDist
+            end
+            return hrp.Position
+        end
+    end
+
+    local arrived = false
+    -- pull the anchor toward the desired point smoothly
+    while not arrived and humanoid and humanoid.Parent and hrp.Parent do
+        local desiredPoint = getDesiredPoint()
+        local dir = desiredPoint - anchor.Position
+        local dist = dir.Magnitude
+        if dist <= 0.5 then arrived = true; break end
+        local dt = RunService.Heartbeat:Wait()
+        local move = dir.Unit * math.min(COME_TO_ME_PULL_SPEED * dt, dist)
+        anchor.Position = anchor.Position + move
+    end
+
+    if not arrived then
+        cleanupStorage(storage)
+        if anchor and anchor.Parent then pcall(function() anchor:Destroy() end) end
+        removeTempHandleForTool(tool)
+        return
+    end
+
+    -- wait then blast-kill (original behavior)
+    wait(COME_TO_ME_WAIT)
+    removeTempHandleForTool(tool)
+    wait(0.03)
+    createTempHandleForTool(tool)
+
+    -- Blast direction uses local player's character facing (HumanoidRootPart look vector)
+    local charHRP = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local playerForward = (charHRP and charHRP.CFrame.LookVector) or ((Camera and Camera.CFrame and Camera.CFrame.LookVector) or Vector3.new(0,0,-1))
+    local blastVel = playerForward.Unit * COME_TO_ME_BLAST_VEL
+
+    pcall(function()
+        if humanoid and humanoid.Parent then humanoid.BreakJointsOnDeath = false; humanoid.Health = 0 end
+        for _,part in ipairs(storage.parts or {}) do
+            if part and part:IsA("BasePart") then part.AssemblyLinearVelocity = blastVel end
+        end
+    end)
+
+    cleanupStorage(storage)
+    if anchor and anchor.Parent then pcall(function() anchor:Destroy() end) end
+    removeTempHandleForTool(tool)
+end
+
+-- Core: Drag mode - pick NPC and hold it in front of player until released (no damage)
+-- Release only occurs on a real click/tap (tap defined as short press with minimal movement).
+local function doComeToMeDrag(humanoid, model, tool)
+    if not humanoid or not model then return end
+    if isPlayerCharacter(model) then return end
+
+    local armPart, armCFrame = findPlayerArmPartOrFallback()
+    local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
+    if not hrp then return end
+
+    createTempHandleForTool(tool)
+
+    local anchor = Instance.new("Part")
+    anchor.Name = "Emp_ComeToMe_DragAnchor"
+    anchor.Size = Vector3.new(1,1,1); anchor.Anchored = true; anchor.CanCollide = false; anchor.Transparency = 1
+    anchor.Position = hrp.Position; anchor.Parent = Workspace
+
+    local storage = attachModelToAnchor(model, anchor)
+
+    local baseDist = COME_TO_ME_DRAG_BASE_DISTANCE
+    local safeDist = computeSafeDistanceForModel(baseDist, model)
+
+    local dragging = true
+    local released = false
+
+    -- Input monitoring: use UserInputService so we can distinguish touch taps from touch drags (camera moves)
+    local touchStart = nil
+    local beganConn, endedConn
+
+    beganConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            -- Mouse click - immediate release
+            released = true
+        elseif input.UserInputType == Enum.UserInputType.Touch then
+            -- Record touch start for tap detection
+            touchStart = {pos = input.Position, time = tick()}
+        elseif input.UserInputType == Enum.UserInputType.TouchGesture then
+            -- ignore
+        end
+    end)
+
+    endedConn = UserInputService.InputEnded:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.UserInputType == Enum.UserInputType.Touch then
+            if touchStart then
+                local dt = tick() - touchStart.time
+                local dx = (input.Position - touchStart.pos)
+                local dist = math.sqrt(dx.X * dx.X + dx.Y * dx.Y)
+                -- Consider this a tap if it was short and didn't move far
+                if dt <= TAP_MAX_TIME and dist <= TAP_MOVE_THRESHOLD then
+                    released = true
+                end
+                touchStart = nil
+            else
+                -- No recorded start (rare) - don't release
+            end
+        end
+    end)
+
+    -- Also listen for keyboard/controller A/button as alternative release on non-touch devices (optional)
+    local function keyboardRelease(input, gameProcessed)
+        if gameProcessed then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.KeyCode == Enum.KeyCode.ButtonR2 or input.KeyCode == Enum.KeyCode.ButtonA then
+            released = true
+        end
+    end
+    local kbConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            -- optional: treat left mouse/keyboard confirm as release? (kept minimal; not necessary)
+        end
+    end)
+
+    -- move anchor to be at the computed desired point continuously until released or target invalid
+    while dragging and not released and humanoid and humanoid.Parent and hrp.Parent do
+        local desiredPoint
+        if armPart and armPart.Parent then
+            desiredPoint = armPart.Position + armPart.CFrame.LookVector * safeDist
+        elseif armCFrame then
+            desiredPoint = armCFrame.Position + armCFrame.LookVector * safeDist
+        else
+            local fallback = (localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")) or nil
+            local fwd = (Camera and Camera.CFrame and Camera.CFrame.LookVector) or Vector3.new(0,0,-1)
+            if fallback then desiredPoint = fallback.Position + fwd * safeDist else desiredPoint = hrp.Position end
+        end
+        if anchor and anchor.Parent then anchor.Position = desiredPoint end
+        RunService.Heartbeat:Wait()
+    end
+
+    -- cleanup input connections
+    if beganConn then beganConn:Disconnect(); beganConn = nil end
+    if endedConn then endedConn:Disconnect(); endedConn = nil end
+    if kbConn then kbConn:Disconnect(); kbConn = nil end
+
+    -- release: just clean up attachments and let NPC go
+    cleanupStorage(storage)
+    if anchor and anchor.Parent then pcall(function() anchor:Destroy() end) end
+    removeTempHandleForTool(tool)
+end
+
+-- ===== EMPEROR'S POWER (main tool with GUI for Wrath & Be Gone) =====
+local function doEmperorsPowerAt(point, powerTool)
+    local records = gatherNPCsInRadius(point, EMPEROR_POWER_RADIUS)
+    if #records == 0 then return end
+
+    for _,rec in ipairs(records) do pcall(function() rec.hum.BreakJointsOnDeath = false end) end
+    for _,rec in ipairs(records) do pcall(function() if rec.hum and rec.hum.Parent then rec.hum.Health = 0 end end) end
+    for _,rec in ipairs(records) do
+        pcall(function()
+            local model = rec.model
+            if model and rec.hrp then
+                for _,part in ipairs(model:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        local dir = (part.Position - point)
+                        local vel = (dir.Magnitude <= 0.001) and Vector3.new(0, EMPEROR_POWER_VEL, 0) or dir.Unit * EMPEROR_POWER_VEL
+                        part.AssemblyLinearVelocity = vel
+                    end
+                end
+            end
+        end)
+    end
+end
+
+local function doBeGoneAt(point)
+    local records = gatherNPCsInRadius(point, BE_GONE_RADIUS)
+    if #records == 0 then return end
+    for _,rec in ipairs(records) do pcall(function() rec.hum.BreakJointsOnDeath = false end) end
+    for _,rec in ipairs(records) do pcall(function() if rec.hum and rec.hum.Parent then rec.hum.Health = 0 end end) end
+    for _,rec in ipairs(records) do
+        spawn(function()
+            pcall(function()
+                local model = rec.model
+                if model then
+                    for _,part in ipairs(model:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            pcall(function() part.Position = BEGONE_TELEPORT_POS end)
+                        end
+                    end
+                end
+            end)
+        end)
+    end
+end
+
+local function doEmporersWrathAt(center, powerTool)
+    local records = gatherNPCsInRadius(center, WRATH_RADIUS)
+    if #records == 0 then return end
+
+    local targets = {}
+    for _,r in ipairs(records) do
+        if r.hum and r.model and r.hrp then
+            local anchor = Instance.new("Part")
+            anchor.Name = "Wrath_Anchor"; anchor.Size = Vector3.new(1,1,1); anchor.Anchored = true; anchor.CanCollide = false; anchor.Transparency = 1
+            anchor.Position = r.hrp.Position; anchor.Parent = Workspace
+            local storage = attachModelToAnchor(r.model, anchor)
+            table.insert(targets, {hum = r.hum, model = r.model, hrp = r.hrp, anchor = anchor, storage = storage})
+        end
+    end
+    if #targets == 0 then return end
+
+    local cycles = math.floor(WRATH_DURATION_SECONDS / WRATH_CYCLE_INTERVAL)
+    for i = 1, cycles do
+        createTempHandleForTool(powerTool)
+
+        local lifts = {}
+        for _,t in ipairs(targets) do
+            if t.hum and t.hum.Parent and t.model and t.model.Parent and t.anchor and t.anchor.Parent then
+                local startPos = t.anchor.Position
+                local upPos = startPos + Vector3.new(0, LIFT_HEIGHT * 0.45, 0)
+                lifts[#lifts+1] = {anchor = t.anchor, start = startPos, target = upPos}
+            end
+        end
+        local liftDur = WRATH_CYCLE_INTERVAL * 0.4
+        local elapsed = 0
+        while elapsed < liftDur do
+            local dt = RunService.Heartbeat:Wait()
+            elapsed = elapsed + dt
+            local alpha = math.min(elapsed / liftDur, 1)
+            for _,l in ipairs(lifts) do if l.anchor and l.anchor.Parent then l.anchor.Position = l.start:Lerp(l.target, alpha) end end
+        end
+        for _,l in ipairs(lifts) do if l.anchor and l.anchor.Parent then l.anchor.Position = l.target end end
+
+        removeTempHandleForTool(powerTool)
+
+        local slams = {}
+        for _,t in ipairs(targets) do
+            if t.hum and t.hum.Parent and t.model and t.model.Parent and t.anchor and t.anchor.Parent then
+                local impactPart, impactPos = findImpactPartBelow(t.hrp.Position, t.model)
+                local slamTarget
+                if impactPos then slamTarget = Vector3.new(t.hrp.Position.X, impactPos.Y + 1, t.hrp.Position.Z)
+                else slamTarget = Vector3.new(t.hrp.Position.X, t.hrp.Position.Y - 20, t.hrp.Position.Z) end
+                slams[#slams+1] = {anchor = t.anchor, start = t.anchor.Position, target = slamTarget, hum = t.hum, model = t.model, hrp = t.hrp}
+            end
+        end
+        local slamDur = WRATH_CYCLE_INTERVAL * 0.4
+        local elapsed2 = 0
+        while elapsed2 < slamDur do
+            local dt = RunService.Heartbeat:Wait()
+            elapsed2 = elapsed2 + dt
+            local alpha = math.min(elapsed2 / slamDur, 1)
+            for _,s in ipairs(slams) do if s.anchor and s.anchor.Parent then s.anchor.Position = s.start:Lerp(s.target, alpha) end end
+        end
+        for _,s in ipairs(slams) do if s.anchor and s.anchor.Parent then s.anchor.Position = s.target end end
+
+        for _,s in ipairs(slams) do
+            pcall(function()
+                if s.hum and s.hum.Parent then
+                    local maxH = s.hum.MaxHealth or 1
+                    local dmg = math.max(1, maxH * WRATH_SLAM_PCT)
+                    s.hum.Health = math.max(0, (s.hum.Health or 0) - dmg)
+                end
+            end)
+        end
+
+        RunService.Heartbeat:Wait()
+        wait(WRATH_CYCLE_INTERVAL * 0.05)
+    end
+
+    for _,t in ipairs(targets) do cleanupStorage(t.storage); if t.anchor and t.anchor.Parent then pcall(function() t.anchor:Destroy() end) end end
+end
+
+-- ===== WIRING TOOLS + GUI BUTTONS =====
+local function giveToolToBackpack(name)
+    local bp = localPlayer:FindFirstChildOfClass("Backpack")
+    if not bp then return end
+    local existing = bp:FindFirstChild(name) or (localPlayer.Character and localPlayer.Character:FindFirstChild(name))
+    if existing and existing:IsA("Tool") then return existing end
+    local tool = Instance.new("Tool")
+    tool.Name = name; tool.RequiresHandle = false; tool.CanBeDropped = false; tool.Parent = bp
+    return tool
+end
+
+-- Emporer Slam: now includes Ground Slam button and Torment toggle (GUI)
+local function wireEmporerSlam(tool)
+    if not tool then return end
+    local sg, groundBtn, tormentBtn = createSlamGUIIfNeeded()
+
+    tool.Equipped:Connect(function(mouse)
+        if not mouse then mouse = localPlayer:GetMouse() end
+        if sg then sg.Enabled = true end
+
+        -- ensure the GUI buttons are visible while equipped
+        if storedGUIs.SlamGUI then storedGUIs.SlamGUI.Enabled = true end
+
+        local clickConn
+        clickConn = mouse.Button1Down:Connect(function()
+            local hum, model = pickNPCFromMouse(mouse)
+            if hum and model then
+                if tormentEnabled then
+                    spawn(function() doTormentOn(hum, model, tool) end)
+                else
+                    spawn(function() doEmporerSlamOn(hum, model, tool) end)
+                end
+            end
+        end)
+
+        local gsConn
+        gsConn = groundBtn.MouseButton1Click:Connect(function()
+            createTempHandleForTool(tool)
+            spawn(function() doGroundSlam(tool) end)
+            wait(1)
+            removeTempHandleForTool(tool)
+        end)
+
+        local tConn
+        tConn = tormentBtn.MouseButton1Click:Connect(function()
+            tormentEnabled = not tormentEnabled
+            tormentBtn.Text = tormentEnabled and "Torment: On" or "Torment: Off"
+        end)
+
+        local function onUnequip()
+            if clickConn then clickConn:Disconnect(); clickConn = nil end
+            if gsConn then gsConn:Disconnect(); gsConn = nil end
+            if tConn then tConn:Disconnect(); tConn = nil end
+            removeTempHandleForTool(tool)
+            if sg then sg.Enabled = false end
+        end
+
+        tool.Unequipped:Connect(onUnequip)
+    end)
+
+    tool.Unequipped:Connect(function()
+        if storedGUIs.SlamGUI then storedGUIs.SlamGUI.Enabled = false end
+    end)
+end
+
+-- Come To Me (wired with Drag toggle)
+local function wireComeToMe(tool)
+    if not tool then return end
+    local cg, dragBtn = createComeGUIIfNeeded()
+
+    -- initialize drag toggle state for GUI
+    if dragBtn then dragBtn.Text = comeDragEnabled and "Drag: On" or "Drag: Off" end
+
+    tool.Equipped:Connect(function(mouse)
+        if not mouse then mouse = localPlayer:GetMouse() end
+        if cg then cg.Enabled = true end
+
+        -- show GUI while equipped
+        if storedGUIs.ComeGUI then storedGUIs.ComeGUI.Enabled = true end
+
+        -- toggle button wiring
+        local dragConn
+        dragConn = dragBtn.MouseButton1Click:Connect(function()
+            comeDragEnabled = not comeDragEnabled
+            dragBtn.Text = comeDragEnabled and "Drag: On" or "Drag: Off"
+        end)
+
+        local conn
+        conn = mouse.Button1Down:Connect(function()
+            local hum, model = pickNPCFromMouse(mouse)
+            if hum and model then
+                if comeDragEnabled then
+                    -- spawn drag routine (drag until a confirmed click/tap release)
+                    spawn(function() doComeToMeDrag(hum, model, tool) end)
+                else
+                    spawn(function() doComeToMeOn(hum, model, tool) end)
+                end
+            end
+        end)
+
+        tool.Unequipped:Connect(function()
+            if conn then conn:Disconnect(); conn = nil end
+            if dragConn then dragConn:Disconnect(); dragConn = nil end
+            removeTempHandleForTool(tool)
+            if cg then cg.Enabled = false end
+        end)
+    end)
+
+    tool.Unequipped:Connect(function()
+        if storedGUIs.ComeGUI then storedGUIs.ComeGUI.Enabled = false end
+    end)
+end
+
+-- Power tool: click = Emporer's Power, GUI = Wrath & Be Gone
+local function wirePowerTool(tool)
+    if not tool then return end
+    local pg, wrathBtn, begoneBtn = createPowerToolGUIIfNeeded()
+    storedGUIs.PowerGUI = pg
+    storedGUIs.Power_WrathBtn = wrathBtn
+    storedGUIs.Power_BeGoneBtn = begoneBtn
+
+    tool.Equipped:Connect(function(mouse)
+        if not mouse then mouse = localPlayer:GetMouse() end
+        if pg then pg.Enabled = true end
+
+        -- ensure visible
+        if storedGUIs.PowerGUI then storedGUIs.PowerGUI.Enabled = true end
+
+        local clickConn
+        clickConn = mouse.Button1Down:Connect(function()
+            local hitPos = mouse.Hit and mouse.Hit.p
+            if hitPos then
+                createTempHandleForTool(tool)
+                doEmperorsPowerAt(hitPos, tool)
+                wait(0.12)
+                removeTempHandleForTool(tool)
+            end
+        end)
+
+        local wrathConn = wrathBtn.MouseButton1Click:Connect(function()
+            createTempHandleForTool(tool)
+            local hitPos = (mouse and mouse.Hit and mouse.Hit.p) or (localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") and localPlayer.Character.HumanoidRootPart.Position)
+            if hitPos then doEmporersWrathAt(hitPos, tool) end
+            removeTempHandleForTool(tool)
+        end)
+
+        local bgConn = begoneBtn.MouseButton1Click:Connect(function()
+            createTempHandleForTool(tool)
+            local hitPos = (mouse and mouse.Hit and mouse.Hit.p) or (localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") and localPlayer.Character.HumanoidRootPart.Position)
+            if hitPos then doBeGoneAt(hitPos) end
+            removeTempHandleForTool(tool)
+        end)
+
+        local function onUnequip()
+            if clickConn then clickConn:Disconnect(); clickConn = nil end
+            if wrathConn then wrathConn:Disconnect(); wrathConn = nil end
+            if bgConn then bgConn:Disconnect(); bgConn = nil end
+            removeTempHandleForTool(tool)
+            if pg then pg.Enabled = false end
+        end
+
+        tool.Unequipped:Connect(onUnequip)
+    end)
+
+    tool.Unequipped:Connect(function() if storedGUIs.PowerGUI then storedGUIs.PowerGUI.Enabled = false end end)
+end
+
+-- ===== ENSURE TOOLS ON SPAWN + RESPAWN HANDLING =====
+local function ensureTools()
+    local bp = localPlayer:FindFirstChildOfClass("Backpack")
+    if not bp then return end
+
+    local slam = giveToolToBackpack(TOOL_EMPEROR_SLAM)
+    if slam then wireEmporerSlam(slam) end
+
+    local come = giveToolToBackpack(TOOL_COME_TO_ME)
+    if come then wireComeToMe(come) end
+
+    local power = giveToolToBackpack(TOOL_EMPEROR_POWER)
+    if power then wirePowerTool(power) end
+end
+
+-- helper to create tool if missing
+function giveToolToBackpack(name)
+    local bp = localPlayer:FindFirstChildOfClass("Backpack")
+    if not bp then return end
+    local existing = bp:FindFirstChild(name) or (localPlayer.Character and localPlayer.Character:FindFirstChild(name))
+    if existing and existing:IsA("Tool") then return existing end
+    local tool = Instance.new("Tool")
+    tool.Name = name; tool.RequiresHandle = false; tool.CanBeDropped = false; tool.Parent = bp
+    return tool
+end
+
+local function onCharacterAdded(char)
+    wait(0.06)
+    hideAllStoredGUIs()
+    tormentEnabled = false
+    comeDragEnabled = false
+    if storedGUIs.Slam_TormentToggle then storedGUIs.Slam_TormentToggle.Text = "Torment: Off" end
+    if storedGUIs.Come_DragToggle then storedGUIs.Come_DragToggle.Text = "Drag: Off" end
+    -- re-give tools
+    ensureTools()
+    -- remove any handles leftover
+    local bp = localPlayer:FindFirstChildOfClass("Backpack")
+    if bp then
+        for _,t in ipairs(bp:GetChildren()) do
+            if t:IsA("Tool") then removeTempHandleForTool(t) end
+        end
+    end
+end
+
+-- initial setup
+ensureTools()
+localPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+print("Emporer kit v5 (Come To Me drag tap-release) loaded for", localPlayer.Name)
