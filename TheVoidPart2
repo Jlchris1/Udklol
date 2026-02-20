@@ -1,0 +1,853 @@
+-- VoidAbility_v2_domain_sendloop_handles_kill_on_exit.lua
+-- Place in StarterPlayer -> StarterPlayerScripts (client)
+-- FULL client script.
+-- Changes from previous: during the domain exit float loop NPCs are killed (Humanoid.Health = 0)
+-- instead of being teleported to the void. Handle creation logic is preserved: clicking an NPC or
+-- Send All creates handles parented to the Tool which are removed when the NPC dies. Handles created
+-- during the float (sendAllLoop) are also created so the visual/record behavior matches other flows.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+
+local localPlayer = Players.LocalPlayer
+if not localPlayer then return end
+local Camera = Workspace.CurrentCamera
+
+-- CONFIG
+local TOOL_NAME = "Void."
+local DOMAIN_BUTTON_NAME = "VoidDomainBtn"
+local SECOND_BUTTON_NAME = "SendAllToVoidBtn"
+
+local VOID_FALLEN_HEIGHT = -500
+local VOID_MIN_OFFSET = 10
+local DOMAIN_RADIUS = 750
+local DOMAIN_BOX_SIZE = Vector3.new(800, 600, 800)
+local DOMAIN_BOX_WORLD_POS = Vector3.new(80000, 80000, 80000)
+local DOMAIN_ENTRY_LIFT = 30           -- large lift on entry so player visibly goes high
+local DOMAIN_FLOAT_HEIGHT = 50         -- how far player floats up on exit
+local DOMAIN_FLOAT_TIME = 3            -- seconds to float up on exit
+local DOMAIN_ENTRY_LIFT_TIME = 1.2     -- seconds for entry lift
+local SEND_ALL_VOID_DELAY = 0.01
+local SEND_ALL_HANDLE_LIFETIME = DOMAIN_FLOAT_TIME + 1.0 -- how long before cleaning leftover send-all handles
+
+-- Internal state
+local toolInstance = nil
+local domainActive = false
+local domainState = {
+    originalTime = nil,
+    createdFolder = nil,
+    npcRecords = {}, -- model -> {hum, origWalk, origJump, origPlatformStand}
+    playerOriginalCFrame = nil,
+    playerOriginalPlatformStand = nil,
+    playerOriginalWalk = nil,
+    playerOriginalJump = nil,
+    playerHRPCanCollide = nil,
+    entryAnchor = nil,
+    isFloating = false, -- used to control float-send loop
+}
+local trackedVoidSelections = {} -- model -> humanoid
+
+-- Handle management: track handles created in the tool and clean them when their NPC dies (or on timeout for sendAll)
+local handleRecords = {}      -- handle (Instance) -> { model = model, conn = RBXScriptConnection, source = "click"|"sendAll"|"sendAllLoop" }
+local modelToHandle = {}      -- model -> handle (to quickly find & avoid duplicates)
+
+-- Helpers
+local function isPlayerCharacter(model) return model and Players:GetPlayerFromCharacter(model) ~= nil end
+local function isNPC(model)
+    if not model or not model:IsA("Model") then return false end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    return hum and not Players:GetPlayerFromCharacter(model)
+end
+
+local function getModelRoot(model)
+    if not model then return nil end
+    return model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
+end
+
+local function getModelSizeExtent(model)
+    if not model then return Vector3.new(1,1,1) end
+    local ok, size = pcall(function() return model:GetExtentsSize() end)
+    if ok and typeof(size) == "Vector3" then return size end
+    local minP, maxP
+    for _,p in ipairs(model:GetDescendants()) do
+        if p:IsA("BasePart") then
+            local half = p.Size * 0.5
+            local pMin = p.Position - half
+            local pMax = p.Position + half
+            if not minP then minP = pMin; maxP = pMax
+            else
+                minP = Vector3.new(math.min(minP.X, pMin.X), math.min(minP.Y, pMin.Y), math.min(minP.Z, pMin.Z))
+                maxP = Vector3.new(math.max(maxP.X, pMax.X), math.max(maxP.Y, pMax.Y), math.max(maxP.Z, pMax.Z))
+            end
+        end
+    end
+    if minP and maxP then return maxP - minP end
+    return Vector3.new(1,1,1)
+end
+
+local function screenRayFindHumanoid(screenX, screenY, maxDistance, snapRadius)
+    maxDistance = maxDistance or 2000
+    snapRadius = snapRadius or 8
+    if not Camera then Camera = Workspace.CurrentCamera end
+    local ray = Camera:ScreenPointToRay(screenX, screenY)
+    local origin = ray.Origin
+    local dir = ray.Direction.Unit
+    local bestHum, bestModel, bestProj = nil, nil, math.huge
+    for _, desc in ipairs(Workspace:GetDescendants()) do
+        if desc and desc:IsA("Humanoid") then
+            local h = desc
+            local model = h.Parent
+            if model and model:IsA("Model") and not Players:GetPlayerFromCharacter(model) then
+                local hrp = getModelRoot(model)
+                if hrp and hrp:IsA("BasePart") then
+                    local toHRP = hrp.Position - origin
+                    local proj = toHRP:Dot(dir)
+                    if proj > 0 and proj <= maxDistance then
+                        local closestPoint = origin + dir * proj
+                        local perpDist = (hrp.Position - closestPoint).Magnitude
+                        if perpDist <= snapRadius and proj < bestProj then
+                            bestHum = h
+                            bestModel = model
+                            bestProj = proj
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return bestHum, bestModel
+end
+
+local function ensureVoidTool()
+    local bp = localPlayer:FindFirstChildOfClass("Backpack")
+    if not bp then return end
+    local existing = bp:FindFirstChild(TOOL_NAME) or (localPlayer.Character and localPlayer.Character:FindFirstChild(TOOL_NAME))
+    if existing and existing:IsA("Tool") then return existing end
+    local tool = Instance.new("Tool")
+    tool.Name = TOOL_NAME
+    tool.RequiresHandle = false
+    tool.CanBeDropped = false
+    tool.Parent = bp
+    return tool
+end
+
+-- Create a handle inside the player's Tool and wire it to the model's Humanoid.Died so it is removed when the NPC dies.
+-- source = "click" or "sendAll" or "sendAllLoop" used for cleanup policies.
+local function createHandleForModel(tool, model, source)
+    if not tool or not model then return nil end
+    if modelToHandle[model] and modelToHandle[model].Parent then
+        -- already have a handle for this model
+        return modelToHandle[model]
+    end
+
+    local handle = Instance.new("Part")
+    handle.Name = "VoidSelectionHandle_" .. tostring(math.floor(tick()*1000))
+    handle.Size = Vector3.new(1,1,1)
+    handle.Transparency = 0.5
+    handle.CanCollide = false
+    handle.Anchored = false
+    handle.Massless = true
+    handle.Parent = tool
+
+    -- find humanoid
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    local conn
+    if hum then
+        conn = hum.Died:Connect(function()
+            -- when NPC dies, destroy handle and cleanup records
+            if conn then
+                pcall(function() conn:Disconnect() end)
+            end
+            if handle and handle.Parent then
+                pcall(function() handle:Destroy() end)
+            end
+            handleRecords[handle] = nil
+            modelToHandle[model] = nil
+        end)
+    else
+        -- no humanoid found; schedule handle cleanup after a short time to avoid leaking
+        conn = nil
+        spawn(function()
+            task.wait(5)
+            if handle and handle.Parent then
+                pcall(function() handle:Destroy() end)
+            end
+            handleRecords[handle] = nil
+        end)
+    end
+
+    handleRecords[handle] = { model = model, conn = conn, source = source or "click" }
+    modelToHandle[model] = handle
+    return handle
+end
+
+local function destroyHandleIfExistsForModel(model)
+    local h = modelToHandle[model]
+    if h and h.Parent then
+        pcall(function() h:Destroy() end)
+    end
+    modelToHandle[model] = nil
+    -- handleRecords entry will be removed by the Died connection when possible; remove proactively too
+    for hd,rec in pairs(handleRecords) do
+        if rec.model == model then
+            if rec.conn then pcall(function() rec.conn:Disconnect() end) end
+            handleRecords[hd] = nil
+        end
+    end
+end
+
+-- Teleport model to Void (above FallenPartsDestroyHeight) and return when done.
+-- This function will create a handle for the model (and keep it until the NPC dies).
+local function sendModelToVoidWithHandle(tool, model, source)
+    if not model or not model.Parent then return end
+    local hrp = getModelRoot(model)
+    if not hrp or not hrp:IsA("BasePart") then return end
+
+    -- create handle in tool (persist until NPC death)
+    createHandleForModel(tool, model, source)
+
+    -- set FallenPartsDestroyHeight safely
+    pcall(function() Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT end)
+
+    local ext = getModelSizeExtent(model)
+    local sizeBasedOffset = math.max(VOID_MIN_OFFSET, ext.Y * 0.5 + math.max(ext.X, ext.Z) * 0.25)
+    local targetY = VOID_FALLEN_HEIGHT + sizeBasedOffset
+
+    -- teleport each part preserving XZ, setting Y to targetY
+    for _, part in ipairs(model:GetDescendants()) do
+        if part:IsA("BasePart") then
+            pcall(function() part.CFrame = CFrame.new(part.Position.X, targetY, part.Position.Z) end)
+        end
+    end
+
+    -- don't destroy handle here; it will be removed on humanoid death (or later cleanup)
+end
+
+local function trackSelectionAndRestoreOnDeaths(selectionTable)
+    local remaining = {}
+    for model, hum in pairs(selectionTable) do
+        if model and model.Parent and hum and hum.Parent then
+            remaining[model] = hum
+        end
+    end
+    if next(remaining) == nil then
+        pcall(function() Workspace.FallenPartsDestroyHeight = 0/0 end)
+        return
+    end
+
+    local count = 0
+    local conns = {}
+    for model, hum in pairs(remaining) do
+        count = count + 1
+        local function onDied()
+            if conns[model] then
+                pcall(function() conns[model]:Disconnect() end)
+                conns[model] = nil
+            end
+            remaining[model] = nil
+            count = count - 1
+            if count <= 0 then
+                pcall(function() Workspace.FallenPartsDestroyHeight = 0/0 end)
+            end
+        end
+        conns[model] = hum.Died:Connect(onDied)
+    end
+end
+
+-- Domain utilities (create/destroy)
+local function createDomainBox()
+    local root = Instance.new("Folder")
+    root.Name = "VoidDomainTemp"
+    root.Parent = Workspace
+    -- floor
+    local floor = Instance.new("Part")
+    floor.Name = "VoidFloor"
+    floor.Size = Vector3.new(DOMAIN_BOX_SIZE.X, 2, DOMAIN_BOX_SIZE.Z)
+    floor.Anchored = true
+    floor.CanCollide = true
+    floor.Position = DOMAIN_BOX_WORLD_POS
+    floor.BrickColor = BrickColor.new("Really black")
+    floor.Material = Enum.Material.SmoothPlastic
+    floor.Parent = root
+    -- walls
+    local halfX = DOMAIN_BOX_SIZE.X/2
+    local halfZ = DOMAIN_BOX_SIZE.Z/2
+    local wallThickness = 4
+    local wallHeight = DOMAIN_BOX_SIZE.Y
+    local function makeWall(pos, size, name)
+        local w = Instance.new("Part")
+        w.Name = name
+        w.Size = size
+        w.Anchored = true
+        w.CanCollide = true
+        w.Position = pos
+        w.BrickColor = BrickColor.new("Really black")
+        w.Material = Enum.Material.SmoothPlastic
+        w.Parent = root
+        return w
+    end
+    local center = DOMAIN_BOX_WORLD_POS
+    makeWall(center + Vector3.new(0, wallHeight/2 + 1, halfZ + wallThickness/2),
+             Vector3.new(DOMAIN_BOX_SIZE.X, wallHeight, wallThickness), "Wall_N")
+    makeWall(center + Vector3.new(0, wallHeight/2 + 1, -halfZ - wallThickness/2),
+             Vector3.new(DOMAIN_BOX_SIZE.X, wallHeight, wallThickness), "Wall_S")
+    makeWall(center + Vector3.new(halfX + wallThickness/2, wallHeight/2 + 1, 0),
+             Vector3.new(wallThickness, wallHeight, DOMAIN_BOX_SIZE.Z), "Wall_E")
+    makeWall(center + Vector3.new(-halfX - wallThickness/2, wallHeight/2 + 1, 0),
+             Vector3.new(wallThickness, wallHeight, DOMAIN_BOX_SIZE.Z), "Wall_W")
+    -- ceiling
+    local ceiling = Instance.new("Part")
+    ceiling.Name = "VoidCeiling"
+    ceiling.Size = Vector3.new(DOMAIN_BOX_SIZE.X, 2, DOMAIN_BOX_SIZE.Z)
+    ceiling.Anchored = true
+    ceiling.CanCollide = true
+    ceiling.Position = center + Vector3.new(0, wallHeight + 2, 0)
+    ceiling.BrickColor = BrickColor.new("Really black")
+    ceiling.Material = Enum.Material.SmoothPlastic
+    ceiling.Parent = root
+
+    return root
+end
+
+local function destroyDomainBox(folder)
+    if not folder then return end
+    pcall(function() folder:Destroy() end)
+end
+
+-- Lock / restore NPC data in domain
+local function lockNPCInDomain(model)
+    if not model then return end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    if domainState.npcRecords[model] then return end
+    local rec = {}
+    rec.hum = hum
+    rec.origWalk = hum.WalkSpeed
+    rec.origJump = hum.JumpPower or 0
+    rec.origPlatform = hum.PlatformStand
+    pcall(function()
+        hum.WalkSpeed = 0
+        if hum.JumpPower ~= nil then hum.JumpPower = 0 end
+        hum.PlatformStand = true
+    end)
+    domainState.npcRecords[model] = rec
+end
+
+local function restoreNPCFromDomain(model)
+    if not model then return end
+    local rec = domainState.npcRecords[model]
+    if not rec then return end
+    local hum = rec.hum
+    pcall(function()
+        if hum and hum.Parent then
+            hum.WalkSpeed = rec.origWalk or hum.WalkSpeed
+            if hum.JumpPower ~= nil then hum.JumpPower = rec.origJump or hum.JumpPower end
+            hum.PlatformStand = rec.origPlatform or false
+        end
+    end)
+    domainState.npcRecords[model] = nil
+end
+
+-- Move NPCs into the domain and move & lift the local player.
+local function moveIntoDomain(npcList)
+    local playerChar = localPlayer.Character
+    local playerHRP = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
+    local playerHum = playerChar and playerChar:FindFirstChildOfClass("Humanoid")
+    if not playerHRP or not playerHum then return end
+
+    -- Save player's original cframe and movement values
+    domainState.playerOriginalCFrame = playerHRP.CFrame
+    domainState.playerOriginalPlatformStand = playerHum.PlatformStand
+    domainState.playerOriginalWalk = playerHum.WalkSpeed
+    domainState.playerOriginalJump = playerHum.JumpPower or 0
+    local origCanCollide = nil
+    pcall(function() origCanCollide = playerHRP.CanCollide end)
+    domainState.playerHRPCanCollide = origCanCollide
+
+    -- Remove any stale entry anchor
+    if domainState.entryAnchor and domainState.entryAnchor.Parent then
+        pcall(function() domainState.entryAnchor:Destroy() end)
+        domainState.entryAnchor = nil
+    end
+
+    -- Unstick the player slightly: nudge up and zero velocities, temporarily disable HRP collisions to avoid getting stuck on geometry.
+    pcall(function()
+        playerHRP.CFrame = playerHRP.CFrame + Vector3.new(0, 4, 0) -- small nudge
+        if playerHRP.AssemblyLinearVelocity then playerHRP.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+        if playerHRP.AssemblyAngularVelocity then playerHRP.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+        playerHRP.CanCollide = false
+    end)
+
+    -- Immobilize NPCs and compute their offsets relative to the player's current position
+    local center = DOMAIN_BOX_WORLD_POS
+    local halfX = DOMAIN_BOX_SIZE.X / 2 - 2
+    local halfZ = DOMAIN_BOX_SIZE.Z / 2 - 2
+    local prPos = playerHRP.Position -- anchor reference for offsets
+    for _, entry in ipairs(npcList) do
+        local m = entry.model
+        local hrp = entry.hrp
+        if m and hrp and hrp.Parent then
+            lockNPCInDomain(m)
+            local offset = hrp.Position - prPos
+            local nx = math.clamp(offset.X, -halfX, halfX)
+            local nz = math.clamp(offset.Z, -halfZ, halfZ)
+            local ny = 3
+            local dest = center + Vector3.new(nx, ny + 1, nz)
+            for _,p in ipairs(m:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    pcall(function() p.CFrame = CFrame.new(dest + (p.Position - hrp.Position)) end)
+                end
+            end
+        end
+    end
+
+    -- Create entry anchor (fresh) at player's position and lift dramatically for a strong visual.
+    local entryAnchor = Instance.new("Part")
+    entryAnchor.Name = "Void_EntryAnchor_" .. tostring(tick())
+    entryAnchor.Size = Vector3.new(1,1,1)
+    entryAnchor.Anchored = true
+    entryAnchor.CanCollide = false
+    entryAnchor.Transparency = 1
+    entryAnchor.CFrame = playerHRP.CFrame
+    entryAnchor.Parent = Workspace
+    domainState.entryAnchor = entryAnchor
+
+    -- Keep PlatformStand FALSE so player can still move inside the domain.
+    pcall(function() playerHum.PlatformStand = false end)
+
+    -- Lift player up visually using the entryAnchor, forcing HRP.CFrame each frame (reliable).
+    local start = entryAnchor.Position
+    local target = start + Vector3.new(0, DOMAIN_ENTRY_LIFT, 0)
+    local dur = DOMAIN_ENTRY_LIFT_TIME
+    local elapsed = 0
+    while elapsed < dur do
+        local dt = RunService.Heartbeat:Wait()
+        elapsed = elapsed + dt
+        local alpha = math.min(elapsed / dur, 1)
+        entryAnchor.Position = start:Lerp(target, alpha)
+        if playerHRP and playerHRP.Parent then
+            pcall(function() playerHRP.CFrame = CFrame.new(entryAnchor.Position) end)
+        end
+    end
+
+    -- Teleport player to inside the domain (center) at a safe height so they don't intersect walls/floor.
+    local insidePos = center + Vector3.new(0, 10, 0)
+    if playerHRP and playerHRP.Parent then
+        pcall(function() playerHRP.CFrame = CFrame.new(insidePos) end)
+    end
+
+    -- Destroy the entry anchor — we no longer need to force the player's CFrame
+    if entryAnchor and entryAnchor.Parent then
+        pcall(function() entryAnchor:Destroy() end)
+    end
+    domainState.entryAnchor = nil
+
+    -- Restore HRP collision to previous state (so player can move and collide normally inside domain)
+    pcall(function()
+        if domainState.playerHRPCanCollide ~= nil then
+            playerHRP.CanCollide = domainState.playerHRPCanCollide
+        else
+            playerHRP.CanCollide = true
+        end
+    end)
+end
+
+-- Fresh float-and-exit logic with looping kills (instead of send-to-void)
+local function exitDomainByClick()
+    if not domainActive then return end
+
+    local playerChar = localPlayer.Character
+    local hrp = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
+    local hum = playerChar and playerChar:FindFirstChildOfClass("Humanoid")
+
+    -- If missing hrp/hum: best-effort cleanup
+    if not hrp or not hum then
+        for model, rec in pairs(domainState.npcRecords) do
+            if rec and rec.hum and rec.hum.Parent and rec.hum.Health > 0 then
+                pcall(function() rec.hum.Health = 0 end)
+            end
+            restoreNPCFromDomain(model)
+        end
+        domainState.npcRecords = {}
+        if domainState.originalTime then
+            pcall(function() Lighting.ClockTime = domainState.originalTime end)
+            domainState.originalTime = nil
+        end
+        destroyDomainBox(domainState.createdFolder); domainState.createdFolder = nil
+        if domainState.entryAnchor and domainState.entryAnchor.Parent then
+            pcall(function() domainState.entryAnchor:Destroy() end)
+        end
+        domainState.entryAnchor = nil
+        domainActive = false
+        return
+    end
+
+    -- Create fresh float anchor at player's current position
+    local floatAnchor = Instance.new("Part")
+    floatAnchor.Name = "Void_FloatAnchor_" .. tostring(tick())
+    floatAnchor.Size = Vector3.new(1,1,1)
+    floatAnchor.Anchored = true
+    floatAnchor.CanCollide = false
+    floatAnchor.Transparency = 1
+    floatAnchor.CFrame = hrp.CFrame
+    floatAnchor.Parent = Workspace
+
+    -- Destroy any lingering entry anchor (avoid reuse)
+    if domainState.entryAnchor and domainState.entryAnchor.Parent then
+        pcall(function() domainState.entryAnchor:Destroy() end)
+        domainState.entryAnchor = nil
+    end
+
+    -- Temporarily make player PlatformStand true to avoid physics jitter during the visual float
+    local prevPlatformStand = hum.PlatformStand
+    pcall(function() hum.PlatformStand = true end)
+
+    -- Start floating state and loop that kills NPCs while floating.
+    domainState.isFloating = true
+    local loopInterval = 0.25 -- seconds between iterations
+
+    -- The loop: repeatedly kill NPCs currently recorded in domainState.npcRecords while floating.
+    spawn(function()
+        while domainState.isFloating do
+            for model, rec in pairs(domainState.npcRecords) do
+                if model and model.Parent and rec and rec.hum and rec.hum.Parent and rec.hum.Health > 0 then
+                    -- create handle for visual/recording parity (so handle exists and is removed by humanoid.Died)
+                    local toolToUse = toolInstance or ensureVoidTool()
+                    if toolToUse then
+                        pcall(function()
+                            createHandleForModel(toolToUse, model, "sendAllLoop")
+                        end)
+                    end
+                    -- kill NPC reliably
+                    pcall(function() rec.hum.Health = 0 end)
+                end
+            end
+            task.wait(loopInterval)
+        end
+    end)
+
+    -- Animate float high using the fresh floatAnchor and force player's CFrame each frame
+    local start = floatAnchor.Position
+    local target = start + Vector3.new(0, DOMAIN_FLOAT_HEIGHT, 0)
+    local dur = DOMAIN_FLOAT_TIME
+    local elapsed = 0
+    while elapsed < dur do
+        local dt = RunService.Heartbeat:Wait()
+        elapsed = elapsed + dt
+        local alpha = math.min(elapsed / dur, 1)
+        floatAnchor.Position = start:Lerp(target, alpha)
+        if hrp and hrp.Parent then
+            pcall(function() hrp.CFrame = CFrame.new(floatAnchor.Position) end)
+        end
+    end
+
+    -- End float: stop the kill loop
+    domainState.isFloating = false
+    task.wait(0.05) -- allow final iteration(s) to finish
+
+    -- Teleport player back to original cframe (if available)
+    if domainState.playerOriginalCFrame and hrp and hrp.Parent then
+        pcall(function() hrp.CFrame = domainState.playerOriginalCFrame end)
+    end
+
+    -- Restore NPCs' recorded values and clear records (harmless for dead NPCs)
+    for model, rec in pairs(domainState.npcRecords) do
+        restoreNPCFromDomain(model)
+    end
+    domainState.npcRecords = {}
+
+    -- restore lighting/time
+    if domainState.originalTime then
+        pcall(function() Lighting.ClockTime = domainState.originalTime end)
+        domainState.originalTime = nil
+    end
+
+    -- cleanup domain geometry and anchors
+    destroyDomainBox(domainState.createdFolder); domainState.createdFolder = nil
+    if floatAnchor and floatAnchor.Parent then pcall(function() floatAnchor:Destroy() end) end
+    if domainState.entryAnchor and domainState.entryAnchor.Parent then pcall(function() domainState.entryAnchor:Destroy() end) end
+    domainState.entryAnchor = nil
+
+    -- Restore player's movement values and PlatformStand
+    pcall(function()
+        if hum and hum.Parent then
+            hum.PlatformStand = domainState.playerOriginalPlatformStand or false
+            if domainState.playerOriginalWalk then hum.WalkSpeed = domainState.playerOriginalWalk end
+            if hum.JumpPower ~= nil and domainState.playerOriginalJump ~= nil then
+                hum.JumpPower = domainState.playerOriginalJump
+            end
+        end
+    end)
+
+    -- Restore HRP collision
+    pcall(function()
+        if hrp and hrp.Parent then
+            if domainState.playerHRPCanCollide ~= nil then
+                hrp.CanCollide = domainState.playerHRPCanCollide
+            else
+                hrp.CanCollide = true
+            end
+        end
+    end)
+
+    -- cleanup: any handles created by sendAllLoop (or send all) that remain should be removed after a timeout
+    spawn(function()
+        task.wait(SEND_ALL_HANDLE_LIFETIME)
+        for handle, rec in pairs(handleRecords) do
+            if rec and rec.source and (rec.source == "sendAll" or rec.source == "sendAllLoop") then
+                if handle and handle.Parent then
+                    pcall(function() handle:Destroy() end)
+                end
+                if rec.conn then pcall(function() rec.conn:Disconnect() end) end
+                handleRecords[handle] = nil
+                if rec.model then modelToHandle[rec.model] = nil end
+            end
+        end
+    end)
+
+    domainState.playerOriginalCFrame = nil
+    domainState.playerOriginalPlatformStand = nil
+    domainState.playerOriginalWalk = nil
+    domainState.playerOriginalJump = nil
+    domainState.playerHRPCanCollide = nil
+    domainActive = false
+end
+
+-- GUI builder
+local function createVoidGUI(tool)
+    local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
+    -- avoid duplicate
+    local existingSG = playerGui:FindFirstChild("VoidTool_GUI")
+    if existingSG then
+        existingSG.Enabled = true
+        local frame = existingSG:FindFirstChild("Frame")
+        local btn = frame and frame:FindFirstChild(DOMAIN_BUTTON_NAME)
+        local btn2 = frame and frame:FindFirstChild(SECOND_BUTTON_NAME)
+        return existingSG, btn, btn2
+    end
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "VoidTool_GUI"
+    sg.ResetOnSpawn = false
+    sg.Parent = playerGui
+
+    local frame = Instance.new("Frame")
+    frame.Name = "Frame"
+    frame.Parent = sg
+    frame.Size = UDim2.new(0, 220, 0, 64)
+    frame.Position = UDim2.new(0.5, -110, 0, 8)
+    frame.BackgroundTransparency = 0.2
+    frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    frame.BorderSizePixel = 0
+
+    local btn = Instance.new("TextButton", frame)
+    btn.Size = UDim2.new(0, 200, 0, 28)
+    btn.Position = UDim2.new(0, 10, 0, 6)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 16
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Text = "Void's Domain"
+    btn.Name = DOMAIN_BUTTON_NAME
+
+    local btn2 = Instance.new("TextButton", frame)
+    btn2.Size = UDim2.new(0,200,0,28)
+    btn2.Position = UDim2.new(0,10,0,34)
+    btn2.Font = Enum.Font.SourceSansBold
+    btn2.TextSize = 16
+    btn2.TextColor3 = Color3.new(1,1,1)
+    btn2.Text = "Send All to Void"
+    btn2.Name = SECOND_BUTTON_NAME
+
+    return sg, btn, btn2
+end
+
+-- Wire the tool
+local function wireVoidTool(tool)
+    if not tool or not tool:IsA("Tool") then return end
+    if tool:FindFirstChild("__VoidWired") then return end
+    local marker = Instance.new("BoolValue")
+    marker.Name = "__VoidWired"
+    marker.Parent = tool
+
+    local guiSG, domainBtn, sendAllBtn
+    local mouse
+    local clickConn
+    local domainBtnConn, sendAllConn
+
+    local function onUnequip()
+        if clickConn then clickConn:Disconnect(); clickConn = nil end
+        if domainBtnConn then domainBtnConn:Disconnect(); domainBtnConn = nil end
+        if sendAllConn then sendAllConn:Disconnect(); sendAllConn = nil end
+        if guiSG and guiSG.Parent then guiSG.Enabled = false end
+        -- destroy any handles that may remain for safety (only those we created)
+        for handle,rec in pairs(handleRecords) do
+            if handle and handle.Parent then
+                pcall(function() handle:Destroy() end)
+            end
+            if rec.conn then pcall(function() rec.conn:Disconnect() end) end
+            handleRecords[handle] = nil
+        end
+        modelToHandle = {}
+    end
+
+    tool.Equipped:Connect(function(m)
+        mouse = m or localPlayer:GetMouse()
+        guiSG, domainBtn, sendAllBtn = createVoidGUI(tool)
+        if guiSG then guiSG.Enabled = true end
+
+        if domainBtn then
+            domainBtnConn = domainBtn.MouseButton1Click:Connect(function()
+                if domainActive then
+                    exitDomainByClick()
+                    return
+                end
+
+                local char = localPlayer.Character
+                local pr = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"))
+                if not pr then return end
+                domainActive = true
+                domainState.originalTime = Lighting and Lighting.ClockTime or nil
+                pcall(function() Lighting.ClockTime = 2 end)
+
+                local npcList = {}
+                for _,desc in ipairs(Workspace:GetDescendants()) do
+                    if desc:IsA("Humanoid") then
+                        local model = desc.Parent
+                        if model and isNPC(model) then
+                            local hrp = getModelRoot(model)
+                            if hrp and (hrp.Position - pr.Position).Magnitude <= DOMAIN_RADIUS then
+                                table.insert(npcList, {hum = desc, model = model, hrp = hrp})
+                            end
+                        end
+                    end
+                end
+
+                -- create domain box, then move player + NPCs inside
+                local boxFolder = createDomainBox()
+                domainState.createdFolder = boxFolder
+                moveIntoDomain(npcList)
+
+                -- watch if all NPCs die inside domain -> auto-exit
+                spawn(function()
+                    local still = {}
+                    for _, e in ipairs(npcList) do
+                        if e.model and e.hum and e.hum.Parent and e.hum.Health > 0 then
+                            still[e.model] = e.hum
+                        end
+                    end
+                    if next(still) == nil then
+                        return
+                    end
+                    local count = 0
+                    local conns = {}
+                    for model, hum in pairs(still) do
+                        count = count + 1
+                        conns[model] = hum.Died:Connect(function()
+                            pcall(function() conns[model]:Disconnect() end)
+                            conns[model] = nil
+                            count = count - 1
+                            if count <= 0 then
+                                exitDomainByClick()
+                            end
+                        end)
+                    end
+                end)
+            end)
+        end
+
+        if sendAllBtn then
+            sendAllConn = sendAllBtn.MouseButton1Click:Connect(function()
+                pcall(function() Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT end)
+                for _,desc in ipairs(Workspace:GetDescendants()) do
+                    if desc:IsA("Humanoid") then
+                        local model = desc.Parent
+                        if model and isNPC(model) then
+                            spawn(function()
+                                -- create handle with source = "sendAll"
+                                local toolToUse = toolInstance or ensureVoidTool()
+                                if toolToUse then
+                                    pcall(function()
+                                        createHandleForModel(toolToUse, model, "sendAll")
+                                        sendModelToVoidWithHandle(toolToUse, model, "sendAll")
+                                    end)
+                                else
+                                    sendModelToVoidWithHandle(tool, model, "sendAll")
+                                end
+                                task.wait(SEND_ALL_VOID_DELAY)
+                            end)
+                        end
+                    end
+                end
+
+                -- Cleanup leftover sendAll handles after lifetime (in case some NPCs didn't die)
+                spawn(function()
+                    task.wait(SEND_ALL_HANDLE_LIFETIME)
+                    for handle, rec in pairs(handleRecords) do
+                        if rec and (rec.source == "sendAll" or rec.source == "sendAllLoop") then
+                            if handle and handle.Parent then
+                                pcall(function() handle:Destroy() end)
+                            end
+                            if rec.conn then pcall(function() rec.conn:Disconnect() end) end
+                            handleRecords[handle] = nil
+                            if rec.model then modelToHandle[rec.model] = nil end
+                        end
+                    end
+                end)
+            end)
+        end
+
+        -- clicking an NPC: create handle, teleport, track until death
+        clickConn = mouse.Button1Down:Connect(function()
+            local x,y = mouse.X, mouse.Y
+            local hum, model = screenRayFindHumanoid(x, y, 2000, 10)
+            if not hum or not model then
+                local tgt = mouse.Target
+                if tgt then
+                    local node = tgt
+                    for i=1,10 do
+                        if not node then break end
+                        local h = node:FindFirstChildOfClass("Humanoid")
+                        if h and isNPC(h.Parent) then
+                            hum, model = h, h.Parent
+                            break
+                        end
+                        node = node.Parent
+                    end
+                end
+            end
+            if hum and model then
+                local toolToUse = toolInstance or ensureVoidTool()
+                if toolToUse then
+                    -- create persistent handle and send; source = "click"
+                    createHandleForModel(toolToUse, model, "click")
+                    sendModelToVoidWithHandle(toolToUse, model, "click")
+                else
+                    sendModelToVoidWithHandle(tool, model, "click")
+                end
+                trackedVoidSelections[model] = hum
+                trackSelectionAndRestoreOnDeaths(trackedVoidSelections)
+            end
+        end)
+    end)
+
+    tool.Unequipped:Connect(onUnequip)
+end
+
+-- Ensure tool on spawn and wire
+local function onCharacterAdded()
+    task.wait(0.05)
+    local t = ensureVoidTool()
+    if t then
+        toolInstance = t
+        wireVoidTool(t)
+    end
+end
+
+-- initial ensure
+toolInstance = ensureVoidTool()
+if toolInstance then wireVoidTool(toolInstance) end
+localPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+print("Void. tool v2 (kill-on-exit + persistent handles) loaded for", localPlayer.Name)
