@@ -1,10 +1,6 @@
--- VoidAbility_v2_domain_sendloop_handles_kill_on_exit.lua
+-- VoidAbility_v2_domain_sendloop_handles.lua
 -- Place in StarterPlayer -> StarterPlayerScripts (client)
--- FULL client script.
--- Changes from previous: during the domain exit float loop NPCs are killed (Humanoid.Health = 0)
--- instead of being teleported to the void. Handle creation logic is preserved: clicking an NPC or
--- Send All creates handles parented to the Tool which are removed when the NPC dies. Handles created
--- during the float (sendAllLoop) are also created so the visual/record behavior matches other flows.
+-- FULL client script (handles removed; float exit now kills NPCs instead of sending them).
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -30,7 +26,7 @@ local DOMAIN_FLOAT_HEIGHT = 50         -- how far player floats up on exit
 local DOMAIN_FLOAT_TIME = 3            -- seconds to float up on exit
 local DOMAIN_ENTRY_LIFT_TIME = 1.2     -- seconds for entry lift
 local SEND_ALL_VOID_DELAY = 0.01
-local SEND_ALL_HANDLE_LIFETIME = DOMAIN_FLOAT_TIME + 1.0 -- how long before cleaning leftover send-all handles
+local SEND_ALL_HANDLE_LIFETIME = DOMAIN_FLOAT_TIME + 1.0 -- retained constant but handles removed
 
 -- Internal state
 local toolInstance = nil
@@ -49,9 +45,14 @@ local domainState = {
 }
 local trackedVoidSelections = {} -- model -> humanoid
 
--- Handle management: track handles created in the tool and clean them when their NPC dies (or on timeout for sendAll)
-local handleRecords = {}      -- handle (Instance) -> { model = model, conn = RBXScriptConnection, source = "click"|"sendAll"|"sendAllLoop" }
-local modelToHandle = {}      -- model -> handle (to quickly find & avoid duplicates)
+-- NOTE: handle creation/tracking removed — these functions are no-ops now.
+local function createHandleForModel(tool, model, source)
+    -- handle creation intentionally removed per request
+    return nil
+end
+local function destroyHandleIfExistsForModel(model)
+    -- no-op: handles are no longer created
+end
 
 -- Helpers
 local function isPlayerCharacter(model) return model and Players:GetPlayerFromCharacter(model) ~= nil end
@@ -133,80 +134,12 @@ local function ensureVoidTool()
     return tool
 end
 
--- Create a handle inside the player's Tool and wire it to the model's Humanoid.Died so it is removed when the NPC dies.
--- source = "click" or "sendAll" or "sendAllLoop" used for cleanup policies.
-local function createHandleForModel(tool, model, source)
-    if not tool or not model then return nil end
-    if modelToHandle[model] and modelToHandle[model].Parent then
-        -- already have a handle for this model
-        return modelToHandle[model]
-    end
-
-    local handle = Instance.new("Part")
-    handle.Name = "VoidSelectionHandle_" .. tostring(math.floor(tick()*1000))
-    handle.Size = Vector3.new(1,1,1)
-    handle.Transparency = 0.5
-    handle.CanCollide = false
-    handle.Anchored = false
-    handle.Massless = true
-    handle.Parent = tool
-
-    -- find humanoid
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    local conn
-    if hum then
-        conn = hum.Died:Connect(function()
-            -- when NPC dies, destroy handle and cleanup records
-            if conn then
-                pcall(function() conn:Disconnect() end)
-            end
-            if handle and handle.Parent then
-                pcall(function() handle:Destroy() end)
-            end
-            handleRecords[handle] = nil
-            modelToHandle[model] = nil
-        end)
-    else
-        -- no humanoid found; schedule handle cleanup after a short time to avoid leaking
-        conn = nil
-        spawn(function()
-            task.wait(5)
-            if handle and handle.Parent then
-                pcall(function() handle:Destroy() end)
-            end
-            handleRecords[handle] = nil
-        end)
-    end
-
-    handleRecords[handle] = { model = model, conn = conn, source = source or "click" }
-    modelToHandle[model] = handle
-    return handle
-end
-
-local function destroyHandleIfExistsForModel(model)
-    local h = modelToHandle[model]
-    if h and h.Parent then
-        pcall(function() h:Destroy() end)
-    end
-    modelToHandle[model] = nil
-    -- handleRecords entry will be removed by the Died connection when possible; remove proactively too
-    for hd,rec in pairs(handleRecords) do
-        if rec.model == model then
-            if rec.conn then pcall(function() rec.conn:Disconnect() end) end
-            handleRecords[hd] = nil
-        end
-    end
-end
-
 -- Teleport model to Void (above FallenPartsDestroyHeight) and return when done.
--- This function will create a handle for the model (and keep it until the NPC dies).
+-- This function no longer creates handles.
 local function sendModelToVoidWithHandle(tool, model, source)
     if not model or not model.Parent then return end
     local hrp = getModelRoot(model)
     if not hrp or not hrp:IsA("BasePart") then return end
-
-    -- create handle in tool (persist until NPC death)
-    createHandleForModel(tool, model, source)
 
     -- set FallenPartsDestroyHeight safely
     pcall(function() Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT end)
@@ -222,7 +155,7 @@ local function sendModelToVoidWithHandle(tool, model, source)
         end
     end
 
-    -- don't destroy handle here; it will be removed on humanoid death (or later cleanup)
+    -- no handle created; callers expect send-only behavior
 end
 
 local function trackSelectionAndRestoreOnDeaths(selectionTable)
@@ -454,7 +387,7 @@ local function moveIntoDomain(npcList)
     end)
 end
 
--- Fresh float-and-exit logic with looping kills (instead of send-to-void)
+-- Fresh float-and-exit logic with looping sends:
 local function exitDomainByClick()
     if not domainActive then return end
 
@@ -504,23 +437,16 @@ local function exitDomainByClick()
     local prevPlatformStand = hum.PlatformStand
     pcall(function() hum.PlatformStand = true end)
 
-    -- Start floating state and loop that kills NPCs while floating.
+    -- Start floating state and loop that sends NPCs to the void while floating.
     domainState.isFloating = true
-    local loopInterval = 0.25 -- seconds between iterations
+    local loopInterval = 0.25 -- seconds between send iterations
 
-    -- The loop: repeatedly kill NPCs currently recorded in domainState.npcRecords while floating.
+    -- The loop: repeatedly KILL NPCs currently recorded in domainState.npcRecords while floating.
     spawn(function()
         while domainState.isFloating do
             for model, rec in pairs(domainState.npcRecords) do
                 if model and model.Parent and rec and rec.hum and rec.hum.Parent and rec.hum.Health > 0 then
-                    -- create handle for visual/recording parity (so handle exists and is removed by humanoid.Died)
-                    local toolToUse = toolInstance or ensureVoidTool()
-                    if toolToUse then
-                        pcall(function()
-                            createHandleForModel(toolToUse, model, "sendAllLoop")
-                        end)
-                    end
-                    -- kill NPC reliably
+                    -- CHANGED: kill the NPC directly instead of teleporting them to the void
                     pcall(function() rec.hum.Health = 0 end)
                 end
             end
@@ -543,7 +469,7 @@ local function exitDomainByClick()
         end
     end
 
-    -- End float: stop the kill loop
+    -- End float: stop the send loop
     domainState.isFloating = false
     task.wait(0.05) -- allow final iteration(s) to finish
 
@@ -552,7 +478,7 @@ local function exitDomainByClick()
         pcall(function() hrp.CFrame = domainState.playerOriginalCFrame end)
     end
 
-    -- Restore NPCs' recorded values and clear records (harmless for dead NPCs)
+    -- Restore NPCs' recorded values and clear records
     for model, rec in pairs(domainState.npcRecords) do
         restoreNPCFromDomain(model)
     end
@@ -588,21 +514,6 @@ local function exitDomainByClick()
                 hrp.CanCollide = domainState.playerHRPCanCollide
             else
                 hrp.CanCollide = true
-            end
-        end
-    end)
-
-    -- cleanup: any handles created by sendAllLoop (or send all) that remain should be removed after a timeout
-    spawn(function()
-        task.wait(SEND_ALL_HANDLE_LIFETIME)
-        for handle, rec in pairs(handleRecords) do
-            if rec and rec.source and (rec.source == "sendAll" or rec.source == "sendAllLoop") then
-                if handle and handle.Parent then
-                    pcall(function() handle:Destroy() end)
-                end
-                if rec.conn then pcall(function() rec.conn:Disconnect() end) end
-                handleRecords[handle] = nil
-                if rec.model then modelToHandle[rec.model] = nil end
             end
         end
     end)
@@ -681,15 +592,7 @@ local function wireVoidTool(tool)
         if domainBtnConn then domainBtnConn:Disconnect(); domainBtnConn = nil end
         if sendAllConn then sendAllConn:Disconnect(); sendAllConn = nil end
         if guiSG and guiSG.Parent then guiSG.Enabled = false end
-        -- destroy any handles that may remain for safety (only those we created)
-        for handle,rec in pairs(handleRecords) do
-            if handle and handle.Parent then
-                pcall(function() handle:Destroy() end)
-            end
-            if rec.conn then pcall(function() rec.conn:Disconnect() end) end
-            handleRecords[handle] = nil
-        end
-        modelToHandle = {}
+        -- no handles to clean up (handle creation removed)
     end
 
     tool.Equipped:Connect(function(m)
@@ -765,11 +668,10 @@ local function wireVoidTool(tool)
                         local model = desc.Parent
                         if model and isNPC(model) then
                             spawn(function()
-                                -- create handle with source = "sendAll"
                                 local toolToUse = toolInstance or ensureVoidTool()
                                 if toolToUse then
                                     pcall(function()
-                                        createHandleForModel(toolToUse, model, "sendAll")
+                                        -- handle creation removed; simply send the model
                                         sendModelToVoidWithHandle(toolToUse, model, "sendAll")
                                     end)
                                 else
@@ -780,25 +682,10 @@ local function wireVoidTool(tool)
                         end
                     end
                 end
-
-                -- Cleanup leftover sendAll handles after lifetime (in case some NPCs didn't die)
-                spawn(function()
-                    task.wait(SEND_ALL_HANDLE_LIFETIME)
-                    for handle, rec in pairs(handleRecords) do
-                        if rec and (rec.source == "sendAll" or rec.source == "sendAllLoop") then
-                            if handle and handle.Parent then
-                                pcall(function() handle:Destroy() end)
-                            end
-                            if rec.conn then pcall(function() rec.conn:Disconnect() end) end
-                            handleRecords[handle] = nil
-                            if rec.model then modelToHandle[rec.model] = nil end
-                        end
-                    end
-                end)
             end)
         end
 
-        -- clicking an NPC: create handle, teleport, track until death
+        -- clicking an NPC: teleport and track until death for restoration behavior only
         clickConn = mouse.Button1Down:Connect(function()
             local x,y = mouse.X, mouse.Y
             local hum, model = screenRayFindHumanoid(x, y, 2000, 10)
@@ -820,8 +707,7 @@ local function wireVoidTool(tool)
             if hum and model then
                 local toolToUse = toolInstance or ensureVoidTool()
                 if toolToUse then
-                    -- create persistent handle and send; source = "click"
-                    createHandleForModel(toolToUse, model, "click")
+                    -- no handle created; just send
                     sendModelToVoidWithHandle(toolToUse, model, "click")
                 else
                     sendModelToVoidWithHandle(tool, model, "click")
@@ -850,4 +736,4 @@ toolInstance = ensureVoidTool()
 if toolInstance then wireVoidTool(toolInstance) end
 localPlayer.CharacterAdded:Connect(onCharacterAdded)
 
-print("Void. tool v2 (kill-on-exit + persistent handles) loaded for", localPlayer.Name)
+print("Void. tool v2 (handles removed; exit kills NPCs) loaded for", localPlayer.Name)
