@@ -1,6 +1,7 @@
 -- VoidAbility_v2_domain_sendloop_handles.lua
 -- Place in StarterPlayer -> StarterPlayerScripts (client)
--- FULL client script (handles removed; float exit now kills NPCs instead of sending them).
+-- CLICK DOES NOT TRIGGER DOMAIN. Clicks use sendModelToVoidWithHandle exactly like original.
+-- Changes: entry float runs simultaneously for player + NPCs; player's velocities cleared every 0.5s for a short duration after floats.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -21,12 +22,15 @@ local VOID_MIN_OFFSET = 10
 local DOMAIN_RADIUS = 750
 local DOMAIN_BOX_SIZE = Vector3.new(800, 600, 800)
 local DOMAIN_BOX_WORLD_POS = Vector3.new(80000, 80000, 80000)
-local DOMAIN_ENTRY_LIFT = 30           -- large lift on entry so player visibly goes high
-local DOMAIN_FLOAT_HEIGHT = 50         -- how far player floats up on exit
-local DOMAIN_FLOAT_TIME = 3            -- seconds to float up on exit
-local DOMAIN_ENTRY_LIFT_TIME = 1.2     -- seconds for entry lift
+local DOMAIN_ENTRY_LIFT = 30
+local DOMAIN_FLOAT_HEIGHT = 50
+local DOMAIN_FLOAT_TIME = 3
+local DOMAIN_ENTRY_LIFT_TIME = 1.2
 local SEND_ALL_VOID_DELAY = 0.01
-local SEND_ALL_HANDLE_LIFETIME = DOMAIN_FLOAT_TIME + 1.0 -- retained constant but handles removed
+
+-- Velocity cleanup settings (clears player's velocities every CLEAR_VEL_INTERVAL seconds for CLEAR_VEL_DURATION seconds)
+local CLEAR_VEL_INTERVAL = 0.5
+local CLEAR_VEL_DURATION = 4 -- seconds
 
 -- Internal state
 local toolInstance = nil
@@ -34,25 +38,16 @@ local domainActive = false
 local domainState = {
     originalTime = nil,
     createdFolder = nil,
-    npcRecords = {}, -- model -> {hum, origWalk, origJump, origPlatformStand}
+    npcRecords = {}, -- model -> {hum, origWalk, origJump, origPlatform, partOffsets = {part->Vector3}, destHRP = Vector3, floatOffset = Vector3}
     playerOriginalCFrame = nil,
     playerOriginalPlatformStand = nil,
     playerOriginalWalk = nil,
     playerOriginalJump = nil,
     playerHRPCanCollide = nil,
     entryAnchor = nil,
-    isFloating = false, -- used to control float-send loop
+    isFloating = false,
 }
 local trackedVoidSelections = {} -- model -> humanoid
-
--- NOTE: handle creation/tracking removed — these functions are no-ops now.
-local function createHandleForModel(tool, model, source)
-    -- handle creation intentionally removed per request
-    return nil
-end
-local function destroyHandleIfExistsForModel(model)
-    -- no-op: handles are no longer created
-end
 
 -- Helpers
 local function isPlayerCharacter(model) return model and Players:GetPlayerFromCharacter(model) ~= nil end
@@ -134,28 +129,23 @@ local function ensureVoidTool()
     return tool
 end
 
--- Teleport model to Void (above FallenPartsDestroyHeight) and return when done.
--- This function no longer creates handles.
+-- Teleport model to Void (above FallenPartsDestroyHeight) — same logic as original (instant send).
 local function sendModelToVoidWithHandle(tool, model, source)
     if not model or not model.Parent then return end
     local hrp = getModelRoot(model)
     if not hrp or not hrp:IsA("BasePart") then return end
 
-    -- set FallenPartsDestroyHeight safely
     pcall(function() Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT end)
 
     local ext = getModelSizeExtent(model)
     local sizeBasedOffset = math.max(VOID_MIN_OFFSET, ext.Y * 0.5 + math.max(ext.X, ext.Z) * 0.25)
     local targetY = VOID_FALLEN_HEIGHT + sizeBasedOffset
 
-    -- teleport each part preserving XZ, setting Y to targetY
     for _, part in ipairs(model:GetDescendants()) do
         if part:IsA("BasePart") then
             pcall(function() part.CFrame = CFrame.new(part.Position.X, targetY, part.Position.Z) end)
         end
     end
-
-    -- no handle created; callers expect send-only behavior
 end
 
 local function trackSelectionAndRestoreOnDeaths(selectionTable)
@@ -204,7 +194,7 @@ local function createDomainBox()
     floor.BrickColor = BrickColor.new("Really black")
     floor.Material = Enum.Material.SmoothPlastic
     floor.Parent = root
-    -- walls
+    -- walls & ceiling (kept simple)
     local halfX = DOMAIN_BOX_SIZE.X/2
     local halfZ = DOMAIN_BOX_SIZE.Z/2
     local wallThickness = 4
@@ -230,7 +220,6 @@ local function createDomainBox()
              Vector3.new(wallThickness, wallHeight, DOMAIN_BOX_SIZE.Z), "Wall_E")
     makeWall(center + Vector3.new(-halfX - wallThickness/2, wallHeight/2 + 1, 0),
              Vector3.new(wallThickness, wallHeight, DOMAIN_BOX_SIZE.Z), "Wall_W")
-    -- ceiling
     local ceiling = Instance.new("Part")
     ceiling.Name = "VoidCeiling"
     ceiling.Size = Vector3.new(DOMAIN_BOX_SIZE.X, 2, DOMAIN_BOX_SIZE.Z)
@@ -249,6 +238,15 @@ local function destroyDomainBox(folder)
     pcall(function() folder:Destroy() end)
 end
 
+-- Small helper: check if a world position is inside the domain box
+local function isPositionInsideDomain(pos)
+    if not pos then return false end
+    local center = DOMAIN_BOX_WORLD_POS
+    local half = DOMAIN_BOX_SIZE * 0.5
+    local diff = pos - center
+    return math.abs(diff.X) <= half.X and math.abs(diff.Y) <= half.Y and math.abs(diff.Z) <= half.Z
+end
+
 -- Lock / restore NPC data in domain
 local function lockNPCInDomain(model)
     if not model then return end
@@ -260,12 +258,30 @@ local function lockNPCInDomain(model)
     rec.origWalk = hum.WalkSpeed
     rec.origJump = hum.JumpPower or 0
     rec.origPlatform = hum.PlatformStand
+    rec.partOffsets = {}    -- part -> offset from HRP (Vector3)
+    rec.destHRP = nil
+    rec.floatOffset = nil
     pcall(function()
         hum.WalkSpeed = 0
         if hum.JumpPower ~= nil then hum.JumpPower = 0 end
         hum.PlatformStand = true
     end)
     domainState.npcRecords[model] = rec
+end
+
+local function updateNPCPartOffsetsAndDest(model, destHRP)
+    if not model then return end
+    local rec = domainState.npcRecords[model]
+    if not rec then return end
+    local hrp = getModelRoot(model)
+    if not hrp or not hrp:IsA("BasePart") then return end
+    rec.partOffsets = {}
+    for _, p in ipairs(model:GetDescendants()) do
+        if p:IsA("BasePart") then
+            rec.partOffsets[p] = p.Position - hrp.Position
+        end
+    end
+    rec.destHRP = destHRP
 end
 
 local function restoreNPCFromDomain(model)
@@ -283,41 +299,61 @@ local function restoreNPCFromDomain(model)
     domainState.npcRecords[model] = nil
 end
 
--- Move NPCs into the domain and move & lift the local player.
+-- Clears HRP velocities periodically (interval seconds) for duration seconds
+local function clearVelocityPeriodic(hrp, interval, duration)
+    if not hrp then return end
+    spawn(function()
+        local iterations = math.max(1, math.ceil(duration / math.max(0.0001, interval)))
+        for i = 1, iterations do
+            if not hrp or not hrp.Parent then break end
+            pcall(function()
+                if hrp.AssemblyLinearVelocity ~= nil then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+                if hrp.AssemblyAngularVelocity ~= nil then hrp.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+            end)
+            task.wait(interval)
+        end
+        -- final safety clear
+        if hrp and hrp.Parent then
+            pcall(function()
+                if hrp.AssemblyLinearVelocity ~= nil then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+                if hrp.AssemblyAngularVelocity ~= nil then hrp.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+            end)
+        end
+    end)
+end
+
+-- Move NPCs into the domain: compute destinations; apply NPC parts with a float animation (entry float)
+-- Modified so player and NPCs float together (single shared anchor).
 local function moveIntoDomain(npcList)
     local playerChar = localPlayer.Character
     local playerHRP = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
     local playerHum = playerChar and playerChar:FindFirstChildOfClass("Humanoid")
     if not playerHRP or not playerHum then return end
 
-    -- Save player's original cframe and movement values
     domainState.playerOriginalCFrame = playerHRP.CFrame
     domainState.playerOriginalPlatformStand = playerHum.PlatformStand
     domainState.playerOriginalWalk = playerHum.WalkSpeed
     domainState.playerOriginalJump = playerHum.JumpPower or 0
-    local origCanCollide = nil
+    local origCanCollide
     pcall(function() origCanCollide = playerHRP.CanCollide end)
     domainState.playerHRPCanCollide = origCanCollide
 
-    -- Remove any stale entry anchor
     if domainState.entryAnchor and domainState.entryAnchor.Parent then
         pcall(function() domainState.entryAnchor:Destroy() end)
         domainState.entryAnchor = nil
     end
 
-    -- Unstick the player slightly: nudge up and zero velocities, temporarily disable HRP collisions to avoid getting stuck on geometry.
     pcall(function()
-        playerHRP.CFrame = playerHRP.CFrame + Vector3.new(0, 4, 0) -- small nudge
+        playerHRP.CFrame = playerHRP.CFrame + Vector3.new(0,4,0)
         if playerHRP.AssemblyLinearVelocity then playerHRP.AssemblyLinearVelocity = Vector3.new(0,0,0) end
         if playerHRP.AssemblyAngularVelocity then playerHRP.AssemblyAngularVelocity = Vector3.new(0,0,0) end
         playerHRP.CanCollide = false
     end)
 
-    -- Immobilize NPCs and compute their offsets relative to the player's current position
     local center = DOMAIN_BOX_WORLD_POS
     local halfX = DOMAIN_BOX_SIZE.X / 2 - 2
     local halfZ = DOMAIN_BOX_SIZE.Z / 2 - 2
-    local prPos = playerHRP.Position -- anchor reference for offsets
+    local prPos = playerHRP.Position
     for _, entry in ipairs(npcList) do
         local m = entry.model
         local hrp = entry.hrp
@@ -327,57 +363,114 @@ local function moveIntoDomain(npcList)
             local nx = math.clamp(offset.X, -halfX, halfX)
             local nz = math.clamp(offset.Z, -halfZ, halfZ)
             local ny = 3
-            local dest = center + Vector3.new(nx, ny + 1, nz)
-            for _,p in ipairs(m:GetDescendants()) do
-                if p:IsA("BasePart") then
-                    pcall(function() p.CFrame = CFrame.new(dest + (p.Position - hrp.Position)) end)
+            local destHRP = center + Vector3.new(nx, ny + 1, nz)
+            updateNPCPartOffsetsAndDest(m, destHRP)
+        end
+    end
+
+    -- Create a single shared anchor to lift both the player and the NPCs at the same time
+    local sharedAnchor = Instance.new("Part")
+    sharedAnchor.Name = "Void_SharedLiftAnchor_" .. tostring(tick())
+    sharedAnchor.Size = Vector3.new(1,1,1)
+    sharedAnchor.Anchored = true
+    sharedAnchor.CanCollide = false
+    sharedAnchor.Transparency = 1
+    sharedAnchor.CFrame = playerHRP.CFrame
+    sharedAnchor.Parent = Workspace
+    domainState.entryAnchor = sharedAnchor
+
+    pcall(function() playerHum.PlatformStand = false end)
+
+    -- compute per-NPC float offsets relative to the sharedAnchor start position
+    local anchorStartPos = sharedAnchor.Position
+    for model, rec in pairs(domainState.npcRecords) do
+        if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+            local npcHRP = getModelRoot(model)
+            if npcHRP and npcHRP.Parent then
+                rec.floatOffset = npcHRP.Position - anchorStartPos
+                if not rec.partOffsets or next(rec.partOffsets) == nil then
+                    rec.partOffsets = {}
+                    if npcHRP then
+                        for _, p in ipairs(model:GetDescendants()) do
+                            if p:IsA("BasePart") then
+                                rec.partOffsets[p] = p.Position - npcHRP.Position
+                            end
+                        end
+                    end
                 end
             end
         end
     end
 
-    -- Create entry anchor (fresh) at player's position and lift dramatically for a strong visual.
-    local entryAnchor = Instance.new("Part")
-    entryAnchor.Name = "Void_EntryAnchor_" .. tostring(tick())
-    entryAnchor.Size = Vector3.new(1,1,1)
-    entryAnchor.Anchored = true
-    entryAnchor.CanCollide = false
-    entryAnchor.Transparency = 1
-    entryAnchor.CFrame = playerHRP.CFrame
-    entryAnchor.Parent = Workspace
-    domainState.entryAnchor = entryAnchor
-
-    -- Keep PlatformStand FALSE so player can still move inside the domain.
-    pcall(function() playerHum.PlatformStand = false end)
-
-    -- Lift player up visually using the entryAnchor, forcing HRP.CFrame each frame (reliable).
-    local start = entryAnchor.Position
+    -- lift both player and NPCs together
+    local start = sharedAnchor.Position
     local target = start + Vector3.new(0, DOMAIN_ENTRY_LIFT, 0)
     local dur = DOMAIN_ENTRY_LIFT_TIME
     local elapsed = 0
+    domainState.isFloating = true
     while elapsed < dur do
         local dt = RunService.Heartbeat:Wait()
         elapsed = elapsed + dt
         local alpha = math.min(elapsed / dur, 1)
-        entryAnchor.Position = start:Lerp(target, alpha)
+        local newPos = start:Lerp(target, alpha)
+        sharedAnchor.Position = newPos
+
+        -- move player to anchor
         if playerHRP and playerHRP.Parent then
-            pcall(function() playerHRP.CFrame = CFrame.new(entryAnchor.Position) end)
+            pcall(function() playerHRP.CFrame = CFrame.new(sharedAnchor.Position) end)
+        end
+
+        -- move NPC parts relative to anchor
+        for model, rec in pairs(domainState.npcRecords) do
+            if model and model.Parent and rec and rec.hum and rec.hum.Parent and rec.floatOffset then
+                local npcHRPPos = sharedAnchor.Position + rec.floatOffset
+                for part, localOff in pairs(rec.partOffsets or {}) do
+                    if part and part.Parent then
+                        local curPos = part.Position
+                        local targetPos = npcHRPPos + localOff
+                        local lerped = curPos:Lerp(targetPos, math.min(1, alpha))
+                        pcall(function()
+                            part.CFrame = CFrame.new(lerped)
+                            if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+                            if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+                        end)
+                    end
+                end
+            end
         end
     end
 
-    -- Teleport player to inside the domain (center) at a safe height so they don't intersect walls/floor.
+    domainState.isFloating = false
+    task.wait(0.05)
+
+    -- final placement inside domain (player + NPCs)
     local insidePos = center + Vector3.new(0, 10, 0)
     if playerHRP and playerHRP.Parent then
         pcall(function() playerHRP.CFrame = CFrame.new(insidePos) end)
     end
 
-    -- Destroy the entry anchor — we no longer need to force the player's CFrame
-    if entryAnchor and entryAnchor.Parent then
-        pcall(function() entryAnchor:Destroy() end)
+    for model, rec in pairs(domainState.npcRecords) do
+        if rec and rec.destHRP and rec.partOffsets then
+            for part, localOff in pairs(rec.partOffsets) do
+                if part and part.Parent then
+                    pcall(function()
+                        part.CFrame = CFrame.new(rec.destHRP + localOff)
+                        if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+                        if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+                    end)
+                end
+            end
+        end
     end
+
+    -- clear some residual player velocity repeatedly to avoid fling
+    if playerHRP and playerHRP.Parent then
+        clearVelocityPeriodic(playerHRP, CLEAR_VEL_INTERVAL, CLEAR_VEL_DURATION)
+    end
+
+    if sharedAnchor and sharedAnchor.Parent then pcall(function() sharedAnchor:Destroy() end) end
     domainState.entryAnchor = nil
 
-    -- Restore HRP collision to previous state (so player can move and collide normally inside domain)
     pcall(function()
         if domainState.playerHRPCanCollide ~= nil then
             playerHRP.CanCollide = domainState.playerHRPCanCollide
@@ -387,7 +480,7 @@ local function moveIntoDomain(npcList)
     end)
 end
 
--- Fresh float-and-exit logic with looping sends:
+-- Float & exit (smooth float then teleport to void at end)
 local function exitDomainByClick()
     if not domainActive then return end
 
@@ -395,7 +488,6 @@ local function exitDomainByClick()
     local hrp = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
     local hum = playerChar and playerChar:FindFirstChildOfClass("Humanoid")
 
-    -- If missing hrp/hum: best-effort cleanup
     if not hrp or not hum then
         for model, rec in pairs(domainState.npcRecords) do
             if rec and rec.hum and rec.hum.Parent and rec.hum.Health > 0 then
@@ -404,20 +496,14 @@ local function exitDomainByClick()
             restoreNPCFromDomain(model)
         end
         domainState.npcRecords = {}
-        if domainState.originalTime then
-            pcall(function() Lighting.ClockTime = domainState.originalTime end)
-            domainState.originalTime = nil
-        end
+        if domainState.originalTime then pcall(function() Lighting.ClockTime = domainState.originalTime end) domainState.originalTime = nil end
         destroyDomainBox(domainState.createdFolder); domainState.createdFolder = nil
-        if domainState.entryAnchor and domainState.entryAnchor.Parent then
-            pcall(function() domainState.entryAnchor:Destroy() end)
-        end
+        if domainState.entryAnchor and domainState.entryAnchor.Parent then pcall(function() domainState.entryAnchor:Destroy() end) end
         domainState.entryAnchor = nil
         domainActive = false
         return
     end
 
-    -- Create fresh float anchor at player's current position
     local floatAnchor = Instance.new("Part")
     floatAnchor.Name = "Void_FloatAnchor_" .. tostring(tick())
     floatAnchor.Size = Vector3.new(1,1,1)
@@ -427,94 +513,119 @@ local function exitDomainByClick()
     floatAnchor.CFrame = hrp.CFrame
     floatAnchor.Parent = Workspace
 
-    -- Destroy any lingering entry anchor (avoid reuse)
     if domainState.entryAnchor and domainState.entryAnchor.Parent then
         pcall(function() domainState.entryAnchor:Destroy() end)
         domainState.entryAnchor = nil
     end
 
-    -- Temporarily make player PlatformStand true to avoid physics jitter during the visual float
     local prevPlatformStand = hum.PlatformStand
     pcall(function() hum.PlatformStand = true end)
 
-    -- Start floating state and loop that sends NPCs to the void while floating.
-    domainState.isFloating = true
-    local loopInterval = 0.25 -- seconds between send iterations
-
-    -- The loop: repeatedly KILL NPCs currently recorded in domainState.npcRecords while floating.
-    spawn(function()
-        while domainState.isFloating do
-            for model, rec in pairs(domainState.npcRecords) do
-                if model and model.Parent and rec and rec.hum and rec.hum.Parent and rec.hum.Health > 0 then
-                    -- CHANGED: kill the NPC directly instead of teleporting them to the void
-                    pcall(function() rec.hum.Health = 0 end)
+    -- compute per-NPC float offsets
+    local playerStartPos = hrp.Position
+    for model, rec in pairs(domainState.npcRecords) do
+        if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+            local npcHRP = getModelRoot(model)
+            if npcHRP and npcHRP.Parent then
+                rec.floatOffset = npcHRP.Position - playerStartPos
+                if not rec.partOffsets or next(rec.partOffsets) == nil then
+                    rec.partOffsets = {}
+                    if npcHRP then
+                        for _, p in ipairs(model:GetDescendants()) do
+                            if p:IsA("BasePart") then
+                                rec.partOffsets[p] = p.Position - npcHRP.Position
+                            end
+                        end
+                    end
                 end
             end
-            task.wait(loopInterval)
         end
-    end)
+    end
 
-    -- Animate float high using the fresh floatAnchor and force player's CFrame each frame
+    -- float animation (lerp)
     local start = floatAnchor.Position
     local target = start + Vector3.new(0, DOMAIN_FLOAT_HEIGHT, 0)
     local dur = DOMAIN_FLOAT_TIME
     local elapsed = 0
+    domainState.isFloating = true
+
     while elapsed < dur do
         local dt = RunService.Heartbeat:Wait()
         elapsed = elapsed + dt
         local alpha = math.min(elapsed / dur, 1)
         floatAnchor.Position = start:Lerp(target, alpha)
+
         if hrp and hrp.Parent then
             pcall(function() hrp.CFrame = CFrame.new(floatAnchor.Position) end)
         end
+
+        for model, rec in pairs(domainState.npcRecords) do
+            if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+                local npcHRP = getModelRoot(model)
+                if npcHRP and npcHRP.Parent and rec.floatOffset then
+                    local newHRPPos = floatAnchor.Position + rec.floatOffset
+                    for part, localOff in pairs(rec.partOffsets or {}) do
+                        if part and part.Parent then
+                            local curPos = part.Position
+                            local targetPos = newHRPPos + localOff
+                            local lerped = curPos:Lerp(targetPos, math.min(1, alpha))
+                            pcall(function()
+                                part.CFrame = CFrame.new(lerped)
+                                if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+                                if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+                            end)
+                        end
+                    end
+                end
+            end
+        end
     end
 
-    -- End float: stop the send loop
     domainState.isFloating = false
-    task.wait(0.05) -- allow final iteration(s) to finish
+    task.wait(0.05)
 
-    -- Teleport player back to original cframe (if available)
+    -- teleport NPCs to void (same-frame group send)
+    for model, rec in pairs(domainState.npcRecords) do
+        if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+            pcall(function() Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT end)
+            local toolToUse = toolInstance or ensureVoidTool()
+            if toolToUse then
+                pcall(function() sendModelToVoidWithHandle(toolToUse, model, "domain_exit") end)
+            else
+                pcall(function() sendModelToVoidWithHandle(nil, model, "domain_exit") end)
+            end
+            pcall(function() if rec.hum and rec.hum.Parent then rec.hum.Health = 0 end end)
+        end
+    end
+
+    -- clear player velocities repeatedly after float to avoid fling
+    if hrp and hrp.Parent then
+        clearVelocityPeriodic(hrp, CLEAR_VEL_INTERVAL, CLEAR_VEL_DURATION)
+    end
+
     if domainState.playerOriginalCFrame and hrp and hrp.Parent then
         pcall(function() hrp.CFrame = domainState.playerOriginalCFrame end)
     end
 
-    -- Restore NPCs' recorded values and clear records
-    for model, rec in pairs(domainState.npcRecords) do
-        restoreNPCFromDomain(model)
-    end
-    domainState.npcRecords = {}
+    for model, _ in pairs(domainState.npcRecords) do domainState.npcRecords[model] = nil end
 
-    -- restore lighting/time
-    if domainState.originalTime then
-        pcall(function() Lighting.ClockTime = domainState.originalTime end)
-        domainState.originalTime = nil
-    end
-
-    -- cleanup domain geometry and anchors
+    if domainState.originalTime then pcall(function() Lighting.ClockTime = domainState.originalTime end) domainState.originalTime = nil end
     destroyDomainBox(domainState.createdFolder); domainState.createdFolder = nil
     if floatAnchor and floatAnchor.Parent then pcall(function() floatAnchor:Destroy() end) end
     if domainState.entryAnchor and domainState.entryAnchor.Parent then pcall(function() domainState.entryAnchor:Destroy() end) end
     domainState.entryAnchor = nil
 
-    -- Restore player's movement values and PlatformStand
     pcall(function()
         if hum and hum.Parent then
             hum.PlatformStand = domainState.playerOriginalPlatformStand or false
             if domainState.playerOriginalWalk then hum.WalkSpeed = domainState.playerOriginalWalk end
-            if hum.JumpPower ~= nil and domainState.playerOriginalJump ~= nil then
-                hum.JumpPower = domainState.playerOriginalJump
-            end
+            if hum.JumpPower ~= nil and domainState.playerOriginalJump ~= nil then hum.JumpPower = domainState.playerOriginalJump end
         end
     end)
 
-    -- Restore HRP collision
     pcall(function()
         if hrp and hrp.Parent then
-            if domainState.playerHRPCanCollide ~= nil then
-                hrp.CanCollide = domainState.playerHRPCanCollide
-            else
-                hrp.CanCollide = true
-            end
+            if domainState.playerHRPCanCollide ~= nil then hrp.CanCollide = domainState.playerHRPCanCollide else hrp.CanCollide = true end
         end
     end)
 
@@ -529,7 +640,6 @@ end
 -- GUI builder
 local function createVoidGUI(tool)
     local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
-    -- avoid duplicate
     local existingSG = playerGui:FindFirstChild("VoidTool_GUI")
     if existingSG then
         existingSG.Enabled = true
@@ -592,7 +702,6 @@ local function wireVoidTool(tool)
         if domainBtnConn then domainBtnConn:Disconnect(); domainBtnConn = nil end
         if sendAllConn then sendAllConn:Disconnect(); sendAllConn = nil end
         if guiSG and guiSG.Parent then guiSG.Enabled = false end
-        -- no handles to clean up (handle creation removed)
     end
 
     tool.Equipped:Connect(function(m)
@@ -627,12 +736,41 @@ local function wireVoidTool(tool)
                     end
                 end
 
-                -- create domain box, then move player + NPCs inside
                 local boxFolder = createDomainBox()
                 domainState.createdFolder = boxFolder
                 moveIntoDomain(npcList)
 
-                -- watch if all NPCs die inside domain -> auto-exit
+                -- Monitor: if local player leaves domain, kill NPCs and clean up
+                spawn(function()
+                    while domainActive do
+                        RunService.Heartbeat:Wait()
+                        local pChar = localPlayer.Character
+                        local pHRP = pChar and pChar:FindFirstChild("HumanoidRootPart")
+                        if not pHRP or not pHRP.Parent then
+                            break
+                        end
+                        if not isPositionInsideDomain(pHRP.Position) then
+                            break
+                        end
+                    end
+
+                    if domainActive then
+                        for model, rec in pairs(domainState.npcRecords) do
+                            if rec and rec.hum and rec.hum.Parent and rec.hum.Health > 0 then
+                                pcall(function() rec.hum.Health = 0 end)
+                            end
+                            restoreNPCFromDomain(model)
+                        end
+                        domainState.npcRecords = {}
+                        if domainState.originalTime then pcall(function() Lighting.ClockTime = domainState.originalTime end) domainState.originalTime = nil end
+                        destroyDomainBox(domainState.createdFolder); domainState.createdFolder = nil
+                        if domainState.entryAnchor and domainState.entryAnchor.Parent then pcall(function() domainState.entryAnchor:Destroy() end) end
+                        domainState.entryAnchor = nil
+                        domainActive = false
+                    end
+                end)
+
+                -- Also watch for NPC deaths while domain is active; if all NPCs die, close domain
                 spawn(function()
                     local still = {}
                     for _, e in ipairs(npcList) do
@@ -640,9 +778,7 @@ local function wireVoidTool(tool)
                             still[e.model] = e.hum
                         end
                     end
-                    if next(still) == nil then
-                        return
-                    end
+                    if next(still) == nil then return end
                     local count = 0
                     local conns = {}
                     for model, hum in pairs(still) do
@@ -651,9 +787,7 @@ local function wireVoidTool(tool)
                             pcall(function() conns[model]:Disconnect() end)
                             conns[model] = nil
                             count = count - 1
-                            if count <= 0 then
-                                exitDomainByClick()
-                            end
+                            if count <= 0 then exitDomainByClick() end
                         end)
                     end
                 end)
@@ -670,12 +804,9 @@ local function wireVoidTool(tool)
                             spawn(function()
                                 local toolToUse = toolInstance or ensureVoidTool()
                                 if toolToUse then
-                                    pcall(function()
-                                        -- handle creation removed; simply send the model
-                                        sendModelToVoidWithHandle(toolToUse, model, "sendAll")
-                                    end)
+                                    pcall(function() sendModelToVoidWithHandle(toolToUse, model, "sendAll") end)
                                 else
-                                    sendModelToVoidWithHandle(tool, model, "sendAll")
+                                    sendModelToVoidWithHandle(nil, model, "sendAll")
                                 end
                                 task.wait(SEND_ALL_VOID_DELAY)
                             end)
@@ -685,7 +816,7 @@ local function wireVoidTool(tool)
             end)
         end
 
-        -- clicking an NPC: teleport and track until death for restoration behavior only
+        -- CLICK HANDLER: Send to void immediately (exact same logic as original script), do NOT trigger domain.
         clickConn = mouse.Button1Down:Connect(function()
             local x,y = mouse.X, mouse.Y
             local hum, model = screenRayFindHumanoid(x, y, 2000, 10)
@@ -704,17 +835,19 @@ local function wireVoidTool(tool)
                     end
                 end
             end
-            if hum and model then
-                local toolToUse = toolInstance or ensureVoidTool()
-                if toolToUse then
-                    -- no handle created; just send
-                    sendModelToVoidWithHandle(toolToUse, model, "click")
-                else
-                    sendModelToVoidWithHandle(tool, model, "click")
-                end
-                trackedVoidSelections[model] = hum
-                trackSelectionAndRestoreOnDeaths(trackedVoidSelections)
+
+            if not hum or not model then return end
+
+            -- Use the same send logic as the original: sendModelToVoidWithHandle and track selection for restore-on-death
+            local toolToUse = toolInstance or ensureVoidTool()
+            if toolToUse then
+                pcall(function() sendModelToVoidWithHandle(toolToUse, model, "click") end)
+            else
+                pcall(function() sendModelToVoidWithHandle(nil, model, "click") end)
             end
+
+            trackedVoidSelections[model] = hum
+            trackSelectionAndRestoreOnDeaths(trackedVoidSelections)
         end)
     end)
 
@@ -731,9 +864,8 @@ local function onCharacterAdded()
     end
 end
 
--- initial ensure
 toolInstance = ensureVoidTool()
 if toolInstance then wireVoidTool(toolInstance) end
 localPlayer.CharacterAdded:Connect(onCharacterAdded)
 
-print("Void. tool v2 (handles removed; exit kills NPCs) loaded for", localPlayer.Name)
+print("Void. tool v2 (click = send to void; domain simultaneous float + velocity clears added) loaded for", localPlayer.Name)
