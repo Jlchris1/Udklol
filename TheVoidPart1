@@ -9,7 +9,7 @@ local player = Players.LocalPlayer
 if not player then return end
 
 -- ====== CONFIG ======
-local EXTREME_POS = Vector3.new(9e37, 9e37, 9e37)
+local EXTREME_POS = Vector3.new(9e37, 9e37, 9e37) -- teleport target for Presence and Erase
 local PRESENCE_RADIUS = 20
 local FORCEFIELD_RADIUS = 35 -- radius in studs
 local FORCEFIELD_CHECK_INTERVAL = 0.18
@@ -63,23 +63,12 @@ local function getAllNPCHumanoids()
     return out
 end
 
+-- Teleport every BasePart of the model to EXTREME_POS (same behavior as Presence)
 local function teleportModelToExtreme(model)
     if not model then return end
     for _,part in ipairs(model:GetDescendants()) do
         if part:IsA("BasePart") then
             pcall(function() part.CFrame = CFrame.new(EXTREME_POS) end)
-        end
-    end
-end
-
-local function anchorModelParts(model)
-    if not model then return end
-    for _,part in ipairs(model:GetDescendants()) do
-        if part:IsA("BasePart") then
-            pcall(function()
-                part.Anchored = true
-                part.CanCollide = false
-            end)
         end
     end
 end
@@ -134,35 +123,24 @@ local function getPlayerCenterPosition()
 end
 
 -- ====== DIALOGUE TYPING (fixed) ======
---// Services
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-
 local localPlayer = Players.LocalPlayer
 
--- --------------------------------------------------------------------
--- Dialogue typing (MOBILE SAFE)
--- --------------------------------------------------------------------
 local function typeDialog(lines, perCharDelay)
     perCharDelay = perCharDelay or 0.03
 
-    -- Remove old GUI if it exists (prevents respawn duplicates)
     local playerGui = localPlayer:WaitForChild("PlayerGui")
     local old = playerGui:FindFirstChild("VoidDialogGUI")
     if old then old:Destroy() end
 
-    -- Create GUI
     local sg = Instance.new("ScreenGui")
     sg.Name = "VoidDialogGUI"
     sg.IgnoreGuiInset = true
     sg.ResetOnSpawn = false
     sg.Parent = playerGui
 
-    -- Detect screen size for mobile scaling
     local screenSize = workspace.CurrentCamera.ViewportSize
     local isMobile = screenSize.X < 900
 
-    -- Frame
     local frame = Instance.new("Frame")
     frame.AnchorPoint = Vector2.new(0.5, 1)
     frame.Position = UDim2.new(0.5, 0, 0.92, 0)
@@ -172,7 +150,6 @@ local function typeDialog(lines, perCharDelay)
     frame.BackgroundTransparency = 1
     frame.Parent = sg
 
-    -- Text label
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
@@ -186,130 +163,32 @@ local function typeDialog(lines, perCharDelay)
     label.Text = ""
     label.Parent = frame
 
-    -- Mobile-friendly text size
     label.TextSize = isMobile and 20 or 28
 
-    -- Typewriter function using Heartbeat (more reliable than wait)
     local function typeLine(text)
         label.Text = ""
-
         local output = ""
         for _, char in utf8.codes(text) do
             output ..= utf8.char(char)
             label.Text = output
-            RunService.Heartbeat:Wait() -- smoother than wait()
+            RunService.Heartbeat:Wait()
             task.wait(perCharDelay)
         end
     end
 
-    -- Play lines sequentially
     for i, line in ipairs(lines) do
         typeLine(line)
-
-        if i < #lines then
-            task.wait(1) -- pause before next line
-        end
+        if i < #lines then task.wait(1) end
     end
 
-    -- Auto remove
     task.delay(8, function()
         if sg then sg:Destroy() end
     end)
 end
-
--- --------------------------------------------------------------------
--- START DIALOGUE
--- --------------------------------------------------------------------
---// Services
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-
-local localPlayer = Players.LocalPlayer
-
--- --------------------------------------------------------------------
--- Dialogue typing (MOBILE SAFE)
--- --------------------------------------------------------------------
-local function typeDialog(lines, perCharDelay)
-    perCharDelay = perCharDelay or 0.03
-
-    -- Remove old GUI if it exists (prevents respawn duplicates)
-    local playerGui = localPlayer:WaitForChild("PlayerGui")
-    local old = playerGui:FindFirstChild("VoidDialogGUI")
-    if old then old:Destroy() end
-
-    -- Create GUI
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "VoidDialogGUI"
-    sg.IgnoreGuiInset = true
-    sg.ResetOnSpawn = false
-    sg.Parent = playerGui
-
-    -- Detect screen size for mobile scaling
-    local screenSize = workspace.CurrentCamera.ViewportSize
-    local isMobile = screenSize.X < 900
-
-    -- Frame
-    local frame = Instance.new("Frame")
-    frame.AnchorPoint = Vector2.new(0.5, 1)
-    frame.Position = UDim2.new(0.5, 0, 0.92, 0)
-    frame.Size = isMobile
-        and UDim2.new(0.9, 0, 0.18, 0)
-        or UDim2.new(0.6, 0, 0.15, 0)
-    frame.BackgroundTransparency = 1
-    frame.Parent = sg
-
-    -- Text label
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.TextWrapped = true
-    label.TextScaled = false
-    label.RichText = false
-    label.Font = Enum.Font.SourceSansBold
-    label.TextColor3 = Color3.fromRGB(200,200,220)
-    label.TextXAlignment = Enum.TextXAlignment.Center
-    label.TextYAlignment = Enum.TextYAlignment.Center
-    label.Text = ""
-    label.Parent = frame
-
-    -- Mobile-friendly text size
-    label.TextSize = isMobile and 20 or 28
-
-    -- Typewriter function using Heartbeat (more reliable than wait)
-    local function typeLine(text)
-        label.Text = ""
-
-        local output = ""
-        for _, char in utf8.codes(text) do
-            output ..= utf8.char(char)
-            label.Text = output
-            RunService.Heartbeat:Wait() -- smoother than wait()
-            task.wait(perCharDelay)
-        end
-    end
-
-    -- Play lines sequentially
-    for i, line in ipairs(lines) do
-        typeLine(line)
-
-        if i < #lines then
-            task.wait(1) -- pause before next line
-        end
-    end
-
-    -- Auto remove
-    task.delay(8, function()
-        if sg then sg:Destroy() end
-    end)
-end
-
--- --------------------------------------------------------------------
--- START DIALOGUE
--- --------------------------------------------------------------------
-local D1 = "Ï̷̺̓s̸̞̮͗̒ ̸̺̗͐̽í̶̡̒t̴̙́ ̸͙̆̕r̵͙̈͛͜e̵͖͕̓a̸̦͋͝l̶̢͓̋l̶̗͗y̴̛̯̼ ̷͎͕͒w̴̩͙̎̈o̵͕̎̈ṛ̵̨̈́̌t̸͚͉͂́h̴̛̫ ̶̺̞̿͝f̶̨̙͛î̸̭g̴̜̗̎h̶̞̜̓t̴̩̂ị̶̘́̉ṉ̶̾͠g̸̣͝?̶̺̽̀"
-local D2 = "O̵̺͌r̸̻̈́ ̴̮̈́á̷̹r̷̺͒̆e̸̞͓̓̈ ̸̙͈̋̄ÿ̷̪o̵̧͈͗u̸̹͑ ̸̮͍̇r̸͚͊e̸̢̪͊a̶̻̓ḻ̴̽͑l̸̥̠̕y̶̦͉͒͗ ̴̛̳̲̄t̷̖̉̓h̷̠́a̶̩͕͝͝t̶̢̝̎ ̶̧̲̇d̷̖̱̉e̴̮̓̀s̷͕͑p̵̝̲͝è̸̻͕̿r̷̭͛a̶̳͍͋̕t̵̤̓ḙ̶͂̋ ̴͚̜̇͝t̵͎̑õ̵̖ ̵̲͒ͅl̴͎̓̚i̷̪̿v̷̡͓͝ȩ̴͝ ̴̗͖̇ä̴̭̱́̚ ̸̖̈́l̴̙̈͜ï̵͚̟f̸͓͑́e̵̲̙̒ ̵͕͋t̴̞̗̀h̵͓̥̓̈́a̴̼͂̌t̵͙͇̆́ ̴̝͚́̐w̸̱̔ạ̷̟̓̍s̵̪̋̀ ̴͕̃̌d̸̼̔̌e̶̲̔͝s̸̼̹̈́ţ̵͔̚í̷̘̖ǹ̶͍͠e̶̤͋̀ḋ̴̢̝ ̶͙̽t̷͔̏͝o̴̧͎̾ ̴͍̔d̵̺͕̔ȋ̵̘̘̿e̵͔͚̊̍ ̶̜̒ì̴̫͌n̷̻̦̒̓ ̴̞̩̃̚t̶͎̟̔̆ḧ̴̥́͌ͅe̵̛͔ ̵̻͑͘é̶̗ǹ̷̡͍d̸̨͆̇ ̷̗́ặ̶̡ņ̴̓́ÿ̶͎̞́̓w̶͔͛a̴̠̣͆͗ý̵͎͝s̸̘̰̎."
 
 task.spawn(function()
+    local D1 = "Ï̷̺̓s̸̞̮͗̒ ̸̺̗͐̽í̶̡̒t̴̙́ ̸͙̆̕r̵͙̈͛͜e̵͖͕̓a̸̦͋͝l̶̢͓̋l̶̗͗y̴̛̯̼ ̷͎͕͒w̴̩͙̎̈o̵͕̎̈ṛ̵̨̈́̌t̸͚͉͂́h̴̛̫ ̶̺̞̿͝f̶̨̙͛î̸̭g̴̜̗̎h̶̞̜̓t̴̩̂ị̶̘́̉ṉ̶̾͠g̸̣͝?̶̺̽̀"
+    local D2 = "O̵̺͌r̸̻̈́ ̴̮̈́á̷̹r̷̺͒̆e̸̞͓̓̈ ̸̙͈̋̄ÿ̷̪o̵̧͈͗u̸̹͑ ̸̮͍̇r̸͚͊e̸̢̪͊a̶̻̓ḻ̴̽͑l̸̥̠̕y̶̦͉͒͗ ̴̛̳̲̄t̷̖̉̓h̷̠́a̶̩͕͝͝t̶̢̝̎ ̶̧̲̇d̷̖̱̉e̴̮̓̀s̷͕͑p̵̝̲͝è̸̻͕̿r̷̭͛a̶̳͍͋̕t̵̤̓ḙ̶͂̋ ̴͚̜̇͝t̵͎̑õ̵̖ ̵̲͒ͅl̴͎̓̚i̷̪̿v̷̡͓͝ȩ̴͝ ̴̗͖̇ä̴̭̱́̚ ̸̖̈́l̴̙̈͜ï̵͚̟f̸͓͑́e̵̲̙̒ ̵͕͋t̴̞̗̀h̵͓̥̓̈́a̴̼͂̌t̵͙͇̆́ ̴̝͚́̐w̸̱̔ạ̷̟̓̍s̵̪̋̀ ̴͕̃̌d̸̼̔̌e̶̲̔͝s̸̼̹̈́ţ̵͔̚í̷̘̖ǹ̶͍͠e̶̤͋̀ḋ̴̢̝ ̶͙̽t̷͔̏͝o̴̧͎̾ ̴͍̔d̵̺͕̔ȋ̵̘̘̿e̵͔͚̊̍ ̶̜̒ì̴̫͌n̷̻̦̒̓ ̴̞̩̃̚t̶͎̟̔̆ḧ̴̥́͌ͅe̵̛͔ ̵̻͑͘é̶̗ǹ̷̡͍d̸̨͆̇ ̷̗́ặ̶̡ņ̴̓́ÿ̶͎̞́̓w̶͔͛a̴̠̣͆͗ý̵͎͝s̸̘̰̎."
     typeDialog({D1, D2}, 0.02)
 end)
 
@@ -383,6 +262,97 @@ local function createHandleOnTool(tool)
     return h
 end
 
+local function updateEraseGuiToggleText()
+    local playerGui = player:FindFirstChildOfClass("PlayerGui")
+    if not playerGui then return end
+    local sg = playerGui:FindFirstChild("TrueVoid_Erase_GUI")
+    if not sg then return end
+    local toggle = sg:FindFirstChild("TrueToggle", true) or sg:FindFirstChild("TrueToggle")
+    if toggle and toggle:IsA("TextButton") then
+        toggle.Text = (trueErasureState and "True Erasure: On" or "True Erasure: Off")
+    end
+end
+
+-- list of placed erase areas (Presence 2.0)
+local eraseAreas = {} -- { center = Vector3, expiry = tick()+5 }
+
+local function createEraseArea(centerPos, duration)
+    duration = duration or 5
+    table.insert(eraseAreas, { center = centerPos, expiry = tick() + duration })
+    -- optional visual indicator can be added here if desired
+end
+
+-- core function that processes a single center (same behavior as Presence)
+local function processPresenceAtCenter(center)
+    local records = {}
+    for _,desc in ipairs(Workspace:GetDescendants()) do
+        if desc:IsA("Humanoid") then
+            local model = desc.Parent
+            if model and isNPC(model) then
+                local hrp = getModelRoot(model)
+                if hrp and (hrp.Position - center).Magnitude <= PRESENCE_RADIUS then
+                    table.insert(records, {hum = desc, model = model})
+                end
+            end
+        end
+    end
+
+    -- If manual true erasure is ON, skip kill effect (do NOT set BreakJointsOnDeath or Health)
+    if not trueErasureState then
+        for _,r in ipairs(records) do pcall(function() r.hum.BreakJointsOnDeath = false end) end
+        for _,r in ipairs(records) do pcall(function() r.hum.Health = 0 end) end
+    end
+
+    -- Teleport models (same as original Presence)
+    for _,r in ipairs(records) do
+        spawn(function()
+            task.wait(0.2)
+            teleportModelToExtreme(r.model)
+        end)
+    end
+end
+
+-- Presence loop (existing passive + placed eraseAreas)
+local toggleState = { -- ensure toggleState exists here for presence loop
+    Forcefield = false,
+    Presence = false,
+    Fear = false,
+    TimeDelation = false,
+    Hidden = false,
+    TrueErasureManual = false
+}
+
+local function presenceLoop()
+    while true do
+        if toggleState and toggleState.Presence then
+            local center = getPlayerCenterPosition()
+            if center then
+                processPresenceAtCenter(center)
+            end
+        end
+
+        -- process placed eraseAreas (Presence 2.0)
+        local now = tick()
+        if #eraseAreas > 0 then
+            -- iterate backwards to remove expired
+            for i = #eraseAreas, 1, -1 do
+                local a = eraseAreas[i]
+                if a and a.expiry and a.expiry > now then
+                    processPresenceAtCenter(a.center)
+                else
+                    table.remove(eraseAreas, i)
+                end
+            end
+        end
+
+        task.wait(PRESENCE_CHECK_INTERVAL)
+    end
+end
+
+-- start presence loop
+spawn(function() presenceLoop() end)
+
+-- Wire the Erase tool so clicks either teleport clicked NPC or create a Presence 2.0 area
 local function wireEraseTool(tool)
     if not tool or not tool:IsA("Tool") then return end
     if tool:FindFirstChild("__TrueVoidWired") then return end
@@ -396,7 +366,6 @@ local function wireEraseTool(tool)
         local sg, toggle = createEraseGUI()
         if sg then sg.Enabled = true end
 
-        -- use player's mouse rather than captured mouse param (more stable)
         local mouse = player and player:GetMouse()
         local trueErasure = trueErasureState
 
@@ -410,64 +379,39 @@ local function wireEraseTool(tool)
                 trueErasureState = not trueErasureState
                 trueErasure = trueErasureState
                 toggle.Text = (trueErasure and "True Erasure: On" or "True Erasure: Off")
+                if passiveUI and passiveUI.TrueEraseBtn then
+                    passiveUI.TrueEraseBtn.Text = "True Erasure (Manual): " .. (trueErasureState and "On" or "Off")
+                end
             end)
         end
 
         local clickConn
         if mouse then
             clickConn = mouse.Button1Down:Connect(function()
-                local target = mouse.Target
-                if not target then return end
-                local hum, model = findHumanoidFromDescendant(target)
-                if not hum or not model or not isNPC(model) then
-                    local hitPos = mouse.Hit and mouse.Hit.p
-                    if hitPos then
-                        local best, bestDist = nil, math.huge
-                        for _,desc in ipairs(Workspace:GetDescendants()) do
-                            if desc:IsA("Humanoid") then
-                                local mm = desc.Parent
-                                if mm and isNPC(mm) then
-                                    local hrp = getModelRoot(mm)
-                                    if hrp then
-                                        local d = (hrp.Position - hitPos).Magnitude
-                                        if d < bestDist and d <= 12 then best = mm; bestDist = d end
-                                    end
-                                end
+                local hitPos = mouse.Hit and mouse.Hit.p
+                if not hitPos then return end
+
+                -- If clicked an NPC, teleport it just like Presence
+                local hum, model = findHumanoidFromDescendant(mouse.Target)
+                if hum and model and isNPC(model) then
+                    if not trueErasure then
+                        -- normal erase: kill then teleport
+                        task.wait(0.8)
+                        pcall(function()
+                            if hum and hum.Parent then
+                                hum.BreakJointsOnDeath = false
+                                hum.Health = 0
                             end
-                        end
-                        if best then hum = best:FindFirstChildOfClass("Humanoid"); model = best end
+                        end)
+                        task.wait(0.2)
                     end
-                end
-                if not hum or not model then return end
-
-                local h = createHandleOnTool(tool)
-
-                if trueErasure then
+                    -- teleport to extreme (same as Presence)
                     teleportModelToExtreme(model)
-                    spawn(function()
-                        for _,part in ipairs(model:GetDescendants()) do
-                            if part:IsA("BasePart") then
-                                waitUntilAtExtreme(part, 2)
-                                break
-                            end
-                        end
-                        anchorModelParts(model)
-                    end)
-                    task.wait(0.5)
-                    pcall(function() if h and h.Parent then h:Destroy() end end)
-                else
-                    task.wait(0.8)
-                    pcall(function()
-                        if hum and hum.Parent then
-                            hum.BreakJointsOnDeath = false
-                            hum.Health = 0
-                        end
-                    end)
-                    task.wait(0.2)
-                    teleportModelToExtreme(model)
-                    task.wait(0.5)
-                    pcall(function() if h and h.Parent then h:Destroy() end end)
+                    return
                 end
+
+                -- Otherwise create a Presence 2.0 area at clicked location (5s)
+                createEraseArea(hitPos, 5)
             end)
         end
 
@@ -490,7 +434,10 @@ end
 
 local function ensureEraseTool()
     local t = giveTool("Erase")
-    if t then wireEraseTool(t) end
+    if t then
+        if not t:FindFirstChild("Handle") then createHandleOnTool(t) end
+        wireEraseTool(t)
+    end
 end
 
 local function watchBackpack()
@@ -508,15 +455,7 @@ local function watchBackpack()
     end)
 end
 
--- ====== PASSIVE TOGGLES UI (unchanged layout) ======
-local toggleState = {
-    Forcefield = false,
-    Presence = false,
-    Fear = false,
-    TimeDelation = false,
-    Hidden = false
-}
-
+-- ====== PASSIVE TOGGLES UI (unchanged layout + manual True Erasure) ======
 local function createPassiveUI()
     local playerGui = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui")
     if playerGui:FindFirstChild("TrueVoid_Passives") then
@@ -528,6 +467,7 @@ local function createPassiveUI()
             PresenceBtn = existing:FindFirstChild("PresenceBtn"),
             FearBtn = existing:FindFirstChild("FearBtn"),
             TimeDelationBtn = existing:FindFirstChild("TimeDelationBtn"),
+            TrueEraseBtn = existing:FindFirstChild("TrueEraseBtn")
         }
     end
 
@@ -572,15 +512,16 @@ local function createPassiveUI()
     local prFrame, prBtn = newToggle("Presence", 1, "Presence: Off")
     local feFrame, feBtn = newToggle("Fear", 2, "Fear: Off")
     local tdFrame, tdBtn = newToggle("TimeDelation", 3, "Time Delation: Off")
+    local teFrame, teBtn = newToggle("TrueErase", 4, "True Erasure (Manual): Off") -- NEW button
 
     xBtn.MouseButton1Click:Connect(function()
         toggleState.Hidden = not toggleState.Hidden
         if toggleState.Hidden then
             xBtn.Text = "O"
-            ffFrame.Visible = false; prFrame.Visible = false; feFrame.Visible = false; tdFrame.Visible = false
+            ffFrame.Visible = false; prFrame.Visible = false; feFrame.Visible = false; tdFrame.Visible = false; teFrame.Visible = false
         else
             xBtn.Text = "X"
-            ffFrame.Visible = true; prFrame.Visible = true; feFrame.Visible = true; tdFrame.Visible = true
+            ffFrame.Visible = true; prFrame.Visible = true; feFrame.Visible = true; tdFrame.Visible = true; teFrame.Visible = true
         end
     end)
 
@@ -601,13 +542,23 @@ local function createPassiveUI()
         tdBtn.Text = "Time Delation: " .. (toggleState.TimeDelation and "On" or "Off")
     end)
 
+    -- NEW: manual True Erasure toggle inside passive UI
+    teBtn.MouseButton1Click:Connect(function()
+        toggleState.TrueErasureManual = not toggleState.TrueErasureManual
+        trueErasureState = toggleState.TrueErasureManual -- keep global state in sync with tool UI
+        teBtn.Text = "True Erasure (Manual): " .. (toggleState.TrueErasureManual and "On" or "Off")
+        -- update the Erase tool GUI if present so everything stays in sync
+        updateEraseGuiToggleText()
+    end)
+
     return {
         SG = sg,
         XBtn = xBtn,
         ForcefieldBtn = ffBtn,
         PresenceBtn = prBtn,
         FearBtn = feBtn,
-        TimeDelationBtn = tdBtn
+        TimeDelationBtn = tdBtn,
+        TrueEraseBtn = teBtn
     }
 end
 
@@ -645,7 +596,7 @@ end
 
 spawn(function()
     while true do
-        if toggleState.Forcefield then
+        if toggleState and toggleState.Forcefield then
             local center = getPlayerCenterPosition()
             for _,desc in ipairs(Workspace:GetDescendants()) do
                 if desc:IsA("Model") and isNPC(desc) then
@@ -662,40 +613,6 @@ spawn(function()
         task.wait(FORCEFIELD_CHECK_INTERVAL)
     end
 end)
-
--- ====== PRESENCE ======
-local function presenceLoop()
-    while true do
-        if toggleState.Presence then
-            local center = getPlayerCenterPosition()
-            if center then
-                local records = {}
-                for _,desc in ipairs(Workspace:GetDescendants()) do
-                    if desc:IsA("Humanoid") then
-                        local model = desc.Parent
-                        if model and isNPC(model) then
-                            local hrp = getModelRoot(model)
-                            if hrp and (hrp.Position - center).Magnitude <= PRESENCE_RADIUS then
-                                table.insert(records, {hum = desc, model = model})
-                            end
-                        end
-                    end
-                end
-                for _,r in ipairs(records) do pcall(function() r.hum.BreakJointsOnDeath = false end) end
-                for _,r in ipairs(records) do pcall(function() r.hum.Health = 0 end) end
-                for _,r in ipairs(records) do
-                    spawn(function()
-                        task.wait(0.2)
-                        teleportModelToExtreme(r.model)
-                    end)
-                end
-            end
-        end
-        task.wait(PRESENCE_CHECK_INTERVAL)
-    end
-end
-
-spawn(function() presenceLoop() end)
 
 -- ====== FEAR ======
 local fearState = {}
@@ -780,7 +697,7 @@ end
 
 local heartbeatConn
 heartbeatConn = RunService.Heartbeat:Connect(function(dt)
-    if toggleState.Fear then
+    if toggleState and toggleState.Fear then
         applyFearHeartbeat()
     else
         if next(fearState) ~= nil then
@@ -796,7 +713,7 @@ local function applyTimeDelationOnce()
     for _,entry in ipairs(getAllNPCHumanoids()) do
         local hum = entry.hum
         local model = entry.model
-        if toggleState.TimeDelation then
+        if toggleState and toggleState.TimeDelation then
             if model and not timeDelationRecords[model] then
                 local origWalk = hum.WalkSpeed
                 local origJump = hum.JumpPower or hum.JumpHeight or 0
@@ -835,7 +752,7 @@ end
 
 spawn(function()
     while true do
-        if toggleState.TimeDelation then
+        if toggleState and toggleState.TimeDelation then
             applyTimeDelationOnce()
         else
             clearTimeDelation()
@@ -854,4 +771,4 @@ player.CharacterAdded:Connect(function()
     if passiveUI and passiveUI.SG then passiveUI.SG.Parent = player:FindFirstChildOfClass("PlayerGui") end
 end)
 
-print("True Void Part One (forcefield non-lethal fling, fear 70/30) loaded for", player.Name)
+print("True Void Part One (Presence + Erase area teleports to EXTREME_POS) loaded for", player.Name)
