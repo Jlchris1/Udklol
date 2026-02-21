@@ -1,0 +1,1152 @@
+-- TheVoid_full_erasure_infinity.lua
+-- Client LocalScript: passive BHs, Void's Judgement, presence/erase, Infinity.
+-- Erase behavior uses the "Erase tool" method (kill OR true-erasure sweep / teleport),
+-- and Infinity follows the same system: when True Erasure is ON, Infinity will
+-- teleport NPCs away (no kill); when OFF, Infinity kills then teleports as before.
+-- Place this in StarterPlayer -> StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local localPlayer = Players.LocalPlayer
+if not localPlayer then return end
+
+-- ===== helpers =====
+local function clamp(v,a,b) if v < a then return a elseif v > b then return b end return v end
+local function isPlayerCharacter(model) return model and Players:GetPlayerFromCharacter(model) ~= nil end
+local function isNPC(model)
+    if not model or not model:IsA("Model") then return false end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    return hum and not Players:GetPlayerFromCharacter(model)
+end
+local function isPartPlayerCharacter(part)
+    if not part then return false end
+    for _, pl in ipairs(Players:GetPlayers()) do
+        local char = pl.Character
+        if char and part:IsDescendantOf(char) then return true end
+    end
+    return false
+end
+local function stripBodyForces(part)
+    if not part then return end
+    for _, c in ipairs(part:GetChildren()) do
+        if c:IsA("BodyPosition") or c:IsA("BodyGyro") or c:IsA("BodyVelocity")
+        or c:IsA("BodyAngularVelocity") or c:IsA("BodyForce") or c:IsA("RocketPropulsion")
+        or c:IsA("BodyThrust") then
+            pcall(function() c:Destroy() end)
+        end
+    end
+end
+local function safeMul(a,b)
+    local ok, res = pcall(function() return a * b end)
+    if not ok or type(res) ~= "number" or res ~= res or res == math.huge or res == -math.huge then
+        return 1e9
+    end
+    return res
+end
+
+-- ===== config & multipliers =====
+local TOOL_NAME = "The Void."
+local CLICK_HALF_EXTENT = 100 -- 100x100 X/Z as requested
+local HUGE_POS = Vector3.new(9e37, 9e37, 9e37)
+
+local INFINITY_PULL_DURATION = 8
+local INFINITY_KILL_DISTANCE = 6
+
+-- Infinity area half-extent (40x40 area -> half-extent 20)
+local INFINITY_AREA_HALF_EXTENT = 20
+
+-- Infinity velocity scaling (velocity = distance * VELOCITY_PER_STUD)
+local VELOCITY_PER_STUD = 6 -- tweak this if you want stronger/weaker pull
+
+-- BodyVelocity max force for the temporary BV used during Infinity
+local INFINITY_BV_MAX_FORCE = Vector3.new(1e8, 1e8, 1e8)
+
+local BH_FOLDER = "TheVoid_BH_Folder"
+local BH_CENTER_NAME = "TheVoid_Center"
+local BH_ATTACHMENT_NAME = "TheVoid_Att"
+
+local BH_PULL_FORCE_BASE = 6e7
+local BH_PULL_RESP_BASE = 200
+local BH_FLING_TORQUE_BASE = Vector3.new(0, 1e6, 0)
+
+-- multipliers — keep finite to avoid NaN / inf issues
+local FLING_MULT = 1e7
+local PULL_MULT  = math.huge
+
+local PASSIVE_FLING_TORQUE = BH_FLING_TORQUE_BASE * FLING_MULT
+local PASSIVE_PULL_MAX_FORCE = safeMul(BH_PULL_FORCE_BASE, (PULL_MULT or 1))
+local PASSIVE_PULL_RESP = safeMul(BH_PULL_RESP_BASE, (PULL_MULT or 1))
+
+-- passive BH offset relative to local player (30 up, 10 behind)
+local PASSIVE_BH_OFFSET = Vector3.new(0, 30, -10)
+
+-- ===== state =====
+local processedParts = {}          -- part -> true
+local processedPartsList = {}      -- ordered list for batched processing
+local processedPartsIndex = 1
+local initiallyMasslessParts = {}
+local initiallyAnchoredParts = {}
+local persistentFlag = localPlayer:FindFirstChild("__Void_PersistentBH")
+if not persistentFlag then
+    persistentFlag = Instance.new("BoolValue")
+    persistentFlag.Name = "__Void_PersistentBH"
+    persistentFlag.Value = false
+    persistentFlag.Parent = localPlayer
+end
+
+local extraBlackHoles = {}         -- list of BH objects
+local VJ_active = false            -- Void's Judgement mode
+local rebalancerRunning = false
+local REBALANCE_BATCH_SIZE = 40
+local rebalancerFreq = 0.12
+
+-- Infinity temporary BV trackers (model -> bv)
+local infinityBVs = {}
+
+-- Collision override tracker: part -> previousCanCollide (we restore after Infinity)
+local collisionOverrides = {}
+
+-- ===== BH folder + center & attachment (single world-space center used when parts not assigned) =====
+local BHFolder = Workspace:FindFirstChild(BH_FOLDER) or Instance.new("Folder", Workspace)
+BHFolder.Name = BH_FOLDER
+local centerPart = BHFolder:FindFirstChild(BH_CENTER_NAME)
+if not centerPart then
+    centerPart = Instance.new("Part")
+    centerPart.Name = BH_CENTER_NAME
+    centerPart.Anchored = true
+    centerPart.CanCollide = false
+    centerPart.Transparency = 1
+    centerPart.Size = Vector3.new(1,1,1)
+    centerPart.Parent = BHFolder
+end
+local BH_Attachment = centerPart:FindFirstChild(BH_ATTACHMENT_NAME)
+if not BH_Attachment then
+    BH_Attachment = Instance.new("Attachment")
+    BH_Attachment.Name = BH_ATTACHMENT_NAME
+    BH_Attachment.Parent = centerPart
+end
+
+-- ===== processedParts lifecycle helpers =====
+local function markPartProcessed(part)
+    if not part or not part:IsA("BasePart") then return end
+    if processedParts[part] then return end
+    processedParts[part] = true
+    table.insert(processedPartsList, part)
+
+    -- cleanup hook: when part removed, clear tracking
+    local conn
+    conn = part.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            processedParts[part] = nil
+            initiallyMasslessParts[part] = nil
+            initiallyAnchoredParts[part] = nil
+            if conn then pcall(function() conn:Disconnect() end); conn = nil end
+        end
+    end)
+end
+
+-- ===== collision helpers =====
+local function recordAndDisableCollisionForPart(part)
+    if not part or not part:IsA("BasePart") then return end
+    if collisionOverrides[part] == nil then
+        local ok, cur = pcall(function() return part.CanCollide end)
+        if ok then collisionOverrides[part] = cur else collisionOverrides[part] = true end
+    end
+    pcall(function() part.CanCollide = false end)
+end
+
+local function recordAndDisableCollisionForModel(model)
+    if not model then return end
+    for _, p in ipairs(model:GetDescendants()) do
+        if p:IsA("BasePart") and not isPartPlayerCharacter(p) then
+            recordAndDisableCollisionForPart(p)
+        end
+    end
+end
+
+local function disableCollisionForLocalPlayer()
+    local char = localPlayer.Character
+    if not char then return end
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") then
+            if collisionOverrides[p] == nil then
+                local ok, cur = pcall(function() return p.CanCollide end)
+                if ok then collisionOverrides[p] = cur else collisionOverrides[p] = true end
+            end
+            pcall(function() p.CanCollide = false end)
+        end
+    end
+end
+
+local function restoreRecordedCollisions()
+    for part, prev in pairs(collisionOverrides) do
+        pcall(function()
+            if part and part.Parent then
+                part.CanCollide = prev
+            end
+        end)
+    end
+    collisionOverrides = {}
+end
+
+-- ===== ensure attachments & aligns (rebalancer will call this) =====
+local function ensurePartAttachmentsAndAligns(part)
+    if not (part and part.Parent and part:IsA("BasePart")) then return end
+
+    -- make attachment on part
+    local att = part:FindFirstChild("Void_Pickup_Att")
+    if not att then
+        att = Instance.new("Attachment")
+        att.Name = "Void_Pickup_Att"
+        att.Parent = part
+        pcall(function() att.WorldCFrame = part.CFrame end)
+    end
+
+    -- make AlignPosition with Attachment0 on part.Attachment
+    local assigned = part:FindFirstChild("Void_AssignedBH")
+    local ap = part:FindFirstChild("Void_Pickup_Align")
+    if not ap then
+        ap = Instance.new("AlignPosition")
+        ap.Name = "Void_Pickup_Align"
+        ap.Attachment0 = att
+        ap.MaxVelocity = math.huge
+        ap.Parent = part
+    end
+
+    -- set appropriate Attachment1 + force/responsiveness depending on assignment
+    pcall(function()
+        if assigned and assigned.Value and assigned.Value:IsA("Attachment") then
+            ap.Attachment1 = assigned.Value
+            ap.MaxForce = PASSIVE_PULL_MAX_FORCE
+            ap.Responsiveness = PASSIVE_PULL_RESP
+        else
+            ap.Attachment1 = BH_Attachment
+            ap.MaxForce = BH_PULL_FORCE_BASE
+            ap.Responsiveness = BH_PULL_RESP_BASE
+        end
+    end)
+
+    -- AlignOrientation
+    local ao = part:FindFirstChild("Void_Pickup_AlignOri")
+    if not ao then
+        ao = Instance.new("AlignOrientation")
+        ao.Name = "Void_Pickup_AlignOri"
+        ao.Attachment0 = att
+        ao.Attachment1 = (assigned and assigned.Value and assigned.Value:IsA("Attachment")) and assigned.Value or BH_Attachment
+        ao.MaxTorque = 9e9
+        ao.Responsiveness = 900
+        ao.Parent = part
+    else
+        pcall(function()
+            ao.Attachment1 = (assigned and assigned.Value and assigned.Value:IsA("Attachment")) and assigned.Value or BH_Attachment
+        end)
+    end
+
+    -- Torque for fling
+    local torque = part:FindFirstChild("Void_Pickup_Torque")
+    if not torque then
+        local ok = pcall(function() return Instance.new("Torque") end)
+        if ok then
+            local tAtt = part:FindFirstChild("Void_Pickup_Torque_Att")
+            if not tAtt then
+                tAtt = Instance.new("Attachment", part)
+                tAtt.Name = "Void_Pickup_Torque_Att"
+            end
+            local newTorque = Instance.new("Torque")
+            newTorque.Name = "Void_Pickup_Torque"
+            newTorque.Attachment0 = tAtt
+            newTorque.Torque = PASSIVE_FLING_TORQUE
+            newTorque.Parent = part
+        end
+    else
+        pcall(function() torque.Torque = PASSIVE_FLING_TORQUE end)
+    end
+end
+
+local function updateAlignForPart(part)
+    if not (part and part.Parent and part:IsA("BasePart")) then return end
+    local ap = part:FindFirstChild("Void_Pickup_Align")
+    if ap then
+        local assigned = part:FindFirstChild("Void_AssignedBH")
+        pcall(function()
+            if assigned and assigned.Value and assigned.Value:IsA("Attachment") then
+                ap.Attachment1 = assigned.Value
+                ap.MaxForce = PASSIVE_PULL_MAX_FORCE
+                ap.Responsiveness = PASSIVE_PULL_RESP
+            else
+                ap.Attachment1 = BH_Attachment
+                ap.MaxForce = BH_PULL_FORCE_BASE
+                ap.Responsiveness = BH_PULL_RESP_BASE
+            end
+            ap.MaxVelocity = math.huge
+        end)
+    else
+        ensurePartAttachmentsAndAligns(part)
+    end
+end
+
+-- ===== rebalancer (batched) =====
+local function startBHRebalancer()
+    if rebalancerRunning then return end
+    rebalancerRunning = true
+    spawn(function()
+        while rebalancerRunning do
+            local processedThisTick = 0
+            local n = #processedPartsList
+            if n == 0 then
+                processedPartsIndex = 1
+            else
+                local i = processedPartsIndex
+                while processedThisTick < REBALANCE_BATCH_SIZE and n > 0 do
+                    local part = processedPartsList[i]
+                    if not part or not part.Parent or not part:IsA("BasePart") or part.Anchored then
+                        -- remove invalids
+                        processedPartsList[i] = nil
+                        processedParts[part] = nil
+                        initiallyAnchoredParts[part] = nil
+                        initiallyMasslessParts[part] = nil
+                    else
+                        pcall(function()
+                            ensurePartAttachmentsAndAligns(part)
+                            updateAlignForPart(part)
+                            part.CanCollide = false
+                        end)
+                    end
+                    processedThisTick = processedThisTick + 1
+                    i = i + 1
+                    if i > n then i = 1 end
+                    if i == processedPartsIndex then break end
+                end
+                processedPartsIndex = (processedPartsIndex + processedThisTick - 1) % n + 1
+            end
+
+            -- occasional compaction
+            if #processedPartsList > 0 and math.random() < 0.05 then
+                local compact = {}
+                for _, p in ipairs(processedPartsList) do
+                    if p and p.Parent and p:IsA("BasePart") then table.insert(compact, p) end
+                end
+                processedPartsList = compact
+                processedPartsIndex = math.min(processedPartsIndex, #processedPartsList > 0 and #processedPartsList or 1)
+            end
+
+            task.wait(rebalancerFreq)
+        end
+    end)
+end
+
+local function stopBHRebalancer()
+    rebalancerRunning = false
+end
+
+-- ===== attach helpers for Infinity (temporary aligns to an anchor) =====
+local function attachModelToAnchor(model, anchor)
+    local storage = { parts = {}, attachments = {}, aligns = {}, orients = {} }
+    for _,v in ipairs(model:GetDescendants()) do
+        if v:IsA("BasePart") and not isPartPlayerCharacter(v) then
+            pcall(function() v.CanCollide = false; v.Massless = true end)
+            stripBodyForces(v)
+            local att = Instance.new("Attachment"); att.Name = "Inf_AttPart"; att.Parent = v
+            pcall(function() att.WorldCFrame = v.CFrame end)
+            table.insert(storage.attachments, att)
+            table.insert(storage.parts, v)
+
+            local aAtt = Instance.new("Attachment", anchor); aAtt.Name = "Inf_AnchorAtt"
+            local ap = Instance.new("AlignPosition")
+            ap.Attachment0 = att; ap.Attachment1 = aAtt
+            ap.MaxForce = PASSIVE_PULL_MAX_FORCE
+            ap.Responsiveness = PASSIVE_PULL_RESP
+            ap.MaxVelocity = math.huge
+            ap.Parent = v
+            table.insert(storage.aligns, ap)
+
+            local ao = Instance.new("AlignOrientation")
+            ao.Attachment0 = att; ao.Attachment1 = aAtt
+            ao.MaxTorque = 9e9; ao.Responsiveness = 900
+            ao.Parent = v
+            table.insert(storage.orients, ao)
+
+            local ok, Torque = pcall(function() return Instance.new("Torque") end)
+            if ok and Torque then
+                local tAtt = Instance.new("Attachment", v); tAtt.Name = "Inf_Torque_Att"
+                Torque.Attachment0 = tAtt
+                Torque.Parent = v
+                Torque.Torque = PASSIVE_FLING_TORQUE
+            else
+                pcall(function() v.AssemblyAngularVelocity = Vector3.new(0, 40, 0) end)
+            end
+        end
+    end
+    return storage
+end
+
+local function cleanupStorage(storage)
+    if not storage then return end
+    for _,ap in ipairs(storage.aligns or {}) do pcall(function() if ap and ap.Parent then ap:Destroy() end end) end
+    for _,ao in ipairs(storage.orients or {}) do pcall(function() if ao and ao.Parent then ao:Destroy() end end) end
+    for _,att in ipairs(storage.attachments or {}) do pcall(function() if att and att.Parent then att:Destroy() end end) end
+end
+
+-- ===== click / erase logic (adapted to "Erase tool" style and unified) =====
+local function getModelRoot(model)
+    if not model then return nil end
+    return model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
+end
+
+-- Teleport every BasePart of the model to HUGE_POS (same behavior as Presence/Erase).
+-- Ensure parts are not anchored and disable their collisions to avoid blocking/breaking.
+local function teleportModelToExtreme(model)
+    if not model then return end
+    for _,part in ipairs(model:GetDescendants()) do
+        if part:IsA("BasePart") and not isPartPlayerCharacter(part) then
+            pcall(function() part.Anchored = false end)
+            recordAndDisableCollisionForPart(part)
+            pcall(function() part.CFrame = CFrame.new(HUGE_POS) end)
+        end
+    end
+end
+
+-- Presence / erase areas (same "Presence 2.0" style)
+local eraseAreas = {} -- { center = Vector3, expiry = tick()+duration }
+local trueErasureState = false
+
+local function createEraseArea(centerPos, duration)
+    duration = duration or 5
+    table.insert(eraseAreas, { center = centerPos, expiry = tick() + duration })
+end
+
+local function processPresenceAtCenter(center)
+    local records = {}
+    for _,desc in ipairs(Workspace:GetDescendants()) do
+        if desc:IsA("Humanoid") then
+            local model = desc.Parent
+            if model and isNPC(model) then
+                local hrp = getModelRoot(model)
+                if hrp and (hrp.Position - center).Magnitude <= 20 then
+                    table.insert(records, {hum = desc, model = model})
+                end
+            end
+        end
+    end
+
+    if not trueErasureState then
+        for _,r in ipairs(records) do pcall(function() r.hum.BreakJointsOnDeath = false end) end
+        for _,r in ipairs(records) do pcall(function() r.hum.Health = 0 end) end
+    end
+
+    for _,r in ipairs(records) do
+        spawn(function()
+            task.wait(0.2)
+            teleportModelToExtreme(r.model)
+        end)
+    end
+end
+
+-- NEW: True Erasure sweep (100x100 area, repeat every interval for duration)
+local function trueErasureSweep(centerPos, duration, interval)
+    duration = duration or 5
+    interval = interval or 0.5
+    local half = 50 -- 100x100 -> half-extent 50
+    local start = tick()
+    while tick() - start < duration do
+        -- iterate humanoids, teleport NPCs inside the box
+        for _, desc in ipairs(Workspace:GetDescendants()) do
+            if desc:IsA("Humanoid") then
+                local model = desc.Parent
+                if model and isNPC(model) then
+                    local root = getModelRoot(model)
+                    if root and root.Parent then
+                        local dx = math.abs(root.Position.X - centerPos.X)
+                        local dz = math.abs(root.Position.Z - centerPos.Z)
+                        if dx <= half and dz <= half then
+                            -- ensure NPC parts are not anchored, disable collisions for them (so they don't block),
+                            -- then teleport every BasePart to HUGE_POS (do NOT anchor)
+                            for _, part in ipairs(model:GetDescendants()) do
+                                if part:IsA("BasePart") and not isPartPlayerCharacter(part) then
+                                    pcall(function() part.Anchored = false end)
+                                    recordAndDisableCollisionForPart(part)
+                                    pcall(function() part.CFrame = CFrame.new(HUGE_POS) end)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        task.wait(interval)
+    end
+end
+
+-- clickKill behavior follows the erase-tool style:
+-- If trueErasureActive then spawn a trueErasureSweep at clickPos (100x100 for 5s).
+-- If clicked an NPC: if not trueErasure then set BreakJointsOnDeath=false; kill after short delay; then teleport parts to HUGE_POS.
+local function clickKillAndTeleport(clickPos, trueErasureActive)
+    if trueErasureActive then
+        task.spawn(function() trueErasureSweep(clickPos, 5, 0.5) end)
+        return
+    end
+
+    for _, desc in ipairs(Workspace:GetDescendants()) do
+        if desc:IsA("Humanoid") then
+            local hum = desc
+            local model = hum.Parent
+            if model and model:IsA("Model") and not Players:GetPlayerFromCharacter(model) then
+                local hrp = getModelRoot(model)
+                if hrp then
+                    local dx = math.abs(hrp.Position.X - clickPos.X)
+                    local dz = math.abs(hrp.Position.Z - clickPos.Z)
+                    if dx <= CLICK_HALF_EXTENT and dz <= CLICK_HALF_EXTENT then
+                        pcall(function()
+                            -- follow erase-tool timing: small delay before kill (so client/physics settle)
+                            task.wait(0.8)
+                            if hum and hum.Parent then
+                                hum.BreakJointsOnDeath = false
+                                hum.Health = 0
+                            end
+                            task.wait(0.2)
+                            for _, part in ipairs(model:GetDescendants()) do
+                                if part:IsA("BasePart") and not isPartPlayerCharacter(part) then
+                                    pcall(function() part.Anchored = false end) -- ensure not anchored
+                                    recordAndDisableCollisionForPart(part)
+                                    pcall(function() part.CFrame = CFrame.new(HUGE_POS) end)
+                                end
+                            end
+                        end)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Presence loop
+spawn(function()
+    while true do
+        local now = tick()
+        if #eraseAreas > 0 then
+            for i = #eraseAreas, 1, -1 do
+                local a = eraseAreas[i]
+                if a and a.expiry and a.expiry > now then
+                    processPresenceAtCenter(a.center)
+                else
+                    table.remove(eraseAreas, i)
+                end
+            end
+        end
+        task.wait(0.5)
+    end
+end)
+
+local function findHumanoidFromDescendant(desc)
+    local node = desc
+    for i=1,10 do
+        if not node then break end
+        local h = node:FindFirstChildOfClass("Humanoid")
+        if h then return h, node end
+        node = node.Parent
+    end
+    return nil, nil
+end
+
+-- ===== Infinity (presence centered on player; repeated teleport of NPCs that reach within INFINITY_KILL_DISTANCE)
+-- Also: disable collisions for local player & NPCs during Infinity; if trueErasureFlag is set, Infinity will teleport NPCs (no kill),
+-- and it will also spawn a 100x100 true-erasure sweep centered on player to match the erase-tool behavior.
+local function doInfinity(trueErasureFlag)
+    local char = localPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    -- create presence area (so presence logic still runs)
+    createEraseArea(hrp.Position, INFINITY_PULL_DURATION)
+
+    -- If true erasure is active, spawn a true-erasure sweep centered on player for INFINITY_PULL_DURATION (so it also runs during Infinity)
+    if trueErasureFlag then
+        task.spawn(function()
+            trueErasureSweep(hrp.Position, INFINITY_PULL_DURATION, 0.5)
+        end)
+    end
+
+    -- START: disable collisions for local player
+    disableCollisionForLocalPlayer()
+
+    -- START: local lift for player (float up ~30 studs)
+    local liftBP = nil
+    local targetPos = hrp.Position + Vector3.new(0, 30, 0)
+    pcall(function()
+        liftBP = Instance.new("BodyPosition")
+        liftBP.Name = "Void_Infinity_LiftBP"
+        liftBP.MaxForce = Vector3.new(1e5, 1e5, 1e5) -- reasonably large for client-side lift
+        liftBP.P = 3000
+        liftBP.D = 100
+        liftBP.Position = targetPos
+        liftBP.Parent = hrp
+    end)
+
+    local start = tick()
+    -- loop; each iteration updates BV velocities for NPCs, and kills/teleports ones inside area
+    while tick() - start < INFINITY_PULL_DURATION do
+        -- iterate humanoids in workspace
+        for _, desc in ipairs(Workspace:GetDescendants()) do
+            if desc:IsA("Humanoid") then
+                local model = desc.Parent
+                if model and isNPC(model) then
+                    local root = getModelRoot(model)
+                    if root and root.Parent then
+                        -- ensure NPC collisions are disabled while Infinity runs
+                        recordAndDisableCollisionForModel(model)
+
+                        -- square area check (40x40 -> half-extent = INFINITY_AREA_HALF_EXTENT)
+                        local dx = math.abs(root.Position.X - hrp.Position.X)
+                        local dz = math.abs(root.Position.Z - hrp.Position.Z)
+
+                        if dx <= INFINITY_AREA_HALF_EXTENT and dz <= INFINITY_AREA_HALF_EXTENT then
+                            -- If true erasure is ON: teleport the NPC away (no kill).
+                            -- If true erasure is OFF: behavior is kill then teleport (matching erase-tool's timing).
+                            if trueErasureFlag then
+                                -- Immediately teleport model parts away (ensuring no anchoring and disabling collisions)
+                                task.spawn(function()
+                                    -- small tick to ensure collisions were disabled above
+                                    task.wait(0.03)
+                                    teleportModelToExtreme(model)
+                                end)
+                                -- cleanup any BV we may have applied
+                                if infinityBVs[model] then
+                                    pcall(function() infinityBVs[model]:Destroy() end)
+                                    infinityBVs[model] = nil
+                                end
+                            else
+                                -- kill + teleport extreme (preserve old behavior when True Erasure is OFF)
+                                local humNPC = desc
+                                pcall(function() if humNPC and humNPC.Parent then humNPC.Health = 0 end end)
+                                task.spawn(function()
+                                    task.wait(0.03)
+                                    teleportModelToExtreme(model)
+                                end)
+                                -- clean up any BV we may have applied
+                                if infinityBVs[model] then
+                                    pcall(function() infinityBVs[model]:Destroy() end)
+                                    infinityBVs[model] = nil
+                                end
+                            end
+                        else
+                            -- apply/update temporary BodyVelocity toward the local player (only when not being teleported)
+                            local toPlayer = hrp.Position - root.Position
+                            local d = toPlayer.Magnitude
+                            if d > 0.001 then
+                                local dir = toPlayer.Unit
+                                -- speed scales with distance (closer => slower)
+                                local targetSpeed = clamp(d * VELOCITY_PER_STUD, 1, 1000)
+                                local targetVel = dir * targetSpeed
+
+                                local bv = infinityBVs[model]
+                                if not (bv and bv.Parent) then
+                                    -- create one on the root
+                                    local ok, newBV = pcall(function()
+                                        local b = Instance.new("BodyVelocity")
+                                        b.Name = "Void_Infinity_BV"
+                                        b.MaxForce = INFINITY_BV_MAX_FORCE
+                                        b.Velocity = Vector3.new(0,0,0)
+                                        b.Parent = root
+                                        return b
+                                    end)
+                                    if ok and newBV then
+                                        bv = newBV
+                                        infinityBVs[model] = bv
+                                    else
+                                        infinityBVs[model] = nil
+                                        bv = nil
+                                    end
+                                end
+
+                                if bv and bv.Parent then
+                                    -- smooth a bit for better feel
+                                    local current = bv.Velocity or Vector3.new(0,0,0)
+                                    local newV = current:Lerp(targetVel, 0.25)
+                                    pcall(function() bv.Velocity = newV end)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        task.wait(0.06)
+    end
+
+    -- cleanup any remaining BodyVelocities we created
+    for model, bv in pairs(infinityBVs) do
+        pcall(function() if bv and bv.Parent then bv:Destroy() end end)
+        infinityBVs[model] = nil
+    end
+
+    -- remove lift
+    if liftBP then
+        pcall(function() liftBP:Destroy() end)
+        liftBP = nil
+    end
+
+    -- restore collisions we changed
+    restoreRecordedCollisions()
+end
+
+-- ===== Black Hole helpers: create/destroy/distribute =====
+local function createBlackHole(initialTarget, idx)
+    local folder = BHFolder or (Workspace:FindFirstChild(BH_FOLDER) or Instance.new("Folder", Workspace))
+    folder.Name = BH_FOLDER
+
+    local part = Instance.new("Part", folder)
+    part.Name = "VoidJudgement_BH_" .. tostring(idx or tostring(math.random(1,9999)))
+    part.Size = Vector3.new(1,1,1)
+    part.Transparency = 1
+    part.Anchored = true
+    part.CanCollide = false
+
+    local att = Instance.new("Attachment", part)
+    att.Name = "VoidJudgement_Att"
+
+    local bh = {
+        Part = part,
+        Attachment = att,
+        AssignedParts = {},
+        TargetPlayer = initialTarget,
+        _running = true,
+        smoothedCF = part.CFrame,
+        skidState = 1,
+        skidAccumulator = 0,
+    }
+
+    -- BH motion thread (simple predictive + idle follow localplayer when no target)
+    bh._thread = spawn(function()
+        while bh._running do
+            local dt = RunService.Heartbeat:Wait()
+            if bh.TargetPlayer and bh.TargetPlayer ~= localPlayer and bh.TargetPlayer.Character and bh.TargetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = bh.TargetPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local pos, vel = hrp.Position, hrp.Velocity or Vector3.new(0,0,0)
+                    local ping = 0.075
+                    pcall(function()
+                        if localPlayer.GetNetworkPing then
+                            local np = localPlayer:GetNetworkPing()
+                            if type(np) == "number" and np > 0 then ping = np end
+                        end
+                    end)
+                    local baseLead = 0.05
+                    local effectiveLat = clamp(ping + baseLead, 0.03, 0.45)
+                    local speed = vel.Magnitude
+                    local speedFactor = clamp(0.12 + (speed * 0.03), 0.12, 1.4)
+                    local leadTime = clamp(effectiveLat * speedFactor, 0.03, 0.6)
+                    local predicted = pos + vel * leadTime
+                    local dir = (vel.Magnitude > 0.5) and vel.Unit or hrp.CFrame.LookVector
+                    bh.skidAccumulator = bh.skidAccumulator + dt
+                    if bh.skidAccumulator >= 0.1 then
+                        bh.skidAccumulator = bh.skidAccumulator - 0.1
+                        bh.skidState = -bh.skidState
+                    end
+                    local halfLen = math.max(0.5, vel.Magnitude) * clamp(1 + (leadTime * 1.2), 1, 2.8)
+                    local desiredPos = predicted + dir * (bh.skidState * halfLen)
+                    local lookAt = predicted + dir
+                    local targetCF = CFrame.new(desiredPos, lookAt)
+                    local ok, cur = pcall(function() return bh.Attachment.WorldCFrame end)
+                    local curCF = ok and cur or bh.smoothedCF or bh.Part.CFrame
+                    local responsiveness = clamp(10 + (speed * 6) + (leadTime * 25), 6, 160)
+                    local alpha = 1 - math.exp(-responsiveness * dt)
+                    if alpha < 0.01 then alpha = 0.01 end
+                    bh.smoothedCF = curCF:Lerp(targetCF, alpha)
+                    pcall(function() bh.Attachment.WorldCFrame = bh.smoothedCF end)
+                end
+            else
+                -- idle around centerPart (which should follow player at offset)
+                local lpHRP = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if lpHRP then
+                    local desiredCF = lpHRP.CFrame * CFrame.new(PASSIVE_BH_OFFSET)
+                    local jitter = CFrame.new(math.cos((idx or 1))*2, 0, math.sin((idx or 1))*2)
+                    desiredCF = desiredCF * jitter
+                    local ok, cur = pcall(function() return bh.Attachment.WorldCFrame end)
+                    local curCF = ok and cur or bh.smoothedCF or bh.Part.CFrame
+                    bh.smoothedCF = curCF:Lerp(desiredCF, 0.12)
+                    pcall(function() bh.Attachment.WorldCFrame = bh.smoothedCF end)
+                else
+                    task.wait(0.06)
+                end
+            end
+        end
+        pcall(function() if bh.Part and bh.Part.Parent then bh.Part:Destroy() end end)
+    end)
+
+    table.insert(extraBlackHoles, bh)
+    return bh
+end
+
+local function destroyExtraBlackHole(bh)
+    if not bh then return end
+    bh._running = false
+    for _, p in ipairs(bh.AssignedParts or {}) do
+        if p and p.Parent then
+            local obj = p:FindFirstChild("Void_AssignedBH")
+            if obj then pcall(function() obj:Destroy() end) end
+            local ap = p:FindFirstChild("Void_Pickup_Align")
+            if ap then pcall(function() ap.Attachment1 = BH_Attachment; ap.MaxForce = BH_PULL_FORCE_BASE; ap.Responsiveness = BH_PULL_RESP_BASE end) end
+        end
+    end
+    pcall(function() if bh.Part and bh.Part.Parent then bh.Part:Destroy() end end)
+end
+
+local function cleanupAllExtraBHs()
+    for i=#extraBlackHoles,1,-1 do
+        local bh = extraBlackHoles[i]
+        if bh then destroyExtraBlackHole(bh) end
+        table.remove(extraBlackHoles, i)
+    end
+end
+
+local function distributePartsEvenlyToBHs()
+    if #extraBlackHoles == 0 then
+        -- make sure parts target center
+        for p,_ in pairs(processedParts) do
+            if p and p.Parent then
+                local ap = p:FindFirstChild("Void_Pickup_Align")
+                if ap then pcall(function() ap.Attachment1 = BH_Attachment; ap.MaxForce = BH_PULL_FORCE_BASE; ap.Responsiveness = BH_PULL_RESP_BASE end) end
+            end
+        end
+        return
+    end
+
+    -- collect live parts
+    local parts = {}
+    for p,_ in pairs(processedParts) do if p and p.Parent then table.insert(parts, p) end end
+    if #parts == 0 then return end
+
+    -- clear assigned lists
+    for _, bh in ipairs(extraBlackHoles) do bh.AssignedParts = {} end
+
+    local calcMaxForce = PASSIVE_PULL_MAX_FORCE
+    local calcResp = PASSIVE_PULL_RESP
+    local flingTorque = PASSIVE_FLING_TORQUE
+
+    for i, part in ipairs(parts) do
+        local idx = ((i-1) % #extraBlackHoles) + 1
+        local bh = extraBlackHoles[idx]
+        -- record assignment object on the part
+        local obj = part:FindFirstChild("Void_AssignedBH")
+        if not obj then
+            obj = Instance.new("ObjectValue"); obj.Name = "Void_AssignedBH"; obj.Parent = part
+        end
+        obj.Value = bh.Attachment
+
+        -- ensure AlignPosition exists and points to bh.Attachment
+        local att = part:FindFirstChild("Void_Pickup_Att")
+        if not att then
+            att = Instance.new("Attachment", part); att.Name = "Void_Pickup_Att"; pcall(function() att.WorldCFrame = part.CFrame end)
+        end
+        local ap = part:FindFirstChild("Void_Pickup_Align")
+        if not ap then
+            ap = Instance.new("AlignPosition")
+            ap.Name = "Void_Pickup_Align"
+            ap.Attachment0 = att
+            ap.Attachment1 = bh.Attachment
+            ap.MaxForce = calcMaxForce
+            ap.Responsiveness = calcResp
+            ap.MaxVelocity = math.huge
+            ap.Parent = part
+        else
+            pcall(function()
+                ap.Attachment1 = bh.Attachment
+                ap.MaxForce = calcMaxForce
+                ap.Responsiveness = calcResp
+            end)
+        end
+
+        -- torque
+        local torque = part:FindFirstChild("Void_Pickup_Torque")
+        if not torque then
+            local ok = pcall(function() return Instance.new("Torque") end)
+            if ok then
+                local tAtt = part:FindFirstChild("Void_Pickup_Torque_Att")
+                if not tAtt then tAtt = Instance.new("Attachment", part); tAtt.Name = "Void_Pickup_Torque_Att" end
+                local newTorque = Instance.new("Torque")
+                newTorque.Name = "Void_Pickup_Torque"
+                newTorque.Attachment0 = tAtt
+                newTorque.Torque = flingTorque
+                newTorque.Parent = part
+            end
+        else
+            pcall(function() torque.Torque = flingTorque end)
+        end
+
+        -- MAKE passive BH assigned parts massless as requested
+        pcall(function() part.Massless = true end)
+
+        table.insert(bh.AssignedParts, part)
+    end
+end
+
+-- ===== persistent BH (enable/disable) =====
+local persistentBHEnabled = false
+
+local function enablePersistentBH()
+    persistentBHEnabled = true
+    if persistentFlag then pcall(function() persistentFlag.Value = true end) end
+
+    -- initial scan: mark suitable parts and massless them
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart") and not v.Anchored and v.Name ~= "Handle"
+           and not isPartPlayerCharacter(v)
+           and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character))
+           and not (v.Parent and v.Parent:FindFirstChildOfClass("Humanoid")) then
+            if initiallyAnchoredParts[v] == nil then initiallyAnchoredParts[v] = v.Anchored end
+            if initiallyMasslessParts[v] == nil then pcall(function() initiallyMasslessParts[v] = v.Massless end) end
+            pcall(function() v.Massless = true end)
+            markPartProcessed(v)
+        end
+    end
+
+    startBHRebalancer()
+
+    -- create passive BHs (3)
+    cleanupAllExtraBHs()
+    for i = 1, 3 do
+        createBlackHole(nil, i)
+    end
+    task.delay(0.08, function() distributePartsEvenlyToBHs() end)
+end
+
+local function disablePersistentBH()
+    persistentBHEnabled = false
+    if persistentFlag then pcall(function() persistentFlag.Value = false end) end
+
+    -- restore parts
+    for p, _ in pairs(processedParts) do
+        if p and p.Parent then
+            pcall(function() p.CanCollide = true end)
+            pcall(function() if initiallyMasslessParts[p] ~= nil then p.Massless = initiallyMasslessParts[p] end end)
+            pcall(function() if initiallyAnchoredParts[p] == false then p.Anchored = false end end)
+            local ap = p:FindFirstChild("Void_Pickup_Align"); if ap then pcall(function() ap:Destroy() end) end
+            local ao = p:FindFirstChild("Void_Pickup_AlignOri"); if ao then pcall(function() ao:Destroy() end) end
+            local att = p:FindFirstChild("Void_Pickup_Att"); if att then pcall(function() att:Destroy() end) end
+            local obj = p:FindFirstChild("Void_AssignedBH"); if obj then pcall(function() obj:Destroy() end) end
+            for _, c in ipairs(p:GetChildren()) do
+                if c:IsA("Torque") or (c:IsA("Attachment") and c.Name:match("^Void_Pickup_Torque_Att")) then
+                    pcall(function() c:Destroy() end)
+                end
+            end
+        end
+        processedParts[p] = nil
+        initiallyMasslessParts[p] = nil
+        initiallyAnchoredParts[p] = nil
+    end
+    processedPartsList = {}
+    processedPartsIndex = 1
+
+    cleanupAllExtraBHs()
+    stopBHRebalancer()
+end
+
+-- ===== GUI creation + tool wiring (left click only, but click behavior uses Erase-tool style) =====
+local GUI_SINGLETON = nil
+local function makeGUI()
+    local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
+    local existing = playerGui:FindFirstChild("TheVoid_GUI")
+    if existing then GUI_SINGLETON = existing; return existing end
+
+    local sg = Instance.new("ScreenGui", playerGui); sg.Name = "TheVoid_GUI"; sg.ResetOnSpawn = false
+    local frame = Instance.new("Frame", sg); frame.Size = UDim2.new(0,260,0,200); frame.Position = UDim2.new(0,8,0,80)
+    frame.BackgroundColor3 = Color3.fromRGB(30,30,30); frame.BorderSizePixel = 0; frame.BackgroundTransparency = 0.12
+
+    local label = Instance.new("TextLabel", frame)
+    label.Size = UDim2.new(1, -16, 0, 18); label.Position = UDim2.new(0,8,0,6)
+    label.BackgroundTransparency = 1; label.Text = "The Void. — Click to erase / teleport"; label.TextColor3 = Color3.new(1,1,1); label.Font = Enum.Font.SourceSans; label.TextSize = 14
+
+    local teBtn = Instance.new("TextButton", frame); teBtn.Name = "TEBtn"; teBtn.Text = "True Erasure: OFF"; teBtn.Size = UDim2.new(1, -16, 0, 28); teBtn.Position = UDim2.new(0,8,0,30)
+    local infBtn = Instance.new("TextButton", frame); infBtn.Name = "InfBtn"; infBtn.Text = "Infinity"; infBtn.Size = UDim2.new(1, -16, 0, 24); infBtn.Position = UDim2.new(0,8,0,64)
+    local vjBtn = Instance.new("TextButton", frame); vjBtn.Name = "VJBtn"; vjBtn.Text = "Void's Judgement"; vjBtn.Size = UDim2.new(1, -16, 0, 24); vjBtn.Position = UDim2.new(0,8,0,92)
+    local passiveBtn = Instance.new("TextButton", frame); passiveBtn.Name = "PassiveBtn"; passiveBtn.Text = "Passive BH: OFF"; passiveBtn.Size = UDim2.new(1, -16, 0, 28); passiveBtn.Position = UDim2.new(0,8,0,124)
+
+    teBtn.MouseButton1Click:Connect(function()
+        local tool = (localPlayer.Backpack and localPlayer.Backpack:FindFirstChild(TOOL_NAME)) or (localPlayer.Character and localPlayer.Character:FindFirstChild(TOOL_NAME))
+        if tool then
+            local tflag = tool:FindFirstChild("__Void_TrueErasure")
+            if not tflag then
+                tflag = Instance.new("BoolValue"); tflag.Name = "__Void_TrueErasure"; tflag.Value = false; tflag.Parent = tool
+            end
+            tflag.Value = not tflag.Value
+            trueErasureState = tflag.Value
+            teBtn.Text = "True Erasure: " .. (tflag.Value and "ON" or "OFF")
+        end
+    end)
+
+    infBtn.MouseButton1Click:Connect(function()
+        local tool = (localPlayer.Backpack and localPlayer.Backpack:FindFirstChild(TOOL_NAME)) or (localPlayer.Character and localPlayer.Character:FindFirstChild(TOOL_NAME))
+        local te = false
+        if tool and tool:FindFirstChild("__Void_TrueErasure") then te = tool.__Void_TrueErasure.Value end
+        task.spawn(function() doInfinity(te) end)
+    end)
+
+    vjBtn.MouseButton1Click:Connect(function()
+        if VJ_active then
+            VJ_active = false
+            cleanupAllExtraBHs()
+            vjBtn.Text = "Void's Judgement"
+        else
+            VJ_active = true
+            -- create one BH per other player (simple)
+            cleanupAllExtraBHs()
+            local all = Players:GetPlayers()
+            local idx = 1
+            for _, pl in ipairs(all) do
+                if pl ~= localPlayer then
+                    local bh = createBlackHole(pl, idx)
+                    if pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") and bh.Attachment then
+                        pcall(function() bh.Attachment.WorldCFrame = pl.Character.HumanoidRootPart.CFrame end)
+                    end
+                    idx = idx + 1
+                end
+            end
+            distributePartsEvenlyToBHs()
+            vjBtn.Text = "Void's Judgement: ON (click to stop)"
+        end
+    end)
+
+    passiveBtn.MouseButton1Click:Connect(function()
+        persistentBHEnabled = not persistentBHEnabled
+        if persistentBHEnabled then
+            enablePersistentBH()
+            passiveBtn.Text = "Passive BH: ON"
+            if VJ_active and #extraBlackHoles > 0 then distributePartsEvenlyToBHs() end
+        else
+            disablePersistentBH()
+            passiveBtn.Text = "Passive BH: OFF"
+        end
+    end)
+
+    GUI_SINGLETON = sg
+    return sg, teBtn, infBtn, vjBtn, passiveBtn
+end
+
+-- TOOL wiring
+local function wireTool(tool)
+    if not tool then return end
+    if tool:FindFirstChild("__VoidWired") then return end
+    local marker = Instance.new("BoolValue", tool); marker.Name = "__VoidWired"
+
+    local tflag = tool:FindFirstChild("__Void_TrueErasure")
+    if not tflag then
+        tflag = Instance.new("BoolValue")
+        tflag.Name = "__Void_TrueErasure"
+        tflag.Value = false
+        tflag.Parent = tool
+    end
+
+    tool.Equipped:Connect(function(mouse)
+        mouse = mouse or localPlayer:GetMouse()
+        local sg, teBtn, infBtn, vjBtn, passiveBtn = makeGUI()
+        if sg then sg.Enabled = true end
+
+        if teBtn then teBtn.Text = "True Erasure: " .. (tflag.Value and "ON" or "OFF") end
+        if passiveBtn then passiveBtn.Text = persistentFlag.Value and "Passive BH: ON" or "Passive BH: OFF" end
+        if vjBtn then vjBtn.Text = VJ_active and "Void's Judgement: ON (click to stop)" or "Void's Judgement" end
+
+        local leftConn
+        leftConn = mouse.Button1Down:Connect(function()
+            local hit = mouse.Hit and mouse.Hit.p
+            local hum, model = nil, nil
+            if mouse.Target then
+                hum, model = findHumanoidFromDescendant(mouse.Target)
+            end
+
+            local te = false
+            if tool and tool:FindFirstChild("__Void_TrueErasure") then te = tool.__Void_TrueErasure.Value end
+            trueErasureState = te -- keep global state in sync for presence loop
+
+            -- If clicked an NPC: follow erase-tool style
+            if hum and model and isNPC(model) then
+                if not te then
+                    -- follow the erase-tool timing (delay before kill so it matches other tools)
+                    task.spawn(function()
+                        task.wait(0.8)
+                        pcall(function() if hum and hum.Parent then hum.BreakJointsOnDeath = false; hum.Health = 0 end end)
+                        task.wait(0.2)
+                        teleportModelToExtreme(model)
+                    end)
+                else
+                    -- If true-erasure active, run a localized true-erasure sweep centered on the NPC root
+                    local root = getModelRoot(model)
+                    if root and root.Parent then
+                        task.spawn(function() trueErasureSweep(root.Position, 5, 0.5) end)
+                    end
+                end
+            else
+                -- Otherwise, clicking the world places a Presence/Erase area like the erase tool
+                if hit then
+                    createEraseArea(hit, 5)
+                end
+
+                -- also support clicking empty space with true-erasure: spawn the 100x100 sweep centered on click
+                if te and hit then
+                    task.spawn(function() trueErasureSweep(hit, 5, 0.5) end)
+                end
+            end
+        end)
+
+        tool.Unequipped:Connect(function()
+            if sg and sg.Parent then sg.Enabled = false end
+            if leftConn then leftConn:Disconnect(); leftConn = nil end
+        end)
+    end)
+end
+
+local function ensureAndWire()
+    local bp = localPlayer:FindFirstChildOfClass("Backpack")
+    if not bp then return end
+    local t = bp:FindFirstChild(TOOL_NAME) or (localPlayer.Character and localPlayer.Character:FindFirstChild(TOOL_NAME))
+    if not t then
+        t = Instance.new("Tool")
+        t.Name = TOOL_NAME
+        t.RequiresHandle = false
+        t.CanBeDropped = false
+        t.Parent = bp
+    end
+    if not t:FindFirstChild("__Void_TrueErasure") then
+        local tv = Instance.new("BoolValue")
+        tv.Name = "__Void_TrueErasure"; tv.Value = false; tv.Parent = t
+    end
+    wireTool(t)
+end
+
+ensureAndWire()
+Players.LocalPlayer.CharacterAdded:Connect(function()
+    task.delay(0.05, ensureAndWire)
+    -- if persistent flag true, re-enable passive BH (recreate BHs and reassign parts)
+    if persistentFlag and persistentFlag.Value then
+        task.delay(0.08, function()
+            -- recreate BHs and re-distribute
+            cleanupAllExtraBHs()
+            for i = 1, 3 do createBlackHole(nil, i) end
+            task.delay(0.08, distributePartsEvenlyToBHs)
+            startBHRebalancer()
+        end)
+    end
+end)
+
+-- keep BH center near local player (30 up, 10 behind) to help idle BH position
+spawn(function()
+    while true do
+        RunService.Heartbeat:Wait()
+        if centerPart and centerPart.Parent then
+            local char = localPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local hrp = char.HumanoidRootPart
+                local desiredPos = hrp.Position + Vector3.new(0,30,0) - hrp.CFrame.LookVector * 10
+                pcall(function() centerPart.Position = desiredPos end)
+                pcall(function() BH_Attachment.WorldPosition = centerPart.Position end)
+            else
+                pcall(function() centerPart.Position = Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.p or Vector3.new(0,50,0) end)
+                pcall(function() BH_Attachment.WorldPosition = centerPart.Position end)
+            end
+        end
+    end
+end)
+
+print("The Void. (full script with Erase-tool style clicks + Infinity teleports when True Erasure ON) loaded for", localPlayer.Name)
