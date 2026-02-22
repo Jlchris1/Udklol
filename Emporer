@@ -1,14 +1,16 @@
--- Emporer kit v8.1 (client LocalScript)
+-- Emporer kit v9.3 (client LocalScript)
 -- Place this LocalScript in StarterPlayerScripts
--- Change: normal "Come To Me" creates an ephemeral handle that is automatically destroyed
---         after the NPC is blasted away (doesn't interfere with persistent drag handles).
+-- v9.3 change: Emporer's Wrath now *creates* an ephemeral handle at the start of each lift
+-- cycle and *removes* it before the slam phase of that same cycle (handle is destroyed during
+-- the ability, not left until after the ability ends). All other behavior from v9.2 preserved.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 
-pcall(function() Workspace.FallenPartsDestroyHeight = 0 end)
+-- set FallenPartsDestroyHeight to NaN (0/0)
+pcall(function() Workspace.FallenPartsDestroyHeight = 0/0 end)
 
 local localPlayer = Players.LocalPlayer
 if not localPlayer then return end
@@ -54,21 +56,24 @@ local DEFAULT_NPC_AVG_BOUND = 6.0
 local TAP_MAX_TIME = 0.25
 local TAP_MOVE_THRESHOLD = 30
 
+local THROW_VELOCITY_MULT = 1.0 -- multiplier for toss speed on release (1.0 = equal to player speed)
+
 -- ===== STATE =====
 local storedGUIs = {}
 local tormentEnabled = false
 local comeDragEnabled = false
 
 -- activeDrags: weak-keyed model -> entry
+-- entry = { model, hum, hrp, anchor, storage, conns = {...}, released = bool, lastHRPVel = Vector3 }
 local activeDrags = setmetatable({}, { __mode = "k" })
 
--- tracks wired tools (weak)
+-- tracks which tool instances we've wired (weak-keyed)
 local wiredTools = setmetatable({}, { __mode = "k" })
 
--- handles we explicitly created (tool -> handle)
+-- handles we created: tool -> handle (weak)
 local createdHandles = setmetatable({}, { __mode = "k" })
 
--- ephemeral handles created for single-use actions (tool -> handle)
+-- ephemeral handles we created (single-action handles) : tool -> handle
 local ephemeralHandles = setmetatable({}, { __mode = "k" })
 
 local function countActiveDrags()
@@ -126,23 +131,20 @@ local function removeAllCreatedHandles()
     end
 end
 
--- ephemeral handle: created for a single action (like normal ComeToMe)
+-- ephemeral handle: created for a single action (do not remove persistent handles)
 local function createEphemeralHandle(tool)
     if not tool or not tool:IsA("Tool") then return nil end
     local existing = tool:FindFirstChild("Handle")
-    -- if existing and it is a persistent created handle, don't overwrite it; ephemeral not needed
     if existing then
-        -- If the existing handle is ephemeral already, reuse it
         if existing:GetAttribute("EmpHandleTemp") then
             ephemeralHandles[tool] = existing
             return existing
         end
-        -- if it's a handle we created for persistent drag, do nothing (we shouldn't destroy it later)
         if existing:GetAttribute("EmpHandleCreated") then
-            -- not ephemeral; do not register in ephemeralHandles
+            -- persistent handle exists; ephemeral not needed
             return existing
         end
-        -- handle belongs to something else (do not touch)
+        -- third-party handle; do not touch
         return existing
     end
     local handle = Instance.new("Part")
@@ -606,7 +608,9 @@ local function doTormentOn(humanoid, model, tool)
     local cycle = 0
     while humanoid and humanoid.Parent and humanoid.Health > 0 and cycle < TORMENT_MAX_CYCLES do
         cycle = cycle + 1
-        createHandleIfNeeded(tool)
+
+        -- create ephemeral handle for this lift (matches requested pattern)
+        createEphemeralHandle(tool)
 
         local anchor = Instance.new("Part")
         anchor.Name = "Torment_Anchor"; anchor.Size = Vector3.new(1,1,1); anchor.Anchored = true; anchor.CanCollide = false; anchor.Transparency = 1
@@ -617,6 +621,9 @@ local function doTormentOn(humanoid, model, tool)
         local startPos = anchor.Position
         local upPos = startPos + Vector3.new(0, LIFT_HEIGHT * 0.6, 0)
         moveAnchor(anchor, startPos, upPos, TORMENT_LIFT_TIME)
+
+        -- remove ephemeral handle before slam (so handle only exists during lift)
+        removeEphemeralHandle(tool)
 
         local impactPart, impactPos = findImpactPartBelow(hrp.Position, model)
         local slamTarget
@@ -648,6 +655,7 @@ local function currentCameraHorizontalDirection()
     return lv.Unit
 end
 
+-- Ground slam: use ephemeral handle that gets destroyed after slam
 local function doGroundSlam(tool)
     local char = localPlayer.Character
     if not char then return end
@@ -655,7 +663,7 @@ local function doGroundSlam(tool)
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not hum then return end
 
-    createHandleIfNeeded(tool)
+    createEphemeralHandle(tool)
 
     local camDir = currentCameraHorizontalDirection()
     local initialVel = Vector3.new(camDir.X * GROUND_SLAM_HORIZ_SPEED, GROUND_SLAM_UP_VEL, camDir.Z * GROUND_SLAM_HORIZ_SPEED)
@@ -731,14 +739,16 @@ local function doGroundSlam(tool)
             end)
         end
     end
+
+    -- destroy ephemeral handle for this action
+    removeEphemeralHandle(tool)
 end
 
--- ===== COME TO ME (normal) - uses an EPHEMERAL handle that is destroyed after blast =====
+-- ===== COME TO ME (normal) - uses ephemeral handle that is removed after blast =====
 local function doComeToMeOn(humanoid, model, tool)
     if not humanoid or not model then return end
     if isPlayerCharacter(model) then return end
 
-    -- create ephemeral handle (won't touch persistent handles or third-party handles)
     createEphemeralHandle(tool)
 
     local armPart, armCFrame = findPlayerArmPartOrFallback()
@@ -822,11 +832,10 @@ local function doComeToMeOn(humanoid, model, tool)
         end
     end)
 
-    -- cleanup
     cleanupStorage(storage)
     if anchor and anchor.Parent then pcall(function() anchor:Destroy() end) end
 
-    -- REMOVE ephemeral handle created for this action (safe: won't remove persistent handles)
+    -- REMOVE ephemeral handle created for this action
     removeEphemeralHandle(tool)
 end
 
@@ -880,6 +889,7 @@ local function getLocalPlayerSpawnPosition()
     return Vector3.new(0,5,0)
 end
 
+-- start a persistent drag entry (creates anchor, storage, connections)
 local function startPersistentDrag(humanoid, model, initiatingTool)
     if not humanoid or not model then return end
     if isPlayerCharacter(model) then return end
@@ -906,28 +916,33 @@ local function startPersistentDrag(humanoid, model, initiatingTool)
         storage = storage,
         conns = {},
         released = false,
+        lastHRPVel = Vector3.new(0,0,0),
     }
     activeDrags[model] = entry
 
     updateHandlesForDragState()
 
+    -- ancestry -> release
     local ancConn = model.AncestryChanged:Connect(function()
         if not model:IsDescendantOf(game) then entry.released = true end
     end)
     table.insert(entry.conns, ancConn)
 
+    -- humanoid death -> release
     if humanoid then
         local diedConn = humanoid.Died:Connect(function() entry.released = true end)
         table.insert(entry.conns, diedConn)
     end
 
+    -- input: release only on real click/tap
     local touchStart = nil
     local beganConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            -- immediate release
             entry.released = true
         elseif input.UserInputType == Enum.UserInputType.Touch then
-            touchStart = { pos = input.Position, t = tick() }
+            touchStart = {pos = input.Position, time = tick()}
         end
     end)
     table.insert(entry.conns, beganConn)
@@ -935,9 +950,9 @@ local function startPersistentDrag(humanoid, model, initiatingTool)
     local endedConn = UserInputService.InputEnded:Connect(function(input, gameProcessed)
         if gameProcessed then return end
         if input.UserInputType == Enum.UserInputType.Touch and touchStart then
-            local dt = tick() - touchStart.t
+            local dt = tick() - touchStart.time
             local dx = (input.Position - touchStart.pos)
-            local dist = math.sqrt(dx.X*dx.X + dx.Y*dx.Y)
+            local dist = math.sqrt(dx.X * dx.X + dx.Y * dx.Y)
             if dt <= TAP_MAX_TIME and dist <= TAP_MOVE_THRESHOLD then
                 entry.released = true
             end
@@ -946,10 +961,13 @@ local function startPersistentDrag(humanoid, model, initiatingTool)
     end)
     table.insert(entry.conns, endedConn)
 
+    -- movement coroutine
     spawn(function()
         local arrived = false
         local timeout = 4
         local elapsed = 0
+        local prevTime = tick()
+
         while not arrived and not entry.released and humanoid and humanoid.Parent and hrp.Parent do
             local armP, armCF = findPlayerArmPartOrFallback()
             local forward, pos = nil, nil
@@ -959,9 +977,27 @@ local function startPersistentDrag(humanoid, model, initiatingTool)
                 local charHRP = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if charHRP then forward = currentCameraHorizontalDirection(); pos = charHRP.Position end
             end
+
             if forward and pos then
+                -- If player is airborne (jump/freefall), bias desired point by player's HRP velocity so NPC follows direction
+                local charHRP = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+                local hrpVel = (charHRP and pcall(function() return charHRP.AssemblyLinearVelocity end) and charHRP.AssemblyLinearVelocity) or Vector3.new(0,0,0)
+                local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
+                local inAir = false
+                if hum then
+                    local state = hum:GetState()
+                    if state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall then
+                        inAir = true
+                    end
+                end
+
                 local desired = Vector3.new(pos.X, pos.Y, pos.Z) + forward * safeDist
+                if inAir then
+                    local horVel = Vector3.new(hrpVel.X, 0, hrpVel.Z)
+                    desired = desired + horVel * 0.12
+                end
                 desired = Vector3.new(desired.X, pos.Y, desired.Z)
+
                 local dir = desired - anchor.Position
                 local dist = dir.Magnitude
                 if dist <= 0.5 then arrived = true break end
@@ -971,10 +1007,20 @@ local function startPersistentDrag(humanoid, model, initiatingTool)
             else
                 RunService.Heartbeat:Wait()
             end
-            elapsed = elapsed + RunService.Heartbeat:Wait()
+
+            -- update last HRP velocity for toss computation
+            local charHRP = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if charHRP then
+                local ok, vel = pcall(function() return charHRP.AssemblyLinearVelocity end)
+                if ok and vel then entry.lastHRPVel = vel end
+            end
+
+            elapsed = elapsed + (tick() - prevTime)
+            prevTime = tick()
             if elapsed > timeout then break end
         end
 
+        -- hold loop: keep anchor directly in front of hand (horizontal), with in-air bias
         while not entry.released and humanoid and humanoid.Parent and hrp.Parent and anchor and anchor.Parent do
             local armP, armCF = findPlayerArmPartOrFallback()
             local forward, pos = nil, nil
@@ -984,14 +1030,49 @@ local function startPersistentDrag(humanoid, model, initiatingTool)
                 local charHRP = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if charHRP then forward = currentCameraHorizontalDirection(); pos = charHRP.Position end
             end
+
             if forward and pos and anchor and anchor.Parent then
+                local charHRP = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+                local hrpVel = (charHRP and pcall(function() return charHRP.AssemblyLinearVelocity end) and charHRP.AssemblyLinearVelocity) or Vector3.new(0,0,0)
+                local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
+                local inAir = false
+                if hum then
+                    local state = hum:GetState()
+                    if state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall then
+                        inAir = true
+                    end
+                end
+
                 local desired = Vector3.new(pos.X, pos.Y, pos.Z) + forward * safeDist
+                if inAir then
+                    local horVel = Vector3.new(hrpVel.X, 0, hrpVel.Z)
+                    desired = desired + horVel * 0.12
+                end
                 desired = Vector3.new(desired.X, pos.Y, desired.Z)
                 anchor.Position = desired
+
+                -- update stored HRP velocity for toss on release
+                if charHRP then
+                    local ok, vel = pcall(function() return charHRP.AssemblyLinearVelocity end)
+                    if ok and vel then entry.lastHRPVel = vel end
+                end
             end
             RunService.Heartbeat:Wait()
         end
 
+        -- On release: if the player was moving, toss NPC by applying HRP velocity to its parts
+        if entry.released then
+            local tossVel = entry.lastHRPVel or Vector3.new(0,0,0)
+            if tossVel and tossVel.Magnitude > 0.1 then
+                for _,p in ipairs(model:GetDescendants()) do
+                    if p:IsA("BasePart") then
+                        p.AssemblyLinearVelocity = tossVel * THROW_VELOCITY_MULT
+                    end
+                end
+            end
+        end
+
+        -- cleanup
         if activeDrags[model] == entry then
             cleanupStorage(storage)
             if anchor and anchor.Parent then pcall(function() anchor:Destroy() end) end
@@ -1006,6 +1087,7 @@ local function startPersistentDrag(humanoid, model, initiatingTool)
         updateHandlesForDragState()
     end)
 
+    -- ensure initiating tool has a handle immediately
     if initiatingTool then createHandleIfNeeded(initiatingTool) end
     updateHandlesForDragState()
 end
@@ -1013,16 +1095,15 @@ end
 local function doComeToMeDrag(humanoid, model, tool)
     if not humanoid or not model then return end
     if isPlayerCharacter(model) then return end
-    if activeDrags[model] then return end
     startPersistentDrag(humanoid, model, tool)
 end
 
--- ===== EMPEROR'S POWER =====
+-- ===== EMPEROR'S POWER (single blast) =====
 local function doEmperorsPowerAt(point, powerTool)
     local records = gatherNPCsInRadius(point, EMPEROR_POWER_RADIUS)
     if #records == 0 then return end
 
-    createHandleIfNeeded(powerTool)
+    createEphemeralHandle(powerTool)
 
     for _,rec in ipairs(records) do pcall(function() rec.hum.BreakJointsOnDeath = false end) end
     for _,rec in ipairs(records) do pcall(function() if rec.hum and rec.hum.Parent then rec.hum.Health = 0 end end) end
@@ -1040,11 +1121,17 @@ local function doEmperorsPowerAt(point, powerTool)
             end
         end)
     end
+
+    removeEphemeralHandle(powerTool)
 end
 
-local function doBeGoneAt(point)
+local function doBeGoneAt(point, powerTool)
     local records = gatherNPCsInRadius(point, BE_GONE_RADIUS)
     if #records == 0 then return end
+
+    -- create ephemeral handle for Be Gone action
+    if powerTool then createEphemeralHandle(powerTool) end
+
     for _,rec in ipairs(records) do pcall(function() rec.hum.BreakJointsOnDeath = false end) end
     for _,rec in ipairs(records) do pcall(function() if rec.hum and rec.hum.Parent then rec.hum.Health = 0 end end) end
     for _,rec in ipairs(records) do
@@ -1061,13 +1148,15 @@ local function doBeGoneAt(point)
             end)
         end)
     end
+
+    if powerTool then removeEphemeralHandle(powerTool) end
 end
 
+-- ===== EMPORER'S WRATH (now matches Torment's handle pattern exactly,
+-- and ensures ephemeral handle is removed BEFORE each slam phase so no handle remains only after ability ends) =====
 local function doEmporersWrathAt(center, powerTool)
     local records = gatherNPCsInRadius(center, WRATH_RADIUS)
     if #records == 0 then return end
-
-    createHandleIfNeeded(powerTool)
 
     local targets = {}
     for _,r in ipairs(records) do
@@ -1083,7 +1172,8 @@ local function doEmporersWrathAt(center, powerTool)
 
     local cycles = math.floor(WRATH_DURATION_SECONDS / WRATH_CYCLE_INTERVAL)
     for i = 1, cycles do
-        createHandleIfNeeded(powerTool)
+        -- create ephemeral handle for the lift phase of this cycle (same as Torment)
+        if powerTool then createEphemeralHandle(powerTool) end
 
         local lifts = {}
         for _,t in ipairs(targets) do
@@ -1102,6 +1192,9 @@ local function doEmporersWrathAt(center, powerTool)
             for _,l in ipairs(lifts) do if l.anchor and l.anchor.Parent then l.anchor.Position = l.start:Lerp(l.target, alpha) end end
         end
         for _,l in ipairs(lifts) do if l.anchor and l.anchor.Parent then l.anchor.Position = l.target end end
+
+        -- IMPORTANT: remove ephemeral handle BEFORE the slam phase for this cycle.
+        if powerTool then removeEphemeralHandle(powerTool) end
 
         local slams = {}
         for _,t in ipairs(targets) do
@@ -1137,7 +1230,11 @@ local function doEmporersWrathAt(center, powerTool)
         wait(WRATH_CYCLE_INTERVAL * 0.05)
     end
 
-    for _,t in ipairs(targets) do cleanupStorage(t.storage); if t.anchor and t.anchor.Parent then pcall(function() t.anchor:Destroy() end) end end
+    -- cleanup anchors & storages
+    for _,t in ipairs(targets) do
+        cleanupStorage(t.storage)
+        if t.anchor and t.anchor.Parent then pcall(function() t.anchor:Destroy() end) end
+    end
 end
 
 -- ===== TOOL WIRING (idempotent) =====
@@ -1184,8 +1281,8 @@ local function ensureTools()
     if power then wirePowerTool(power) end
 end
 
--- Wire functions (idempotent)
-local function wireEmporerSlam(tool)
+-- Wire tool functions (idempotent)
+function wireEmporerSlam(tool)
     if not tool or wiredTools[tool] then return end
     wiredTools[tool] = true
 
@@ -1195,6 +1292,7 @@ local function wireEmporerSlam(tool)
         if not mouse then mouse = localPlayer:GetMouse() end
         if sg then sg.Enabled = true end
 
+        -- if dragging active, ensure this tool has handle
         if countActiveDrags() > 0 then createHandleIfNeeded(tool) end
 
         local clickConn
@@ -1211,7 +1309,6 @@ local function wireEmporerSlam(tool)
 
         local gsConn
         gsConn = groundBtn.MouseButton1Click:Connect(function()
-            createHandleIfNeeded(tool)
             spawn(function() doGroundSlam(tool) end)
         end)
 
@@ -1236,7 +1333,7 @@ local function wireEmporerSlam(tool)
     end)
 end
 
-local function wireComeToMe(tool)
+function wireComeToMe(tool)
     if not tool or wiredTools[tool] then return end
     wiredTools[tool] = true
 
@@ -1279,7 +1376,7 @@ local function wireComeToMe(tool)
     end)
 end
 
-local function wirePowerTool(tool)
+function wirePowerTool(tool)
     if not tool or wiredTools[tool] then return end
     wiredTools[tool] = true
 
@@ -1298,21 +1395,19 @@ local function wirePowerTool(tool)
         clickConn = mouse.Button1Down:Connect(function()
             local hitPos = mouse.Hit and mouse.Hit.p
             if hitPos then
-                createHandleIfNeeded(tool)
+                -- Emporer Power is immediate blast; use ephemeral handle
                 doEmperorsPowerAt(hitPos, tool)
             end
         end)
 
         local wrathConn = wrathBtn.MouseButton1Click:Connect(function()
-            createHandleIfNeeded(tool)
             local hitPos = (mouse and mouse.Hit and mouse.Hit.p) or (localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") and localPlayer.Character.HumanoidRootPart.Position)
             if hitPos then doEmporersWrathAt(hitPos, tool) end
         end)
 
         local bgConn = begoneBtn.MouseButton1Click:Connect(function()
-            createHandleIfNeeded(tool)
             local hitPos = (mouse and mouse.Hit and mouse.Hit.p) or (localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") and localPlayer.Character.HumanoidRootPart.Position)
-            if hitPos then doBeGoneAt(hitPos) end
+            if hitPos then doBeGoneAt(hitPos, tool) end
         end)
 
         local function onUnequip()
@@ -1372,6 +1467,7 @@ local function ensureTools()
     if power then wirePowerTool(power) end
 end
 
+-- Listen for Backpack being recreated
 local bpAddedConn
 bpAddedConn = localPlayer.ChildAdded:Connect(function(child)
     if child and child.Name == "Backpack" then
@@ -1382,6 +1478,7 @@ bpAddedConn = localPlayer.ChildAdded:Connect(function(child)
     end
 end)
 
+-- On character added: reset UI state and wire death handler to teleport drags
 local function onCharacterAdded(char)
     wait(0.06)
     hideAllStoredGUIs()
@@ -1432,7 +1529,8 @@ end
 
 localPlayer.CharacterAdded:Connect(onCharacterAdded)
 
+-- initial
 ensureTools()
 task.defer(function() wait(0.1) ensureTools() end)
 
-print("Emporer kit v8.1 loaded for", localPlayer.Name)
+print("Emporer kit v9.3 loaded for", localPlayer.Name)
