@@ -1,12 +1,7 @@
--- Emporer kit v7 (client LocalScript)
+-- Emporer kit v8.1 (client LocalScript)
 -- Place this LocalScript in StarterPlayerScripts
--- Full feature set:
---  * Workspace.FallenPartsDestroyHeight = 0 on launch
---  * Come To Me: pulls NPC to a point directly in front of the player's arm (horizontally)
---  * Drag mode: pulls NPC in front of the arm and holds it until a real click/tap release
---  * Drag persists when you unequip the tool (unequip won't undrag)
---  * Tools are reliably given after respawn — handles Backpack destruction/recreation
---  * Idempotent wiring: tools won't get multiple event hookups when ensureTools runs repeatedly
+-- Change: normal "Come To Me" creates an ephemeral handle that is automatically destroyed
+--         after the NPC is blasted away (doesn't interfere with persistent drag handles).
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -59,16 +54,28 @@ local DEFAULT_NPC_AVG_BOUND = 6.0
 local TAP_MAX_TIME = 0.25
 local TAP_MOVE_THRESHOLD = 30
 
--- ===== STATE & STORAGE =====
+-- ===== STATE =====
 local storedGUIs = {}
 local tormentEnabled = false
 local comeDragEnabled = false
 
--- active drags (weak-keyed)
+-- activeDrags: weak-keyed model -> entry
 local activeDrags = setmetatable({}, { __mode = "k" })
 
--- keep track of wired tools to avoid double-wiring
+-- tracks wired tools (weak)
 local wiredTools = setmetatable({}, { __mode = "k" })
+
+-- handles we explicitly created (tool -> handle)
+local createdHandles = setmetatable({}, { __mode = "k" })
+
+-- ephemeral handles created for single-use actions (tool -> handle)
+local ephemeralHandles = setmetatable({}, { __mode = "k" })
+
+local function countActiveDrags()
+    local c = 0
+    for _,_ in pairs(activeDrags) do c = c + 1 end
+    return c
+end
 
 -- ===== HELPERS =====
 local function isPlayerCharacter(model) return model and Players:GetPlayerFromCharacter(model) ~= nil end
@@ -78,23 +85,85 @@ local function isNPC(model)
     return hum and not Players:GetPlayerFromCharacter(model)
 end
 
-local function createTempHandleForTool(tool)
+-- create persistent handle for tools (used for drag state)
+local function createHandleIfNeeded(tool)
     if not tool or not tool:IsA("Tool") then return nil end
     local existing = tool:FindFirstChild("Handle")
-    if existing then pcall(function() existing:Destroy() end) end
+    if existing then
+        if existing:GetAttribute("EmpHandleCreated") then
+            createdHandles[tool] = existing
+        end
+        return existing
+    end
     local handle = Instance.new("Part")
     handle.Name = "Handle"
     handle.Size = Vector3.new(1,1,1)
     handle.Transparency = 0.5
     handle.CanCollide = false
     handle.Massless = true
+    handle:SetAttribute("EmpHandleCreated", true)
     handle.Parent = tool
+    createdHandles[tool] = handle
     return handle
 end
-local function removeTempHandleForTool(tool)
+
+-- remove only handles we created
+local function removeHandleIfOurs(tool)
     if not tool or not tool:IsA("Tool") then return end
     local h = tool:FindFirstChild("Handle")
-    if h then pcall(function() h:Destroy() end) end
+    if h and h:GetAttribute("EmpHandleCreated") then
+        pcall(function() h:Destroy() end)
+        createdHandles[tool] = nil
+    end
+end
+
+local function removeAllCreatedHandles()
+    for tool,handle in pairs(createdHandles) do
+        if tool and handle and handle.Parent == tool then
+            pcall(function() handle:Destroy() end)
+        end
+        createdHandles[tool] = nil
+    end
+end
+
+-- ephemeral handle: created for a single action (like normal ComeToMe)
+local function createEphemeralHandle(tool)
+    if not tool or not tool:IsA("Tool") then return nil end
+    local existing = tool:FindFirstChild("Handle")
+    -- if existing and it is a persistent created handle, don't overwrite it; ephemeral not needed
+    if existing then
+        -- If the existing handle is ephemeral already, reuse it
+        if existing:GetAttribute("EmpHandleTemp") then
+            ephemeralHandles[tool] = existing
+            return existing
+        end
+        -- if it's a handle we created for persistent drag, do nothing (we shouldn't destroy it later)
+        if existing:GetAttribute("EmpHandleCreated") then
+            -- not ephemeral; do not register in ephemeralHandles
+            return existing
+        end
+        -- handle belongs to something else (do not touch)
+        return existing
+    end
+    local handle = Instance.new("Part")
+    handle.Name = "Handle"
+    handle.Size = Vector3.new(1,1,1)
+    handle.Transparency = 0.5
+    handle.CanCollide = false
+    handle.Massless = true
+    handle:SetAttribute("EmpHandleTemp", true)
+    handle.Parent = tool
+    ephemeralHandles[tool] = handle
+    return handle
+end
+
+local function removeEphemeralHandle(tool)
+    if not tool or not tool:IsA("Tool") then return end
+    local h = tool:FindFirstChild("Handle")
+    if h and h:GetAttribute("EmpHandleTemp") then
+        pcall(function() h:Destroy() end)
+        ephemeralHandles[tool] = nil
+    end
 end
 
 local function findHumanoidFromDescendant(descendant)
@@ -282,7 +351,7 @@ local function applyKillOrDamageAfterImpact(humanoid, model, hrp, wasInstantKill
     end
 end
 
--- ===== GUI helpers =====
+-- ===== GUI creation (hidden by default) =====
 local function hideAllStoredGUIs()
     for _,g in pairs(storedGUIs) do
         if g and g.Enabled ~= nil then
@@ -294,12 +363,14 @@ end
 local function createPowerToolGUIIfNeeded()
     local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
     if storedGUIs.PowerGUI and storedGUIs.PowerGUI.Parent == playerGui then
+        storedGUIs.PowerGUI.Enabled = false
         return storedGUIs.PowerGUI, storedGUIs.Power_WrathBtn, storedGUIs.Power_BeGoneBtn
     end
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "Empower_Power_GUI"
     screenGui.ResetOnSpawn = false
     screenGui.Parent = playerGui
+    screenGui.Enabled = false
 
     local container = Instance.new("Frame", screenGui)
     container.Name = "PowerContainer"
@@ -341,12 +412,14 @@ end
 local function createSlamGUIIfNeeded()
     local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
     if storedGUIs.SlamGUI and storedGUIs.SlamGUI.Parent == playerGui then
+        storedGUIs.SlamGUI.Enabled = false
         return storedGUIs.SlamGUI, storedGUIs.Slam_GroundBtn, storedGUIs.Slam_TormentToggle
     end
     local sg = Instance.new("ScreenGui")
     sg.Name = "Emporer_Slam_GUI"
     sg.ResetOnSpawn = false
     sg.Parent = playerGui
+    sg.Enabled = false
 
     local frame = Instance.new("Frame", sg)
     frame.Name = "SlamContainer"; frame.Size = UDim2.new(0,220,0,88)
@@ -372,12 +445,14 @@ end
 local function createComeGUIIfNeeded()
     local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
     if storedGUIs.ComeGUI and storedGUIs.ComeGUI.Parent == playerGui then
+        storedGUIs.ComeGUI.Enabled = false
         return storedGUIs.ComeGUI, storedGUIs.Come_DragToggle
     end
     local sg = Instance.new("ScreenGui")
     sg.Name = "Emporer_Come_GUI"
     sg.ResetOnSpawn = false
     sg.Parent = playerGui
+    sg.Enabled = false
 
     local frame = Instance.new("Frame", sg)
     frame.Name = "ComeContainer"; frame.Size = UDim2.new(0,220,0,48)
@@ -394,7 +469,7 @@ local function createComeGUIIfNeeded()
     return sg, dBtn
 end
 
--- ===== UTIL: horizontal forward helpers & arm finder =====
+-- ===== orientation helpers & arm finder =====
 local function horizontalForwardFromPart(part)
     if not part or not part.CFrame then return nil end
     local lv = part.CFrame.LookVector
@@ -431,7 +506,7 @@ local function findPlayerArmPartOrFallback()
     local char = localPlayer.Character
     if not char then return nil, nil end
 
-    local arm = char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm") or char:FindFirstChild("RightHand") or char:FindFirstChild("LeftHand") or char:FindFirstChild("Left Arm")
+    local arm = char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm") or char:FindFirstChild("LeftHand") or char:FindFirstChild("Left Arm")
     if arm and arm:IsA("BasePart") then
         return arm, arm.CFrame
     end
@@ -456,9 +531,7 @@ end
 local function getModelExtents(model)
     if not model or not model:IsA("Model") then return Vector3.new(0,0,0) end
     local ok, ext = pcall(function() return model:GetExtentsSize() end)
-    if ok and ext then
-        return ext
-    end
+    if ok and ext then return ext end
     local minp, maxp = nil, nil
     for _,v in ipairs(model:GetDescendants()) do
         if v:IsA("BasePart") then
@@ -473,9 +546,7 @@ local function getModelExtents(model)
             end
         end
     end
-    if minp and maxp then
-        return maxp - minp
-    end
+    if minp and maxp then return maxp - minp end
     return Vector3.new(0,0,0)
 end
 
@@ -492,14 +563,14 @@ local function computeSafeDistanceForModel(baseDist, model)
     return final
 end
 
--- ===== SLAM / TORMENT / GROUND SLAM (unchanged) =====
+-- ===== SLAM / TORMENT / GROUND SLAM =====
 local function doEmporerSlamOn(humanoid, model, tool)
     if not humanoid or not model or humanoid.Health == nil then return end
     if isPlayerCharacter(model) then return end
     local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
     if not hrp then return end
 
-    createTempHandleForTool(tool)
+    createHandleIfNeeded(tool)
 
     local anchor = Instance.new("Part")
     anchor.Name = "Emp_Slam_Anchor"
@@ -511,8 +582,6 @@ local function doEmporerSlamOn(humanoid, model, tool)
     local startPos = anchor.Position
     local upPos = startPos + Vector3.new(0, LIFT_HEIGHT, 0)
     moveAnchor(anchor, startPos, upPos, LIFT_TIME_SLAM)
-
-    removeTempHandleForTool(tool)
 
     local impactPart, impactPos = findImpactPartBelow(hrp.Position, model)
     local slamTarget
@@ -537,7 +606,7 @@ local function doTormentOn(humanoid, model, tool)
     local cycle = 0
     while humanoid and humanoid.Parent and humanoid.Health > 0 and cycle < TORMENT_MAX_CYCLES do
         cycle = cycle + 1
-        createTempHandleForTool(tool)
+        createHandleIfNeeded(tool)
 
         local anchor = Instance.new("Part")
         anchor.Name = "Torment_Anchor"; anchor.Size = Vector3.new(1,1,1); anchor.Anchored = true; anchor.CanCollide = false; anchor.Transparency = 1
@@ -548,8 +617,6 @@ local function doTormentOn(humanoid, model, tool)
         local startPos = anchor.Position
         local upPos = startPos + Vector3.new(0, LIFT_HEIGHT * 0.6, 0)
         moveAnchor(anchor, startPos, upPos, TORMENT_LIFT_TIME)
-
-        removeTempHandleForTool(tool)
 
         local impactPart, impactPos = findImpactPartBelow(hrp.Position, model)
         local slamTarget
@@ -587,6 +654,8 @@ local function doGroundSlam(tool)
     local hrp = char:FindFirstChild("HumanoidRootPart")
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not hum then return end
+
+    createHandleIfNeeded(tool)
 
     local camDir = currentCameraHorizontalDirection()
     local initialVel = Vector3.new(camDir.X * GROUND_SLAM_HORIZ_SPEED, GROUND_SLAM_UP_VEL, camDir.Z * GROUND_SLAM_HORIZ_SPEED)
@@ -664,16 +733,20 @@ local function doGroundSlam(tool)
     end
 end
 
--- ===== COME TO ME (normal) =====
+-- ===== COME TO ME (normal) - uses an EPHEMERAL handle that is destroyed after blast =====
 local function doComeToMeOn(humanoid, model, tool)
     if not humanoid or not model then return end
     if isPlayerCharacter(model) then return end
 
+    -- create ephemeral handle (won't touch persistent handles or third-party handles)
+    createEphemeralHandle(tool)
+
     local armPart, armCFrame = findPlayerArmPartOrFallback()
     local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
-    if not hrp then return end
-
-    createTempHandleForTool(tool)
+    if not hrp then
+        removeEphemeralHandle(tool)
+        return
+    end
 
     local anchor = Instance.new("Part")
     anchor.Name = "Emp_ComeToMe_Anchor"
@@ -729,15 +802,13 @@ local function doComeToMeOn(humanoid, model, tool)
     if not arrived then
         cleanupStorage(storage)
         if anchor and anchor.Parent then pcall(function() anchor:Destroy() end) end
-        removeTempHandleForTool(tool)
+        removeEphemeralHandle(tool)
         return
     end
 
     wait(COME_TO_ME_WAIT)
-    removeTempHandleForTool(tool)
-    wait(0.03)
-    createTempHandleForTool(tool)
 
+    -- Blast kill
     local charHRP = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
     local playerForward = (charHRP and charHRP.CFrame.LookVector) or ((Camera and Camera.CFrame and Camera.CFrame.LookVector) or Vector3.new(0,0,-1))
     local pf = Vector3.new(playerForward.X, 0, playerForward.Z)
@@ -751,18 +822,69 @@ local function doComeToMeOn(humanoid, model, tool)
         end
     end)
 
+    -- cleanup
     cleanupStorage(storage)
     if anchor and anchor.Parent then pcall(function() anchor:Destroy() end) end
-    removeTempHandleForTool(tool)
+
+    -- REMOVE ephemeral handle created for this action (safe: won't remove persistent handles)
+    removeEphemeralHandle(tool)
 end
 
 -- ===== PERSISTENT DRAG IMPLEMENTATION =====
-local function startPersistentDrag(humanoid, model)
+local function getAllOurToolInstances()
+    local out = {}
+    local function tryInsert(t)
+        if t and t:IsA("Tool") then out[#out+1] = t end
+    end
+    local bp = localPlayer:FindFirstChildOfClass("Backpack")
+    if bp then
+        tryInsert(bp:FindFirstChild(TOOL_EMPEROR_SLAM))
+        tryInsert(bp:FindFirstChild(TOOL_COME_TO_ME))
+        tryInsert(bp:FindFirstChild(TOOL_EMPEROR_POWER))
+    end
+    if localPlayer.Character then
+        tryInsert(localPlayer.Character:FindFirstChild(TOOL_EMPEROR_SLAM))
+        tryInsert(localPlayer.Character:FindFirstChild(TOOL_COME_TO_ME))
+        tryInsert(localPlayer.Character:FindFirstChild(TOOL_EMPEROR_POWER))
+    end
+    for _,inst in ipairs(Workspace:GetDescendants()) do
+        if inst and inst.Parent and (inst.Name == TOOL_EMPEROR_SLAM or inst.Name == TOOL_COME_TO_ME or inst.Name == TOOL_EMPEROR_POWER) and inst:IsA("Tool") then
+            out[#out+1] = inst
+        end
+    end
+    return out
+end
+
+local function updateHandlesForDragState()
+    local count = countActiveDrags()
+    if count > 0 then
+        local tools = getAllOurToolInstances()
+        for _,t in ipairs(tools) do
+            createHandleIfNeeded(t)
+        end
+    else
+        removeAllCreatedHandles()
+    end
+end
+
+local function getLocalPlayerSpawnPosition()
+    local resp = localPlayer.RespawnLocation
+    if resp and resp:IsA("BasePart") then
+        return resp.Position
+    end
+    for _,v in ipairs(Workspace:GetDescendants()) do
+        if v and v:IsA("SpawnLocation") then
+            if v.Position then return v.Position end
+        end
+    end
+    return Vector3.new(0,5,0)
+end
+
+local function startPersistentDrag(humanoid, model, initiatingTool)
     if not humanoid or not model then return end
     if isPlayerCharacter(model) then return end
     if activeDrags[model] then return end
 
-    local armPart, armCFrame = findPlayerArmPartOrFallback()
     local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
     if not hrp then return end
 
@@ -777,58 +899,54 @@ local function startPersistentDrag(humanoid, model)
     local safeDist = computeSafeDistanceForModel(baseDist, model)
 
     local entry = {
-        anchor = anchor,
-        storage = storage,
+        model = model,
         hum = humanoid,
         hrp = hrp,
-        model = model,
-        released = false,
+        anchor = anchor,
+        storage = storage,
         conns = {},
+        released = false,
     }
     activeDrags[model] = entry
 
-    -- watch model ancestry & humanoid death
-    local ancestryConn = model.AncestryChanged:Connect(function()
+    updateHandlesForDragState()
+
+    local ancConn = model.AncestryChanged:Connect(function()
         if not model:IsDescendantOf(game) then entry.released = true end
     end)
-    table.insert(entry.conns, ancestryConn)
+    table.insert(entry.conns, ancConn)
 
     if humanoid then
         local diedConn = humanoid.Died:Connect(function() entry.released = true end)
         table.insert(entry.conns, diedConn)
     end
 
-    -- input: release only on real click/tap
     local touchStart = nil
     local beganConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             entry.released = true
         elseif input.UserInputType == Enum.UserInputType.Touch then
-            touchStart = {pos = input.Position, time = tick()}
+            touchStart = { pos = input.Position, t = tick() }
         end
     end)
     table.insert(entry.conns, beganConn)
 
     local endedConn = UserInputService.InputEnded:Connect(function(input, gameProcessed)
         if gameProcessed then return end
-        if input.UserInputType == Enum.UserInputType.Touch then
-            if touchStart then
-                local dt = tick() - touchStart.time
-                local dx = (input.Position - touchStart.pos)
-                local dist = math.sqrt(dx.X * dx.X + dx.Y * dx.Y)
-                if dt <= TAP_MAX_TIME and dist <= TAP_MOVE_THRESHOLD then
-                    entry.released = true
-                end
-                touchStart = nil
+        if input.UserInputType == Enum.UserInputType.Touch and touchStart then
+            local dt = tick() - touchStart.t
+            local dx = (input.Position - touchStart.pos)
+            local dist = math.sqrt(dx.X*dx.X + dx.Y*dx.Y)
+            if dt <= TAP_MAX_TIME and dist <= TAP_MOVE_THRESHOLD then
+                entry.released = true
             end
+            touchStart = nil
         end
     end)
     table.insert(entry.conns, endedConn)
 
-    -- anchor movement coroutine
     spawn(function()
-        -- smooth pull to front-of-arm
         local arrived = false
         local timeout = 4
         local elapsed = 0
@@ -853,11 +971,10 @@ local function startPersistentDrag(humanoid, model)
             else
                 RunService.Heartbeat:Wait()
             end
-            elapsed = elapsed + 0.01
+            elapsed = elapsed + RunService.Heartbeat:Wait()
             if elapsed > timeout then break end
         end
 
-        -- hold at front-of-arm until release
         while not entry.released and humanoid and humanoid.Parent and hrp.Parent and anchor and anchor.Parent do
             local armP, armCF = findPlayerArmPartOrFallback()
             local forward, pos = nil, nil
@@ -875,7 +992,6 @@ local function startPersistentDrag(humanoid, model)
             RunService.Heartbeat:Wait()
         end
 
-        -- cleanup
         if activeDrags[model] == entry then
             cleanupStorage(storage)
             if anchor and anchor.Parent then pcall(function() anchor:Destroy() end) end
@@ -886,23 +1002,27 @@ local function startPersistentDrag(humanoid, model)
             if anchor and anchor.Parent then pcall(function() anchor:Destroy() end) end
             for _,c in ipairs(entry.conns) do pcall(function() c:Disconnect() end) end
         end
+
+        updateHandlesForDragState()
     end)
+
+    if initiatingTool then createHandleIfNeeded(initiatingTool) end
+    updateHandlesForDragState()
 end
 
 local function doComeToMeDrag(humanoid, model, tool)
     if not humanoid or not model then return end
     if isPlayerCharacter(model) then return end
     if activeDrags[model] then return end
-
-    createTempHandleForTool(tool)
-    startPersistentDrag(humanoid, model)
-    removeTempHandleForTool(tool)
+    startPersistentDrag(humanoid, model, tool)
 end
 
--- ===== EMPEROR'S POWER (unchanged) =====
+-- ===== EMPEROR'S POWER =====
 local function doEmperorsPowerAt(point, powerTool)
     local records = gatherNPCsInRadius(point, EMPEROR_POWER_RADIUS)
     if #records == 0 then return end
+
+    createHandleIfNeeded(powerTool)
 
     for _,rec in ipairs(records) do pcall(function() rec.hum.BreakJointsOnDeath = false end) end
     for _,rec in ipairs(records) do pcall(function() if rec.hum and rec.hum.Parent then rec.hum.Health = 0 end end) end
@@ -944,8 +1064,10 @@ local function doBeGoneAt(point)
 end
 
 local function doEmporersWrathAt(center, powerTool)
-    local records = gatherNPCsInRadius(center, WRATH_radius or WRATH_RADIUS)
+    local records = gatherNPCsInRadius(center, WRATH_RADIUS)
     if #records == 0 then return end
+
+    createHandleIfNeeded(powerTool)
 
     local targets = {}
     for _,r in ipairs(records) do
@@ -961,7 +1083,7 @@ local function doEmporersWrathAt(center, powerTool)
 
     local cycles = math.floor(WRATH_DURATION_SECONDS / WRATH_CYCLE_INTERVAL)
     for i = 1, cycles do
-        createTempHandleForTool(powerTool)
+        createHandleIfNeeded(powerTool)
 
         local lifts = {}
         for _,t in ipairs(targets) do
@@ -980,8 +1102,6 @@ local function doEmporersWrathAt(center, powerTool)
             for _,l in ipairs(lifts) do if l.anchor and l.anchor.Parent then l.anchor.Position = l.start:Lerp(l.target, alpha) end end
         end
         for _,l in ipairs(lifts) do if l.anchor and l.anchor.Parent then l.anchor.Position = l.target end end
-
-        removeTempHandleForTool(powerTool)
 
         local slams = {}
         for _,t in ipairs(targets) do
@@ -1021,17 +1141,50 @@ local function doEmporersWrathAt(center, powerTool)
 end
 
 -- ===== TOOL WIRING (idempotent) =====
-local function giveToolToBackpack(name)
-    local bp = localPlayer:FindFirstChildOfClass("Backpack")
-    if not bp then return end
-    local existing = bp:FindFirstChild(name) or (localPlayer.Character and localPlayer.Character:FindFirstChild(name))
-    if existing and existing:IsA("Tool") then return existing end
-    local tool = Instance.new("Tool")
-    tool.Name = name; tool.RequiresHandle = false; tool.CanBeDropped = false; tool.Parent = bp
-    return tool
+local function waitForBackpack(timeout)
+    timeout = timeout or 8
+    local start = tick()
+    while tick() - start < timeout do
+        local bp = localPlayer:FindFirstChildOfClass("Backpack")
+        if bp and bp.Parent then return bp end
+        local byName = localPlayer:FindFirstChild("Backpack")
+        if byName and byName:IsA("Backpack") then return byName end
+        RunService.Heartbeat:Wait()
+    end
+    local ok, bp = pcall(function() return localPlayer:WaitForChild("Backpack", 6) end)
+    if ok and bp then return bp end
+    return nil
 end
 
--- Wire functions are extracted to call per-instance and mark wiredTools[tool]=true
+local function ensureTools()
+    local bp = waitForBackpack(6)
+    if not bp then return end
+
+    local function createOrGet(name)
+        local existing = bp:FindFirstChild(name) or (localPlayer.Character and localPlayer.Character:FindFirstChild(name))
+        if existing and existing:IsA("Tool") then
+            if existing.Parent ~= bp then existing.Parent = bp end
+            return existing
+        end
+        local tool = Instance.new("Tool")
+        tool.Name = name
+        tool.RequiresHandle = false
+        tool.CanBeDropped = false
+        tool.Parent = bp
+        return tool
+    end
+
+    local slam = createOrGet(TOOL_EMPEROR_SLAM)
+    if slam then wireEmporerSlam(slam) end
+
+    local come = createOrGet(TOOL_COME_TO_ME)
+    if come then wireComeToMe(come) end
+
+    local power = createOrGet(TOOL_EMPEROR_POWER)
+    if power then wirePowerTool(power) end
+end
+
+-- Wire functions (idempotent)
 local function wireEmporerSlam(tool)
     if not tool or wiredTools[tool] then return end
     wiredTools[tool] = true
@@ -1041,6 +1194,8 @@ local function wireEmporerSlam(tool)
     tool.Equipped:Connect(function(mouse)
         if not mouse then mouse = localPlayer:GetMouse() end
         if sg then sg.Enabled = true end
+
+        if countActiveDrags() > 0 then createHandleIfNeeded(tool) end
 
         local clickConn
         clickConn = mouse.Button1Down:Connect(function()
@@ -1056,10 +1211,8 @@ local function wireEmporerSlam(tool)
 
         local gsConn
         gsConn = groundBtn.MouseButton1Click:Connect(function()
-            createTempHandleForTool(tool)
+            createHandleIfNeeded(tool)
             spawn(function() doGroundSlam(tool) end)
-            wait(1)
-            removeTempHandleForTool(tool)
         end)
 
         local tConn
@@ -1072,7 +1225,6 @@ local function wireEmporerSlam(tool)
             if clickConn then clickConn:Disconnect(); clickConn = nil end
             if gsConn then gsConn:Disconnect(); gsConn = nil end
             if tConn then tConn:Disconnect(); tConn = nil end
-            removeTempHandleForTool(tool)
             if sg then sg.Enabled = false end
         end
 
@@ -1095,6 +1247,8 @@ local function wireComeToMe(tool)
         if not mouse then mouse = localPlayer:GetMouse() end
         if cg then cg.Enabled = true end
 
+        if countActiveDrags() > 0 then createHandleIfNeeded(tool) end
+
         local dragConn
         dragConn = dragBtn.MouseButton1Click:Connect(function()
             comeDragEnabled = not comeDragEnabled
@@ -1116,7 +1270,6 @@ local function wireComeToMe(tool)
         tool.Unequipped:Connect(function()
             if conn then conn:Disconnect(); conn = nil end
             if dragConn then dragConn:Disconnect(); dragConn = nil end
-            removeTempHandleForTool(tool)
             if cg then cg.Enabled = false end
         end)
     end)
@@ -1139,36 +1292,33 @@ local function wirePowerTool(tool)
         if not mouse then mouse = localPlayer:GetMouse() end
         if pg then pg.Enabled = true end
 
+        if countActiveDrags() > 0 then createHandleIfNeeded(tool) end
+
         local clickConn
         clickConn = mouse.Button1Down:Connect(function()
             local hitPos = mouse.Hit and mouse.Hit.p
             if hitPos then
-                createTempHandleForTool(tool)
+                createHandleIfNeeded(tool)
                 doEmperorsPowerAt(hitPos, tool)
-                wait(0.12)
-                removeTempHandleForTool(tool)
             end
         end)
 
         local wrathConn = wrathBtn.MouseButton1Click:Connect(function()
-            createTempHandleForTool(tool)
+            createHandleIfNeeded(tool)
             local hitPos = (mouse and mouse.Hit and mouse.Hit.p) or (localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") and localPlayer.Character.HumanoidRootPart.Position)
             if hitPos then doEmporersWrathAt(hitPos, tool) end
-            removeTempHandleForTool(tool)
         end)
 
         local bgConn = begoneBtn.MouseButton1Click:Connect(function()
-            createTempHandleForTool(tool)
+            createHandleIfNeeded(tool)
             local hitPos = (mouse and mouse.Hit and mouse.Hit.p) or (localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") and localPlayer.Character.HumanoidRootPart.Position)
             if hitPos then doBeGoneAt(hitPos) end
-            removeTempHandleForTool(tool)
         end)
 
         local function onUnequip()
             if clickConn then clickConn:Disconnect(); clickConn = nil end
             if wrathConn then wrathConn:Disconnect(); wrathConn = nil end
             if bgConn then bgConn:Disconnect(); bgConn = nil end
-            removeTempHandleForTool(tool)
             if pg then pg.Enabled = false end
         end
 
@@ -1178,42 +1328,30 @@ local function wirePowerTool(tool)
     tool.Unequipped:Connect(function() if storedGUIs.PowerGUI then storedGUIs.PowerGUI.Enabled = false end end)
 end
 
--- ===== RELIABLE ENSURE TOOLS + RESPAN HANDLING =====
--- Wait/Find Backpack robustly (handles backpack being destroyed and recreated)
+-- ===== BACKPACK / RESPAWN handling =====
 local function waitForBackpack(timeout)
     timeout = timeout or 8
     local start = tick()
     while tick() - start < timeout do
         local bp = localPlayer:FindFirstChildOfClass("Backpack")
         if bp and bp.Parent then return bp end
-        -- also check direct child named "Backpack" (some environments)
         local byName = localPlayer:FindFirstChild("Backpack")
         if byName and byName:IsA("Backpack") then return byName end
-        -- wait a short moment
         RunService.Heartbeat:Wait()
     end
-    -- final attempt: WaitForChild (will yield longer but usually returns)
     local ok, bp = pcall(function() return localPlayer:WaitForChild("Backpack", 6) end)
     if ok and bp then return bp end
     return nil
 end
 
--- ensureTools is idempotent and wires tools when present/moved
 local function ensureTools()
     local bp = waitForBackpack(6)
-    if not bp then
-        -- fallback: spawn a short retry and return; CharacterAdded/ChildAdded will re-run ensureTools
-        return
-    end
+    if not bp then return end
 
-    -- create or move tools into backpack, then wire them (but only wire once per instance)
     local function createOrGet(name)
         local existing = bp:FindFirstChild(name) or (localPlayer.Character and localPlayer.Character:FindFirstChild(name))
         if existing and existing:IsA("Tool") then
-            if existing.Parent ~= bp then
-                -- move to backpack (this handles the case tools are in Character after respawn)
-                existing.Parent = bp
-            end
+            if existing.Parent ~= bp then existing.Parent = bp end
             return existing
         end
         local tool = Instance.new("Tool")
@@ -1232,27 +1370,11 @@ local function ensureTools()
 
     local power = createOrGet(TOOL_EMPEROR_POWER)
     if power then wirePowerTool(power) end
-
-    -- remove stray handles for all tools in backpack
-    for _,t in ipairs(bp:GetChildren()) do
-        if t:IsA("Tool") then removeTempHandleForTool(t) end
-    end
-
-    -- if any tools were still parented to character (rare), move them to bp
-    if localPlayer.Character then
-        for _,t in ipairs(localPlayer.Character:GetChildren()) do
-            if t:IsA("Tool") then
-                t.Parent = bp
-            end
-        end
-    end
 end
 
--- Detect Backpack recreation: reconnect on ChildAdded 'Backpack'
 local bpAddedConn
 bpAddedConn = localPlayer.ChildAdded:Connect(function(child)
     if child and child.Name == "Backpack" then
-        -- give it a small moment to initialize
         task.defer(function()
             wait(0.05)
             ensureTools()
@@ -1260,7 +1382,6 @@ bpAddedConn = localPlayer.ChildAdded:Connect(function(child)
     end
 end)
 
--- CharacterAdded handler: ensure UI state reset and re-give tools
 local function onCharacterAdded(char)
     wait(0.06)
     hideAllStoredGUIs()
@@ -1269,13 +1390,49 @@ local function onCharacterAdded(char)
     if storedGUIs.Slam_TormentToggle then storedGUIs.Slam_TormentToggle.Text = "Torment: Off" end
     if storedGUIs.Come_DragToggle then storedGUIs.Come_DragToggle.Text = "Drag: Off" end
 
-    -- ensure tools after respawn
     ensureTools()
+
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.Died:Connect(function()
+            local spawnPos = getLocalPlayerSpawnPosition()
+            local toMove = {}
+            for model, entry in pairs(activeDrags) do
+                if model and entry and entry.hr and model:IsA("Model") then
+                    table.insert(toMove, { model = model, entry = entry })
+                end
+            end
+            for _,v in ipairs(toMove) do
+                local model = v.model
+                local entry = v.entry
+                cleanupStorage(entry.storage)
+                if entry.anchor and entry.anchor.Parent then pcall(function() entry.anchor:Destroy() end) end
+                local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
+                if hrp then
+                    local offset = spawnPos - hrp.Position
+                    for _,p in ipairs(model:GetDescendants()) do
+                        if p:IsA("BasePart") then
+                            p.CFrame = p.CFrame + offset
+                        end
+                    end
+                else
+                    for _,p in ipairs(model:GetDescendants()) do
+                        if p:IsA("BasePart") then
+                            p.CFrame = CFrame.new(spawnPos + Vector3.new(math.random(-3,3), 0, math.random(-3,3)))
+                        end
+                    end
+                end
+                for _,c in ipairs(entry.conns) do pcall(function() c:Disconnect() end) end
+                activeDrags[model] = nil
+            end
+            updateHandlesForDragState()
+        end)
+    end
 end
 
 localPlayer.CharacterAdded:Connect(onCharacterAdded)
 
--- initial ensureTools (handles first spawn)
 ensureTools()
+task.defer(function() wait(0.1) ensureTools() end)
 
-print("Emporer kit v7 loaded for", localPlayer.Name, "- tools will be given after respawn (Backpack handled).")
+print("Emporer kit v8.1 loaded for", localPlayer.Name)
