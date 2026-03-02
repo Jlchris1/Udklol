@@ -1,0 +1,26 @@
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+-- Delete the player's plot Structures
+local plotName = player.Name .. "'s plot"
+
+if workspace:FindFirstChild("Plots") then
+	local plot = workspace.Plots:FindFirstChild(plotName)
+	if plot and plot:FindFirstChild("baseplate") and plot.baseplate:FindFirstChild("Structures") then
+		plot.baseplate.Structures:Destroy()
+	end
+end
+
+-- Delete other workspace objects
+local objectsToDelete = {
+	"ActiveUnits",
+	"Components",
+	"Center"
+}
+
+for _, name in ipairs(objectsToDelete) do
+	local obj = workspace:FindFirstChild(name)
+	if obj then
+		obj:Destroy()
+	end
+end
