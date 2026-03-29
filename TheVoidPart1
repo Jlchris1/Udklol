@@ -1,4 +1,4 @@
--- True Void — Part One (forcefield non-lethal fling + fear 70/30)
+-- True Void — Part One (forcefield non-lethal fling + fear 100/0)
 -- Place this LocalScript into StarterPlayer -> StarterPlayerScripts
 
 local Players = game:GetService("Players")
@@ -20,598 +20,777 @@ local FORCEFIELD_BASE_VEL = 60 -- base velocity applied
 local FORCEFIELD_UPWARD_BONUS = 8 -- slight upward component
 local FORCEFIELD_COOLDOWN = 0.6 -- seconds before same NPC can be processed again
 
-local BG_COLOR = Color3.fromRGB(0,0,0)
+local BG_COLOR = Color3.fromRGB(0, 0, 0)
 local TEXT_COLOR = Color3.fromRGB(120, 50, 130) -- dark purple
 
 -- Attempt to set FallenPartsDestroyHeight to NaN (graceful)
-pcall(function() Workspace.FallenPartsDestroyHeight = 0/0 end)
+pcall(function()
+	Workspace.FallenPartsDestroyHeight = 0 / 0
+end)
 
 -- ====== UTILITIES ======
 local function isNPC(model)
-    if not model or not model:IsA("Model") then return false end
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    if not hum then return false end
-    return not Players:GetPlayerFromCharacter(model)
+	if not model or not model:IsA("Model") then
+		return false
+	end
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	if not hum then
+		return false
+	end
+	return not Players:GetPlayerFromCharacter(model)
 end
 
 local function findHumanoidFromDescendant(desc)
-    local node = desc
-    for i=1,10 do
-        if not node then break end
-        local h = node:FindFirstChildOfClass("Humanoid")
-        if h then return h, node end
-        node = node.Parent
-    end
-    return nil, nil
+	local node = desc
+	for _ = 1, 10 do
+		if not node then
+			break
+		end
+		local h = node:FindFirstChildOfClass("Humanoid")
+		if h then
+			return h, node
+		end
+		node = node.Parent
+	end
+	return nil, nil
 end
 
 local function getModelRoot(model)
-    if not model then return nil end
-    return model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
+	if not model then
+		return nil
+	end
+	return model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
 end
 
 local function getAllNPCHumanoids()
-    local out = {}
-    for _,h in ipairs(Workspace:GetDescendants()) do
-        if h:IsA("Humanoid") then
-            local model = h.Parent
-            if model and isNPC(model) then
-                table.insert(out, {hum = h, model = model, hrp = getModelRoot(model)})
-            end
-        end
-    end
-    return out
+	local out = {}
+	for _, h in ipairs(Workspace:GetDescendants()) do
+		if h:IsA("Humanoid") then
+			local model = h.Parent
+			if model and isNPC(model) then
+				table.insert(out, { hum = h, model = model, hrp = getModelRoot(model) })
+			end
+		end
+	end
+	return out
 end
 
 -- Teleport every BasePart of the model to EXTREME_POS (same behavior as Presence)
 local function teleportModelToExtreme(model)
-    if not model then return end
-    for _,part in ipairs(model:GetDescendants()) do
-        if part:IsA("BasePart") then
-            pcall(function() part.CFrame = CFrame.new(EXTREME_POS) end)
-        end
-    end
+	if not model then
+		return
+	end
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			pcall(function()
+				part.CFrame = CFrame.new(EXTREME_POS)
+			end)
+		end
+	end
 end
 
 local function waitUntilAtExtreme(part, timeout)
-    timeout = timeout or 5
-    local t = 0
-    while t < timeout do
-        if not part or not part.Parent then return false end
-        local ok, pos = pcall(function() return part.Position end)
-        if ok and pos and pos.Magnitude > 1e30 then
-            return true
-        end
-        t = t + RunService.Heartbeat:Wait()
-    end
-    return false
+	timeout = timeout or 5
+	local t = 0
+	while t < timeout do
+		if not part or not part.Parent then
+			return false
+		end
+		local ok, pos = pcall(function()
+			return part.Position
+		end)
+		if ok and pos and pos.Magnitude > 1e30 then
+			return true
+		end
+		t = t + RunService.Heartbeat:Wait()
+	end
+	return false
 end
 
 local function getModelHorizontalExtent(model)
-    if not model then return 1 end
-    local ok, size = pcall(function() return model:GetExtentsSize() end)
-    if ok and typeof(size) == "Vector3" then
-        return math.max(0.1, math.max(size.X, size.Z))
-    end
-    -- fallback bounding box over parts
-    local minP, maxP
-    for _,p in ipairs(model:GetDescendants()) do
-        if p:IsA("BasePart") then
-            local half = p.Size * 0.5
-            local pMin = p.Position - half
-            local pMax = p.Position + half
-            if not minP then minP = pMin; maxP = pMax
-            else
-                minP = Vector3.new(math.min(minP.X, pMin.X), math.min(minP.Y, pMin.Y), math.min(minP.Z, pMin.Z))
-                maxP = Vector3.new(math.max(maxP.X, pMax.X), math.max(maxP.Y, pMax.Y), math.max(maxP.Z, pMax.Z))
-            end
-        end
-    end
-    if minP and maxP then
-        local ext = maxP - minP
-        return math.max(0.1, math.max(ext.X, ext.Z))
-    end
-    return 1
+	if not model then
+		return 1
+	end
+	local ok, size = pcall(function()
+		return model:GetExtentsSize()
+	end)
+	if ok and typeof(size) == "Vector3" then
+		return math.max(0.1, math.max(size.X, size.Z))
+	end
+
+	local minP, maxP
+	for _, p in ipairs(model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			local half = p.Size * 0.5
+			local pMin = p.Position - half
+			local pMax = p.Position + half
+			if not minP then
+				minP = pMin
+				maxP = pMax
+			else
+				minP = Vector3.new(math.min(minP.X, pMin.X), math.min(minP.Y, pMin.Y), math.min(minP.Z, pMin.Z))
+				maxP = Vector3.new(math.max(maxP.X, pMax.X), math.max(maxP.Y, pMax.Y), math.max(maxP.Z, pMax.Z))
+			end
+		end
+	end
+	if minP and maxP then
+		local ext = maxP - minP
+		return math.max(0.1, math.max(ext.X, ext.Z))
+	end
+	return 1
 end
 
 local function getPlayerCenterPosition()
-    local char = player.Character
-    local root = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"))
-    if root and root.Parent then return root.Position end
-    if Workspace.CurrentCamera then return Workspace.CurrentCamera.CFrame.Position end
-    return Vector3.new(0,0,0)
+	local char = player.Character
+	local root = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"))
+	if root and root.Parent then
+		return root.Position
+	end
+	if Workspace.CurrentCamera then
+		return Workspace.CurrentCamera.CFrame.Position
+	end
+	return Vector3.new(0, 0, 0)
+end
+
+-- ====== TOOL / HANDLE HELPERS ======
+local ERASE_HANDLE_ATTR = "__TrueVoidEraseHandle"
+local eraseHandleTokens = setmetatable({}, { __mode = "k" })
+
+local function getToolHandle(tool)
+	if not tool or not tool:IsA("Tool") then
+		return nil
+	end
+	local h = tool:FindFirstChild("Handle")
+	if h and h:IsA("BasePart") then
+		return h
+	end
+	return nil
+end
+
+local function createHandleOnTool(tool)
+	if not tool or not tool:IsA("Tool") then
+		return nil
+	end
+
+	local existing = getToolHandle(tool)
+	if existing then
+		existing:SetAttribute(ERASE_HANDLE_ATTR, true)
+		return existing
+	end
+
+	local h = Instance.new("Part")
+	h.Name = "Handle"
+	h.Size = Vector3.new(1, 1, 1)
+	h.Transparency = 0.5
+	h.CanCollide = false
+	h.Massless = true
+	h:SetAttribute(ERASE_HANDLE_ATTR, true)
+	h.Parent = tool
+	return h
+end
+
+local function removeHandleOnTool(tool)
+	if not tool or not tool:IsA("Tool") then
+		return
+	end
+	local h = getToolHandle(tool)
+	if h and h:GetAttribute(ERASE_HANDLE_ATTR) then
+		pcall(function()
+			h:Destroy()
+		end)
+	end
+end
+
+local function scheduleEraseHandleRemoval(tool, seconds)
+	if not tool or not tool:IsA("Tool") then
+		return
+	end
+
+	local handle = createHandleOnTool(tool)
+	if not handle then
+		return
+	end
+
+	local token = (eraseHandleTokens[tool] or 0) + 1
+	eraseHandleTokens[tool] = token
+	handle:SetAttribute("EraseHandleToken", token)
+
+	task.delay(seconds or 1, function()
+		if not tool or not tool.Parent then
+			return
+		end
+		local h = getToolHandle(tool)
+		if not h then
+			return
+		end
+		if h:GetAttribute(ERASE_HANDLE_ATTR) and h:GetAttribute("EraseHandleToken") == token then
+			pcall(function()
+				h:Destroy()
+			end)
+		end
+	end)
 end
 
 -- ====== DIALOGUE TYPING (fixed) ======
 local localPlayer = Players.LocalPlayer
 
 local function typeDialog(lines, perCharDelay)
-    perCharDelay = perCharDelay or 0.03
+	perCharDelay = perCharDelay or 0.03
 
-    local playerGui = localPlayer:WaitForChild("PlayerGui")
-    local old = playerGui:FindFirstChild("VoidDialogGUI")
-    if old then old:Destroy() end
+	local playerGui = localPlayer:WaitForChild("PlayerGui")
+	local old = playerGui:FindFirstChild("VoidDialogGUI")
+	if old then
+		old:Destroy()
+	end
 
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "VoidDialogGUI"
-    sg.IgnoreGuiInset = true
-    sg.ResetOnSpawn = false
-    sg.Parent = playerGui
+	local sg = Instance.new("ScreenGui")
+	sg.Name = "VoidDialogGUI"
+	sg.IgnoreGuiInset = true
+	sg.ResetOnSpawn = false
+	sg.Parent = playerGui
 
-    local screenSize = workspace.CurrentCamera.ViewportSize
-    local isMobile = screenSize.X < 900
+	local screenSize = workspace.CurrentCamera.ViewportSize
+	local isMobile = screenSize.X < 900
 
-    local frame = Instance.new("Frame")
-    frame.AnchorPoint = Vector2.new(0.5, 1)
-    frame.Position = UDim2.new(0.5, 0, 0.92, 0)
-    frame.Size = isMobile
-        and UDim2.new(0.9, 0, 0.18, 0)
-        or UDim2.new(0.6, 0, 0.15, 0)
-    frame.BackgroundTransparency = 1
-    frame.Parent = sg
+	local frame = Instance.new("Frame")
+	frame.AnchorPoint = Vector2.new(0.5, 1)
+	frame.Position = UDim2.new(0.5, 0, 0.92, 0)
+	frame.Size = isMobile and UDim2.new(0.9, 0, 0.18, 0) or UDim2.new(0.6, 0, 0.15, 0)
+	frame.BackgroundTransparency = 1
+	frame.Parent = sg
 
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.TextWrapped = true
-    label.TextScaled = false
-    label.RichText = false
-    label.Font = Enum.Font.SourceSansBold
-    label.TextColor3 = Color3.fromRGB(200,200,220)
-    label.TextXAlignment = Enum.TextXAlignment.Center
-    label.TextYAlignment = Enum.TextYAlignment.Center
-    label.Text = ""
-    label.Parent = frame
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.TextWrapped = true
+	label.TextScaled = false
+	label.RichText = false
+	label.Font = Enum.Font.SourceSansBold
+	label.TextColor3 = Color3.fromRGB(200, 200, 220)
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.TextYAlignment = Enum.TextYAlignment.Center
+	label.Text = ""
+	label.Parent = frame
 
-    label.TextSize = isMobile and 20 or 28
+	label.TextSize = isMobile and 20 or 28
 
-    local function typeLine(text)
-        label.Text = ""
-        local output = ""
-        for _, char in utf8.codes(text) do
-            output ..= utf8.char(char)
-            label.Text = output
-            RunService.Heartbeat:Wait()
-            task.wait(perCharDelay)
-        end
-    end
+	local function typeLine(text)
+		label.Text = ""
+		local output = ""
+		for _, char in utf8.codes(text) do
+			output ..= utf8.char(char)
+			label.Text = output
+			RunService.Heartbeat:Wait()
+			task.wait(perCharDelay)
+		end
+	end
 
-    for i, line in ipairs(lines) do
-        typeLine(line)
-        if i < #lines then task.wait(1) end
-    end
+	for i, line in ipairs(lines) do
+		typeLine(line)
+		if i < #lines then
+			task.wait(1)
+		end
+	end
 
-    task.delay(8, function()
-        if sg then sg:Destroy() end
-    end)
+	task.delay(8, function()
+		if sg then
+			sg:Destroy()
+		end
+	end)
 end
 
 task.spawn(function()
-    local D1 = "Ï̷̺̓s̸̞̮͗̒ ̸̺̗͐̽í̶̡̒t̴̙́ ̸͙̆̕r̵͙̈͛͜e̵͖͕̓a̸̦͋͝l̶̢͓̋l̶̗͗y̴̛̯̼ ̷͎͕͒w̴̩͙̎̈o̵͕̎̈ṛ̵̨̈́̌t̸͚͉͂́h̴̛̫ ̶̺̞̿͝f̶̨̙͛î̸̭g̴̜̗̎h̶̞̜̓t̴̩̂ị̶̘́̉ṉ̶̾͠g̸̣͝?̶̺̽̀"
-    local D2 = "O̵̺͌r̸̻̈́ ̴̮̈́á̷̹r̷̺͒̆e̸̞͓̓̈ ̸̙͈̋̄ÿ̷̪o̵̧͈͗u̸̹͑ ̸̮͍̇r̸͚͊e̸̢̪͊a̶̻̓ḻ̴̽͑l̸̥̠̕y̶̦͉͒͗ ̴̛̳̲̄t̷̖̉̓h̷̠́a̶̩͕͝͝t̶̢̝̎ ̶̧̲̇d̷̖̱̉e̴̮̓̀s̷͕͑p̵̝̲͝è̸̻͕̿r̷̭͛a̶̳͍͋̕t̵̤̓ḙ̶͂̋ ̴͚̜̇͝t̵͎̑õ̵̖ ̵̲͒ͅl̴͎̓̚i̷̪̿v̷̡͓͝ȩ̴͝ ̴̗͖̇ä̴̭̱́̚ ̸̖̈́l̴̙̈͜ï̵͚̟f̸͓͑́e̵̲̙̒ ̵͕͋t̴̞̗̀h̵͓̥̓̈́a̴̼͂̌t̵͙͇̆́ ̴̝͚́̐w̸̱̔ạ̷̟̓̍s̵̪̋̀ ̴͕̃̌d̸̼̔̌e̶̲̔͝s̸̼̹̈́ţ̵͔̚í̷̘̖ǹ̶͍͠e̶̤͋̀ḋ̴̢̝ ̶͙̽t̷͔̏͝o̴̧͎̾ ̴͍̔d̵̺͕̔ȋ̵̘̘̿e̵͔͚̊̍ ̶̜̒ì̴̫͌n̷̻̦̒̓ ̴̞̩̃̚t̶͎̟̔̆ḧ̴̥́͌ͅe̵̛͔ ̵̻͑͘é̶̗ǹ̷̡͍d̸̨͆̇ ̷̗́ặ̶̡ņ̴̓́ÿ̶͎̞́̓w̶͔͛a̴̠̣͆͗ý̵͎͝s̸̘̰̎."
-    typeDialog({D1, D2}, 0.02)
+	local D1 = "Ï̷̺̓s̸̞̮͗̒ ̸̺̗͐̽í̶̡̒t̴̙́ ̸͙̆̕r̵͙̈͛͜e̵͖͕̓a̸̦͋͝l̶̢͓̋l̶̗͗y̴̛̯̼ ̷͎͕͒w̴̩͙̎̈o̵͕̎̈ṛ̵̨̈́̌t̸͚͉͂́h̴̛̫ ̶̺̞̿͝f̶̨̙͛î̸̭g̴̜̗̎h̶̞̜̓t̴̩̂ị̶̘́̉ṉ̶̾͠g̸̣͝?̶̺̽̀"
+	local D2 = "O̵̺͌r̸̻̈́ ̴̮̈́á̷̹r̷̺͒̆e̸̞͓̓̈ ̸̙͈̋̄ÿ̷̪o̵̧͈͗u̸̹͑ ̸̮͍̇r̸͚͊e̸̢̪͊a̶̻̓ḻ̴̽͑l̸̥̠̕y̶̦͉͒͗ ̴̛̳̲̄t̷̖̉̓h̷̠́a̶̩͕͝͝t̶̢̝̎ ̶̧̲̇d̷̖̱̉e̴̮̓̀s̷͕͑p̵̝̲͝è̸̻͕̿r̷̭͛a̶̳͍͋̕t̵̤̓ḙ̶͂̋ ̴͚̜̇͝t̵͎̑õ̵̖ ̵̲͒ͅl̴͎̓̚i̷̪̿v̷̡͓͝ȩ̴͝ ̴̗͖̇ä̴̭̱́̚ ̸̖̈́l̴̙̈͜ï̵͚̟f̸͓͑́e̵̲̙̒ ̵͕͋t̴̞̗̀h̵͓̥̓̈́a̴̼͂̌t̵͙͇̆́ ̴̝͚́̐w̸̱̔ạ̷̟̓̍s̵̪̋̀ ̴͕̃̌d̸̼̔̌e̶̲̔͝s̸̼̹̈́ţ̵͔̚í̷̘̖ǹ̶͍͠e̶̤͋̀ḋ̴̢̝ ̶͙̽t̷͔̏͝o̴̧͎̾ ̴͍̔d̵̺͕̔ȋ̵̘̘̿e̵͔͚̊̍ ̶̜̒ì̴̫͌n̷̻̦̒̓ ̴̞̩̃̚t̶͎̟̔̆ḧ̴̥́͌ͅe̵̛͔ ̵̻͑͘é̶̗ǹ̷̡͍d̸̨͆̇ ̷̗́ặ̶̡ņ̴̓́ÿ̶͎̞́̓w̶͔͛a̴̠̣͆͗ý̵͎͝s̸̘̰̎."
+	typeDialog({ D1, D2 }, 0.02)
 end)
 
--- ====== ERASE TOOL (fixed wiring + persistence) ======
-local function giveTool(name)
-    local bp = player:FindFirstChildOfClass("Backpack")
-    if not bp then return end
-    local existing = bp:FindFirstChild(name) or (player.Character and player.Character:FindFirstChild(name))
-    if existing and existing:IsA("Tool") then return existing end
-    local tool = Instance.new("Tool")
-    tool.Name = name
-    tool.RequiresHandle = false
-    tool.CanBeDropped = false
-    tool.Parent = bp
-    return tool
-end
-
--- persistent toggle state that survives equip/respawn
+-- ====== ERASE TOOL / HANDLE / GUI ======
 local trueErasureState = false
-
-local function createEraseGUI()
-    if not player then return nil, nil end
-    local playerGui = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui")
-
-    local sg = playerGui:FindFirstChild("TrueVoid_Erase_GUI")
-    if not sg then
-        sg = Instance.new("ScreenGui")
-        sg.Name = "TrueVoid_Erase_GUI"
-        sg.ResetOnSpawn = false
-        sg.Parent = playerGui
-
-        local frame = Instance.new("Frame", sg)
-        frame.Name = "Root"
-        frame.Size = UDim2.new(0,200,0,40)
-        frame.Position = UDim2.new(1, -220, 0, 10)
-        frame.BackgroundTransparency = 0.15
-        frame.BackgroundColor3 = BG_COLOR
-        frame.BorderSizePixel = 0
-
-        local toggle = Instance.new("TextButton", frame)
-        toggle.Name = "TrueToggle"
-        toggle.Size = UDim2.new(0,180,0,28)
-        toggle.Position = UDim2.new(0,10,0,6)
-        toggle.Text = (trueErasureState and "True Erasure: On" or "True Erasure: Off")
-        toggle.TextColor3 = TEXT_COLOR
-        toggle.BackgroundColor3 = Color3.fromRGB(18,18,18)
-        toggle.Font = Enum.Font.SourceSansBold
-        toggle.TextSize = 16
-        toggle.BorderSizePixel = 0
-    else
-        if sg.Parent ~= playerGui then sg.Parent = playerGui end
-        local toggle = sg:FindFirstChild("TrueToggle", true) or sg:FindFirstChild("TrueToggle")
-        if toggle and toggle:IsA("TextButton") then
-            toggle.Text = (trueErasureState and "True Erasure: On" or "True Erasure: Off")
-        end
-    end
-
-    local toggle = sg:FindFirstChild("TrueToggle", true) or sg:FindFirstChild("TrueToggle")
-    return sg, toggle
-end
-
-local function createHandleOnTool(tool)
-    if not tool or not tool:IsA("Tool") then return end
-    if tool:FindFirstChild("Handle") then pcall(function() tool.Handle:Destroy() end) end
-    local h = Instance.new("Part")
-    h.Name = "Handle"
-    h.Size = Vector3.new(1,1,1)
-    h.Transparency = 0.5
-    h.CanCollide = false
-    h.Parent = tool
-    return h
-end
+local passiveUI = nil
 
 local function updateEraseGuiToggleText()
-    local playerGui = player:FindFirstChildOfClass("PlayerGui")
-    if not playerGui then return end
-    local sg = playerGui:FindFirstChild("TrueVoid_Erase_GUI")
-    if not sg then return end
-    local toggle = sg:FindFirstChild("TrueToggle", true) or sg:FindFirstChild("TrueToggle")
-    if toggle and toggle:IsA("TextButton") then
-        toggle.Text = (trueErasureState and "True Erasure: On" or "True Erasure: Off")
-    end
+	local playerGui = player:FindFirstChildOfClass("PlayerGui")
+	if not playerGui then
+		return
+	end
+	local sg = playerGui:FindFirstChild("TrueVoid_Erase_GUI")
+	if not sg then
+		return
+	end
+	local toggle = sg:FindFirstChild("TrueToggle", true) or sg:FindFirstChild("TrueToggle")
+	if toggle and toggle:IsA("TextButton") then
+		toggle.Text = (trueErasureState and "True Erasure: On" or "True Erasure: Off")
+	end
+end
+
+local function giveTool(name)
+	local bp = player:FindFirstChildOfClass("Backpack")
+	if not bp then
+		return
+	end
+	local existing = bp:FindFirstChild(name) or (player.Character and player.Character:FindFirstChild(name))
+	if existing and existing:IsA("Tool") then
+		return existing
+	end
+	local tool = Instance.new("Tool")
+	tool.Name = name
+	tool.RequiresHandle = false
+	tool.CanBeDropped = false
+	tool.Parent = bp
+	return tool
+end
+
+local function createEraseGUI()
+	if not player then
+		return nil, nil
+	end
+	local playerGui = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui")
+
+	local sg = playerGui:FindFirstChild("TrueVoid_Erase_GUI")
+	if not sg then
+		sg = Instance.new("ScreenGui")
+		sg.Name = "TrueVoid_Erase_GUI"
+		sg.ResetOnSpawn = false
+		sg.Parent = playerGui
+
+		local frame = Instance.new("Frame", sg)
+		frame.Name = "Root"
+		frame.Size = UDim2.new(0, 200, 0, 40)
+		frame.Position = UDim2.new(1, -220, 0, 10)
+		frame.BackgroundTransparency = 0.15
+		frame.BackgroundColor3 = BG_COLOR
+		frame.BorderSizePixel = 0
+
+		local toggle = Instance.new("TextButton", frame)
+		toggle.Name = "TrueToggle"
+		toggle.Size = UDim2.new(0, 180, 0, 28)
+		toggle.Position = UDim2.new(0, 10, 0, 6)
+		toggle.Text = (trueErasureState and "True Erasure: On" or "True Erasure: Off")
+		toggle.TextColor3 = TEXT_COLOR
+		toggle.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+		toggle.Font = Enum.Font.SourceSansBold
+		toggle.TextSize = 16
+		toggle.BorderSizePixel = 0
+	else
+		if sg.Parent ~= playerGui then
+			sg.Parent = playerGui
+		end
+		local toggle = sg:FindFirstChild("TrueToggle", true) or sg:FindFirstChild("TrueToggle")
+		if toggle and toggle:IsA("TextButton") then
+			toggle.Text = (trueErasureState and "True Erasure: On" or "True Erasure: Off")
+		end
+	end
+
+	local toggle = sg:FindFirstChild("TrueToggle", true) or sg:FindFirstChild("TrueToggle")
+	return sg, toggle
 end
 
 -- list of placed erase areas (Presence 2.0)
 local eraseAreas = {} -- { center = Vector3, expiry = tick()+5 }
 
 local function createEraseArea(centerPos, duration)
-    duration = duration or 5
-    table.insert(eraseAreas, { center = centerPos, expiry = tick() + duration })
-    -- optional visual indicator can be added here if desired
+	duration = duration or 5
+	table.insert(eraseAreas, { center = centerPos, expiry = tick() + duration })
 end
 
 -- core function that processes a single center (same behavior as Presence)
 local function processPresenceAtCenter(center)
-    local records = {}
-    for _,desc in ipairs(Workspace:GetDescendants()) do
-        if desc:IsA("Humanoid") then
-            local model = desc.Parent
-            if model and isNPC(model) then
-                local hrp = getModelRoot(model)
-                if hrp and (hrp.Position - center).Magnitude <= PRESENCE_RADIUS then
-                    table.insert(records, {hum = desc, model = model})
-                end
-            end
-        end
-    end
+	local records = {}
+	for _, desc in ipairs(Workspace:GetDescendants()) do
+		if desc:IsA("Humanoid") then
+			local model = desc.Parent
+			if model and isNPC(model) then
+				local hrp = getModelRoot(model)
+				if hrp and (hrp.Position - center).Magnitude <= PRESENCE_RADIUS then
+					table.insert(records, { hum = desc, model = model })
+				end
+			end
+		end
+	end
 
-    -- If manual true erasure is ON, skip kill effect (do NOT set BreakJointsOnDeath or Health)
-    if not trueErasureState then
-        for _,r in ipairs(records) do pcall(function() r.hum.BreakJointsOnDeath = false end) end
-        for _,r in ipairs(records) do pcall(function() r.hum.Health = 0 end) end
-    end
+	if not trueErasureState then
+		for _, r in ipairs(records) do
+			pcall(function()
+				r.hum.BreakJointsOnDeath = false
+			end)
+		end
+		for _, r in ipairs(records) do
+			pcall(function()
+				r.hum.Health = 0
+			end)
+		end
+	end
 
-    -- Teleport models (same as original Presence)
-    for _,r in ipairs(records) do
-        spawn(function()
-            task.wait(0.2)
-            teleportModelToExtreme(r.model)
-        end)
-    end
+	for _, r in ipairs(records) do
+		task.spawn(function()
+			task.wait(0.2)
+			teleportModelToExtreme(r.model)
+		end)
+	end
 end
 
 -- Presence loop (existing passive + placed eraseAreas)
-local toggleState = { -- ensure toggleState exists here for presence loop
-    Forcefield = false,
-    Presence = false,
-    Fear = false,
-    TimeDelation = false,
-    Hidden = false,
-    TrueErasureManual = false
+local toggleState = {
+	Forcefield = false,
+	Presence = false,
+	Fear = false,
+	TimeDelation = false,
+	Hidden = false,
+	TrueErasureManual = false
 }
 
 local function presenceLoop()
-    while true do
-        if toggleState and toggleState.Presence then
-            local center = getPlayerCenterPosition()
-            if center then
-                processPresenceAtCenter(center)
-            end
-        end
+	while true do
+		if toggleState and toggleState.Presence then
+			local center = getPlayerCenterPosition()
+			if center then
+				processPresenceAtCenter(center)
+			end
+		end
 
-        -- process placed eraseAreas (Presence 2.0)
-        local now = tick()
-        if #eraseAreas > 0 then
-            -- iterate backwards to remove expired
-            for i = #eraseAreas, 1, -1 do
-                local a = eraseAreas[i]
-                if a and a.expiry and a.expiry > now then
-                    processPresenceAtCenter(a.center)
-                else
-                    table.remove(eraseAreas, i)
-                end
-            end
-        end
+		local now = tick()
+		if #eraseAreas > 0 then
+			for i = #eraseAreas, 1, -1 do
+				local a = eraseAreas[i]
+				if a and a.expiry and a.expiry > now then
+					processPresenceAtCenter(a.center)
+				else
+					table.remove(eraseAreas, i)
+				end
+			end
+		end
 
-        task.wait(PRESENCE_CHECK_INTERVAL)
-    end
+		task.wait(PRESENCE_CHECK_INTERVAL)
+	end
 end
 
--- start presence loop
-spawn(function() presenceLoop() end)
+task.spawn(function()
+	presenceLoop()
+end)
 
 -- Wire the Erase tool so clicks either teleport clicked NPC or create a Presence 2.0 area
 local function wireEraseTool(tool)
-    if not tool or not tool:IsA("Tool") then return end
-    if tool:FindFirstChild("__TrueVoidWired") then return end
-    local marker = Instance.new("BoolValue")
-    marker.Name = "__TrueVoidWired"
-    marker.Value = true
-    marker.Parent = tool
+	if not tool or not tool:IsA("Tool") then
+		return
+	end
+	if tool:FindFirstChild("__TrueVoidWired") then
+		return
+	end
 
-    local equippedConn
-    equippedConn = tool.Equipped:Connect(function()
-        local sg, toggle = createEraseGUI()
-        if sg then sg.Enabled = true end
+	local marker = Instance.new("BoolValue")
+	marker.Name = "__TrueVoidWired"
+	marker.Value = true
+	marker.Parent = tool
 
-        local mouse = player and player:GetMouse()
-        local trueErasure = trueErasureState
+	local equippedConn
+	equippedConn = tool.Equipped:Connect(function()
+		local sg, toggle = createEraseGUI()
+		if sg then
+			sg.Enabled = true
+		end
 
-        if toggle and toggle:IsA("TextButton") then
-            toggle.Text = (trueErasure and "True Erasure: On" or "True Erasure: Off")
-        end
+		local mouse = player and player:GetMouse()
 
-        local togConn
-        if toggle then
-            togConn = toggle.MouseButton1Click:Connect(function()
-                trueErasureState = not trueErasureState
-                trueErasure = trueErasureState
-                toggle.Text = (trueErasure and "True Erasure: On" or "True Erasure: Off")
-                if passiveUI and passiveUI.TrueEraseBtn then
-                    passiveUI.TrueEraseBtn.Text = "True Erasure (Manual): " .. (trueErasureState and "On" or "Off")
-                end
-            end)
-        end
+		if toggle and toggle:IsA("TextButton") then
+			toggle.Text = (trueErasureState and "True Erasure: On" or "True Erasure: Off")
+		end
 
-        local clickConn
-        if mouse then
-            clickConn = mouse.Button1Down:Connect(function()
-                local hitPos = mouse.Hit and mouse.Hit.p
-                if not hitPos then return end
+		local togConn
+		if toggle then
+			togConn = toggle.MouseButton1Click:Connect(function()
+				trueErasureState = not trueErasureState
+				toggleState.TrueErasureManual = trueErasureState
+				toggle.Text = (trueErasureState and "True Erasure: On" or "True Erasure: Off")
+				if passiveUI and passiveUI.TrueEraseBtn then
+					passiveUI.TrueEraseBtn.Text = "True Erasure (Manual): " .. (trueErasureState and "On" or "Off")
+				end
+			end)
+		end
 
-                -- If clicked an NPC, teleport it just like Presence
-                local hum, model = findHumanoidFromDescendant(mouse.Target)
-                if hum and model and isNPC(model) then
-                    if not trueErasure then
-                        -- normal erase: kill then teleport
-                        task.wait(0.8)
-                        pcall(function()
-                            if hum and hum.Parent then
-                                hum.BreakJointsOnDeath = false
-                                hum.Health = 0
-                            end
-                        end)
-                        task.wait(0.2)
-                    end
-                    -- teleport to extreme (same as Presence)
-                    teleportModelToExtreme(model)
-                    return
-                end
+		local clickConn
+		if mouse then
+			clickConn = mouse.Button1Down:Connect(function()
+				-- Create a handle on click, keep it alive for 1 second, then destroy it
+				createHandleOnTool(tool)
+				scheduleEraseHandleRemoval(tool, 1)
 
-                -- Otherwise create a Presence 2.0 area at clicked location (5s)
-                createEraseArea(hitPos, 5)
-            end)
-        end
+				local hitPos = mouse.Hit and mouse.Hit.p
+				if not hitPos then
+					return
+				end
 
-        local unequipConn
-        unequipConn = tool.Unequipped:Connect(function()
-            if togConn then pcall(function() togConn:Disconnect() end) end
-            if clickConn then pcall(function() clickConn:Disconnect() end) end
-            if sg then sg.Enabled = false end
-            pcall(function() if tool:FindFirstChild("Handle") then tool.Handle:Destroy() end end)
-            if unequipConn then unequipConn:Disconnect(); unequipConn = nil end
-        end)
-    end)
+				-- If clicked an NPC, teleport it just like Presence
+				local hum, model = findHumanoidFromDescendant(mouse.Target)
+				if hum and model and isNPC(model) then
+					if not trueErasureState then
+						pcall(function()
+							if hum and hum.Parent then
+								hum.BreakJointsOnDeath = false
+								hum.Health = 0
+							end
+						end)
+						task.wait(0.2)
+					end
+					teleportModelToExtreme(model)
+					return
+				end
 
-    tool.AncestryChanged:Connect(function(_, parent)
-        if not parent then
-            if equippedConn then equippedConn:Disconnect(); equippedConn = nil end
-        end
-    end)
+				-- Otherwise create a Presence 2.0 area at clicked location
+				createEraseArea(hitPos, 5)
+			end)
+		end
+
+		local unequipConn
+		unequipConn = tool.Unequipped:Connect(function()
+			if togConn then
+				pcall(function()
+					togConn:Disconnect()
+				end)
+			end
+			if clickConn then
+				pcall(function()
+					clickConn:Disconnect()
+				end)
+			end
+			if sg then
+				sg.Enabled = false
+			end
+			removeHandleOnTool(tool)
+			if unequipConn then
+				unequipConn:Disconnect()
+				unequipConn = nil
+			end
+		end)
+	end)
+
+	tool.AncestryChanged:Connect(function(_, parent)
+		if not parent then
+			if equippedConn then
+				equippedConn:Disconnect()
+				equippedConn = nil
+			end
+		end
+	end)
 end
 
 local function ensureEraseTool()
-    local t = giveTool("Erase")
-    if t then
-        if not t:FindFirstChild("Handle") then createHandleOnTool(t) end
-        wireEraseTool(t)
-    end
+	local t = giveTool("Erase")
+	if t then
+		wireEraseTool(t)
+	end
 end
 
 local function watchBackpack()
-    local bp = player:FindFirstChildOfClass("Backpack") or player:WaitForChild("Backpack")
-    if not bp then return end
-    for _,child in ipairs(bp:GetChildren()) do
-        if child:IsA("Tool") and child.Name == "Erase" then
-            wireEraseTool(child)
-        end
-    end
-    bp.ChildAdded:Connect(function(child)
-        if child:IsA("Tool") and child.Name == "Erase" then
-            wireEraseTool(child)
-        end
-    end)
+	local bp = player:FindFirstChildOfClass("Backpack") or player:WaitForChild("Backpack")
+	if not bp then
+		return
+	end
+	for _, child in ipairs(bp:GetChildren()) do
+		if child:IsA("Tool") and child.Name == "Erase" then
+			wireEraseTool(child)
+		end
+	end
+	bp.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") and child.Name == "Erase" then
+			wireEraseTool(child)
+		end
+	end)
 end
 
 -- ====== PASSIVE TOGGLES UI (unchanged layout + manual True Erasure) ======
 local function createPassiveUI()
-    local playerGui = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui")
-    if playerGui:FindFirstChild("TrueVoid_Passives") then
-        local existing = playerGui:FindFirstChild("TrueVoid_Passives")
-        return {
-            SG = existing,
-            XBtn = existing:FindFirstChild("XBtn"),
-            ForcefieldBtn = existing:FindFirstChild("ForcefieldBtn"),
-            PresenceBtn = existing:FindFirstChild("PresenceBtn"),
-            FearBtn = existing:FindFirstChild("FearBtn"),
-            TimeDelationBtn = existing:FindFirstChild("TimeDelationBtn"),
-            TrueEraseBtn = existing:FindFirstChild("TrueEraseBtn")
-        }
-    end
+	local playerGui = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui")
+	if playerGui:FindFirstChild("TrueVoid_Passives") then
+		local existing = playerGui:FindFirstChild("TrueVoid_Passives")
+		return {
+			SG = existing,
+			XBtn = existing:FindFirstChild("XBtn"),
+			ForcefieldBtn = existing:FindFirstChild("ForcefieldBtn"),
+			PresenceBtn = existing:FindFirstChild("PresenceBtn"),
+			FearBtn = existing:FindFirstChild("FearBtn"),
+			TimeDelationBtn = existing:FindFirstChild("TimeDelationBtn"),
+			TrueEraseBtn = existing:FindFirstChild("TrueEraseBtn")
+		}
+	end
 
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "TrueVoid_Passives"; sg.ResetOnSpawn = false; sg.Parent = playerGui
+	local sg = Instance.new("ScreenGui")
+	sg.Name = "TrueVoid_Passives"
+	sg.ResetOnSpawn = false
+	sg.Parent = playerGui
 
-    local baseX = UDim2.new(1, -240, 0, 10)
-    local width = 200
-    local height = 34
-    local gap = 6
+	local baseX = UDim2.new(1, -240, 0, 10)
+	local width = 200
+	local height = 34
+	local gap = 6
 
-    local xFrame = Instance.new("Frame", sg)
-    xFrame.Size = UDim2.new(0,60,0,34)
-    xFrame.Position = UDim2.new(1, -70, 0, 10)
-    xFrame.BackgroundTransparency = 0.15
-    xFrame.BackgroundColor3 = BG_COLOR
-    xFrame.BorderSizePixel = 0
+	local xFrame = Instance.new("Frame", sg)
+	xFrame.Size = UDim2.new(0, 60, 0, 34)
+	xFrame.Position = UDim2.new(1, -70, 0, 10)
+	xFrame.BackgroundTransparency = 0.15
+	xFrame.BackgroundColor3 = BG_COLOR
+	xFrame.BorderSizePixel = 0
 
-    local xBtn = Instance.new("TextButton", xFrame)
-    xBtn.Size = UDim2.new(1, -8, 1, -6)
-    xBtn.Position = UDim2.new(0,4,0,3)
-    xBtn.Text = "X"
-    xBtn.TextColor3 = TEXT_COLOR
-    xBtn.Font = Enum.Font.SourceSansBold
-    xBtn.TextSize = 18
-    xBtn.BackgroundColor3 = Color3.fromRGB(18,18,18)
-    xBtn.BorderSizePixel = 0
+	local xBtn = Instance.new("TextButton", xFrame)
+	xBtn.Size = UDim2.new(1, -8, 1, -6)
+	xBtn.Position = UDim2.new(0, 4, 0, 3)
+	xBtn.Text = "X"
+	xBtn.TextColor3 = TEXT_COLOR
+	xBtn.Font = Enum.Font.SourceSansBold
+	xBtn.TextSize = 18
+	xBtn.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+	xBtn.BorderSizePixel = 0
 
-    local function newToggle(name, posOffset, text)
-        local f = Instance.new("Frame", sg)
-        f.Size = UDim2.new(0,width,0,height)
-        f.Position = UDim2.new(baseX.X.Scale, baseX.X.Offset, baseX.Y.Scale, baseX.Y.Offset + (height + gap) * posOffset)
-        f.BackgroundTransparency = 0.15; f.BackgroundColor3 = BG_COLOR; f.BorderSizePixel = 0
-        local btn = Instance.new("TextButton", f)
-        btn.Size = UDim2.new(1, -8, 1, -6); btn.Position = UDim2.new(0,4,0,3)
-        btn.Text = text; btn.TextColor3 = TEXT_COLOR
-        btn.BackgroundColor3 = Color3.fromRGB(18,18,18); btn.Font = Enum.Font.SourceSansBold; btn.TextSize = 16; btn.BorderSizePixel = 0
-        return f, btn
-    end
+	local function newToggle(name, posOffset, text)
+		local f = Instance.new("Frame", sg)
+		f.Size = UDim2.new(0, width, 0, height)
+		f.Position = UDim2.new(baseX.X.Scale, baseX.X.Offset, baseX.Y.Scale, baseX.Y.Offset + (height + gap) * posOffset)
+		f.BackgroundTransparency = 0.15
+		f.BackgroundColor3 = BG_COLOR
+		f.BorderSizePixel = 0
 
-    local ffFrame, ffBtn = newToggle("Forcefield", 0, "Forcefield: Off")
-    local prFrame, prBtn = newToggle("Presence", 1, "Presence: Off")
-    local feFrame, feBtn = newToggle("Fear", 2, "Fear: Off")
-    local tdFrame, tdBtn = newToggle("TimeDelation", 3, "Time Delation: Off")
-    local teFrame, teBtn = newToggle("TrueErase", 4, "True Erasure (Manual): Off") -- NEW button
+		local btn = Instance.new("TextButton", f)
+		btn.Size = UDim2.new(1, -8, 1, -6)
+		btn.Position = UDim2.new(0, 4, 0, 3)
+		btn.Text = text
+		btn.TextColor3 = TEXT_COLOR
+		btn.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+		btn.Font = Enum.Font.SourceSansBold
+		btn.TextSize = 16
+		btn.BorderSizePixel = 0
+		return f, btn
+	end
 
-    xBtn.MouseButton1Click:Connect(function()
-        toggleState.Hidden = not toggleState.Hidden
-        if toggleState.Hidden then
-            xBtn.Text = "O"
-            ffFrame.Visible = false; prFrame.Visible = false; feFrame.Visible = false; tdFrame.Visible = false; teFrame.Visible = false
-        else
-            xBtn.Text = "X"
-            ffFrame.Visible = true; prFrame.Visible = true; feFrame.Visible = true; tdFrame.Visible = true; teFrame.Visible = true
-        end
-    end)
+	local ffFrame, ffBtn = newToggle("Forcefield", 0, "Forcefield: Off")
+	local prFrame, prBtn = newToggle("Presence", 1, "Presence: Off")
+	local feFrame, feBtn = newToggle("Fear", 2, "Fear: Off")
+	local tdFrame, tdBtn = newToggle("TimeDelation", 3, "Time Delation: Off")
+	local teFrame, teBtn = newToggle("TrueErase", 4, "True Erasure (Manual): Off")
 
-    ffBtn.MouseButton1Click:Connect(function()
-        toggleState.Forcefield = not toggleState.Forcefield
-        ffBtn.Text = "Forcefield: " .. (toggleState.Forcefield and "On" or "Off")
-    end)
-    prBtn.MouseButton1Click:Connect(function()
-        toggleState.Presence = not toggleState.Presence
-        prBtn.Text = "Presence: " .. (toggleState.Presence and "On" or "Off")
-    end)
-    feBtn.MouseButton1Click:Connect(function()
-        toggleState.Fear = not toggleState.Fear
-        feBtn.Text = "Fear: " .. (toggleState.Fear and "On" or "Off")
-    end)
-    tdBtn.MouseButton1Click:Connect(function()
-        toggleState.TimeDelation = not toggleState.TimeDelation
-        tdBtn.Text = "Time Delation: " .. (toggleState.TimeDelation and "On" or "Off")
-    end)
+	xBtn.MouseButton1Click:Connect(function()
+		toggleState.Hidden = not toggleState.Hidden
+		if toggleState.Hidden then
+			xBtn.Text = "O"
+			ffFrame.Visible = false
+			prFrame.Visible = false
+			feFrame.Visible = false
+			tdFrame.Visible = false
+			teFrame.Visible = false
+		else
+			xBtn.Text = "X"
+			ffFrame.Visible = true
+			prFrame.Visible = true
+			feFrame.Visible = true
+			tdFrame.Visible = true
+			teFrame.Visible = true
+		end
+	end)
 
-    -- NEW: manual True Erasure toggle inside passive UI
-    teBtn.MouseButton1Click:Connect(function()
-        toggleState.TrueErasureManual = not toggleState.TrueErasureManual
-        trueErasureState = toggleState.TrueErasureManual -- keep global state in sync with tool UI
-        teBtn.Text = "True Erasure (Manual): " .. (toggleState.TrueErasureManual and "On" or "Off")
-        -- update the Erase tool GUI if present so everything stays in sync
-        updateEraseGuiToggleText()
-    end)
+	ffBtn.MouseButton1Click:Connect(function()
+		toggleState.Forcefield = not toggleState.Forcefield
+		ffBtn.Text = "Forcefield: " .. (toggleState.Forcefield and "On" or "Off")
+	end)
 
-    return {
-        SG = sg,
-        XBtn = xBtn,
-        ForcefieldBtn = ffBtn,
-        PresenceBtn = prBtn,
-        FearBtn = feBtn,
-        TimeDelationBtn = tdBtn,
-        TrueEraseBtn = teBtn
-    }
+	prBtn.MouseButton1Click:Connect(function()
+		toggleState.Presence = not toggleState.Presence
+		prBtn.Text = "Presence: " .. (toggleState.Presence and "On" or "Off")
+	end)
+
+	feBtn.MouseButton1Click:Connect(function()
+		toggleState.Fear = not toggleState.Fear
+		feBtn.Text = "Fear: " .. (toggleState.Fear and "On" or "Off")
+	end)
+
+	tdBtn.MouseButton1Click:Connect(function()
+		toggleState.TimeDelation = not toggleState.TimeDelation
+		tdBtn.Text = "Time Delation: " .. (toggleState.TimeDelation and "On" or "Off")
+	end)
+
+	teBtn.MouseButton1Click:Connect(function()
+		toggleState.TrueErasureManual = not toggleState.TrueErasureManual
+		trueErasureState = toggleState.TrueErasureManual
+		teBtn.Text = "True Erasure (Manual): " .. (toggleState.TrueErasureManual and "On" or "Off")
+		updateEraseGuiToggleText()
+	end)
+
+	return {
+		SG = sg,
+		XBtn = xBtn,
+		ForcefieldBtn = ffBtn,
+		PresenceBtn = prBtn,
+		FearBtn = feBtn,
+		TimeDelationBtn = tdBtn,
+		TrueEraseBtn = teBtn
+	}
 end
 
-local passiveUI = createPassiveUI()
+passiveUI = createPassiveUI()
 
 -- ====== FORCEFIELD (radius-based fling, non-lethal) ======
 local lastForcefieldAt = {} -- model -> last processed timestamp
 
 local function processForcefieldOnModel(model, centerPos)
-    if not model or not model.Parent then return end
-    local now = tick()
-    if lastForcefieldAt[model] and now - lastForcefieldAt[model] < FORCEFIELD_COOLDOWN then return end
-    lastForcefieldAt[model] = now
+	if not model or not model.Parent then
+		return
+	end
+	local now = tick()
+	if lastForcefieldAt[model] and now - lastForcefieldAt[model] < FORCEFIELD_COOLDOWN then
+		return
+	end
+	lastForcefieldAt[model] = now
 
-    local hrp = getModelRoot(model)
-    if not hrp then return end
-    local ok, pos = pcall(function() return hrp.Position end)
-    if not ok or not pos then return end
-    local dir = (pos - centerPos)
-    if dir.Magnitude <= 0.001 then dir = Vector3.new(0,1,0) end
+	local hrp = getModelRoot(model)
+	if not hrp then
+		return
+	end
+	local ok, pos = pcall(function()
+		return hrp.Position
+	end)
+	if not ok or not pos then
+		return
+	end
 
-    local horizExtent = getModelHorizontalExtent(model)
-    local AVERAGE_NPC_SIZE = 2.0
-    local sizeScale = math.max(1, horizExtent / AVERAGE_NPC_SIZE)
+	local dir = (pos - centerPos)
+	if dir.Magnitude <= 0.001 then
+		dir = Vector3.new(0, 1, 0)
+	end
 
-    local velMag = FORCEFIELD_BASE_VEL * sizeScale
-    local vel = dir.Unit * velMag + Vector3.new(0, FORCEFIELD_UPWARD_BONUS, 0)
+	local horizExtent = getModelHorizontalExtent(model)
+	local AVERAGE_NPC_SIZE = 2.0
+	local sizeScale = math.max(1, horizExtent / AVERAGE_NPC_SIZE)
 
-    for _,part in ipairs(model:GetDescendants()) do
-        if part:IsA("BasePart") then
-            pcall(function() part.AssemblyLinearVelocity = vel end)
-        end
-    end
+	local velMag = FORCEFIELD_BASE_VEL * sizeScale
+	local vel = dir.Unit * velMag + Vector3.new(0, FORCEFIELD_UPWARD_BONUS, 0)
+
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			pcall(function()
+				part.AssemblyLinearVelocity = vel
+			end)
+		end
+	end
 end
 
-spawn(function()
-    while true do
-        if toggleState and toggleState.Forcefield then
-            local center = getPlayerCenterPosition()
-            for _,desc in ipairs(Workspace:GetDescendants()) do
-                if desc:IsA("Model") and isNPC(desc) then
-                    local hrp = getModelRoot(desc)
-                    if hrp and hrp.Parent then
-                        local ok, pos = pcall(function() return hrp.Position end)
-                        if ok and pos and (pos - center).Magnitude <= FORCEFIELD_RADIUS then
-                            processForcefieldOnModel(desc, center)
-                        end
-                    end
-                end
-            end
-        end
-        task.wait(FORCEFIELD_CHECK_INTERVAL)
-    end
+task.spawn(function()
+	while true do
+		if toggleState and toggleState.Forcefield then
+			local center = getPlayerCenterPosition()
+			for _, desc in ipairs(Workspace:GetDescendants()) do
+				if desc:IsA("Model") and isNPC(desc) then
+					local hrp = getModelRoot(desc)
+					if hrp and hrp.Parent then
+						local ok, pos = pcall(function()
+							return hrp.Position
+						end)
+						if ok and pos and (pos - center).Magnitude <= FORCEFIELD_RADIUS then
+							processForcefieldOnModel(desc, center)
+						end
+					end
+				end
+			end
+		end
+		task.wait(FORCEFIELD_CHECK_INTERVAL)
+	end
 end)
 
 -- ====== FEAR ======
@@ -619,156 +798,172 @@ local fearState = {}
 local FEAR_RADIUS = 200
 
 local function applyFearHeartbeat()
-    local centerPos = getPlayerCenterPosition()
-    if not centerPos then return end
+	local centerPos = getPlayerCenterPosition()
+	if not centerPos then
+		return
+	end
 
-    local toHandle = {}
-    for _,desc in ipairs(Workspace:GetDescendants()) do
-        if desc:IsA("Humanoid") then
-            local model = desc.Parent
-            if model and isNPC(model) then
-                local hrp = getModelRoot(model)
-                if hrp and (hrp.Position - centerPos).Magnitude <= FEAR_RADIUS then
-                    table.insert(toHandle, {hum = desc, model = model, hrp = hrp})
-                end
-            end
-        end
-    end
+	local toHandle = {}
+	for _, desc in ipairs(Workspace:GetDescendants()) do
+		if desc:IsA("Humanoid") then
+			local model = desc.Parent
+			if model and isNPC(model) then
+				local hrp = getModelRoot(model)
+				if hrp and (hrp.Position - centerPos).Magnitude <= FEAR_RADIUS then
+					table.insert(toHandle, { hum = desc, model = model, hrp = hrp })
+				end
+			end
+		end
+	end
 
-    for _,entry in ipairs(toHandle) do
-        local model = entry.model
-        local hum = entry.hum
-        if not fearState[model] then
-            local roll = math.random()
-            if roll <= 0.7 then
-                fearState[model] = { mode = "run", origWalk = hum.WalkSpeed }
-            else
-                fearState[model] = { mode = "freeze", origWalk = hum.WalkSpeed }
-                pcall(function() if hum and hum.Parent then hum.WalkSpeed = 0 end end)
-            end
-        end
-    end
+	for _, entry in ipairs(toHandle) do
+		local model = entry.model
+		local hum = entry.hum
+		if not fearState[model] then
+			fearState[model] = { mode = "run", origWalk = hum.WalkSpeed }
+		end
+	end
 
-    local currentSet = {}
-    for _,e in ipairs(toHandle) do currentSet[e.model] = true end
-    for model,s in pairs(fearState) do
-        if model and model.Parent then
-            if not currentSet[model] then
-                local hum = model:FindFirstChildOfClass("Humanoid")
-                if hum and s and s.origWalk then
-                    pcall(function() hum.WalkSpeed = s.origWalk end)
-                end
-                fearState[model] = nil
-            end
-        else
-            fearState[model] = nil
-        end
-    end
+	local currentSet = {}
+	for _, e in ipairs(toHandle) do
+		currentSet[e.model] = true
+	end
 
-    for model,s in pairs(fearState) do
-        if model and model.Parent and s.mode == "run" then
-            local hum = model:FindFirstChildOfClass("Humanoid")
-            local hrp = getModelRoot(model)
-            if hum and hrp and hrp.Parent then
-                local dir = (hrp.Position - centerPos)
-                if dir.Magnitude <= 0.5 then
-                    dir = Vector3.new(math.random()-0.5, 0, math.random()-0.5)
-                end
-                local target = hrp.Position + dir.Unit * 40
-                pcall(function() hum:MoveTo(target) end)
-            else
-                fearState[model] = nil
-            end
-        end
-    end
+	for model, s in pairs(fearState) do
+		if model and model.Parent then
+			if not currentSet[model] then
+				local hum = model:FindFirstChildOfClass("Humanoid")
+				if hum and s and s.origWalk then
+					pcall(function()
+						hum.WalkSpeed = s.origWalk
+					end)
+				end
+				fearState[model] = nil
+			end
+		else
+			fearState[model] = nil
+		end
+	end
+
+	for model, s in pairs(fearState) do
+		if model and model.Parent and s.mode == "run" then
+			local hum = model:FindFirstChildOfClass("Humanoid")
+			local hrp = getModelRoot(model)
+			if hum and hrp and hrp.Parent then
+				local dir = (hrp.Position - centerPos)
+				if dir.Magnitude <= 0.5 then
+					dir = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5)
+				end
+				local target = hrp.Position + dir.Unit * 40
+				pcall(function()
+					hum:MoveTo(target)
+				end)
+			else
+				fearState[model] = nil
+			end
+		end
+	end
 end
 
 local function clearFearState()
-    for model,s in pairs(fearState) do
-        if model and model.Parent then
-            local hum = model:FindFirstChildOfClass("Humanoid")
-            if hum and s.origWalk then
-                pcall(function() hum.WalkSpeed = s.origWalk end)
-            end
-        end
-        fearState[model] = nil
-    end
+	for model, s in pairs(fearState) do
+		if model and model.Parent then
+			local hum = model:FindFirstChildOfClass("Humanoid")
+			if hum and s.origWalk then
+				pcall(function()
+					hum.WalkSpeed = s.origWalk
+				end)
+			end
+		end
+		fearState[model] = nil
+	end
 end
 
 local heartbeatConn
-heartbeatConn = RunService.Heartbeat:Connect(function(dt)
-    if toggleState and toggleState.Fear then
-        applyFearHeartbeat()
-    else
-        if next(fearState) ~= nil then
-            clearFearState()
-        end
-    end
+heartbeatConn = RunService.Heartbeat:Connect(function(_dt)
+	if toggleState and toggleState.Fear then
+		applyFearHeartbeat()
+	else
+		if next(fearState) ~= nil then
+			clearFearState()
+		end
+	end
 end)
 
 -- ====== TIME DELATION ======
 local timeDelationRecords = {}
 
 local function applyTimeDelationOnce()
-    for _,entry in ipairs(getAllNPCHumanoids()) do
-        local hum = entry.hum
-        local model = entry.model
-        if toggleState and toggleState.TimeDelation then
-            if model and not timeDelationRecords[model] then
-                local origWalk = hum.WalkSpeed
-                local origJump = hum.JumpPower or hum.JumpHeight or 0
-                timeDelationRecords[model] = { origWalk = origWalk, origJump = origJump }
-                pcall(function()
-                    hum.WalkSpeed = math.max(1, origWalk * 0.15)
-                    if hum.JumpPower then hum.JumpPower = (origJump and origJump * 0.15) or hum.JumpPower end
-                end)
-            end
-        else
-            if timeDelationRecords[model] then
-                local rec = timeDelationRecords[model]
-                pcall(function()
-                    if hum and hum.Parent then
-                        hum.WalkSpeed = rec.origWalk or hum.WalkSpeed
-                        if hum.JumpPower then hum.JumpPower = rec.origJump or hum.JumpPower end
-                    end
-                end)
-                timeDelationRecords[model] = nil
-            end
-        end
-    end
+	for _, entry in ipairs(getAllNPCHumanoids()) do
+		local hum = entry.hum
+		local model = entry.model
+		if toggleState and toggleState.TimeDelation then
+			if model and not timeDelationRecords[model] then
+				local origWalk = hum.WalkSpeed
+				local origJump = hum.JumpPower or hum.JumpHeight or 0
+				timeDelationRecords[model] = { origWalk = origWalk, origJump = origJump }
+				pcall(function()
+					hum.WalkSpeed = math.max(1, origWalk * 0.15)
+					if hum.JumpPower then
+						hum.JumpPower = (origJump and origJump * 0.15) or hum.JumpPower
+					end
+				end)
+			end
+		else
+			if timeDelationRecords[model] then
+				local rec = timeDelationRecords[model]
+				pcall(function()
+					if hum and hum.Parent then
+						hum.WalkSpeed = rec.origWalk or hum.WalkSpeed
+						if hum.JumpPower then
+							hum.JumpPower = rec.origJump or hum.JumpPower
+						end
+					end
+				end)
+				timeDelationRecords[model] = nil
+			end
+		end
+	end
 end
 
 local function clearTimeDelation()
-    for model,rec in pairs(timeDelationRecords) do
-        if model and model.Parent then
-            local hum = model:FindFirstChildOfClass("Humanoid")
-            if hum then
-                pcall(function() hum.WalkSpeed = rec.origWalk or hum.WalkSpeed; if hum.JumpPower then hum.JumpPower = rec.origJump or hum.JumpPower end end)
-            end
-        end
-        timeDelationRecords[model] = nil
-    end
+	for model, rec in pairs(timeDelationRecords) do
+		if model and model.Parent then
+			local hum = model:FindFirstChildOfClass("Humanoid")
+			if hum then
+				pcall(function()
+					hum.WalkSpeed = rec.origWalk or hum.WalkSpeed
+					if hum.JumpPower then
+						hum.JumpPower = rec.origJump or hum.JumpPower
+					end
+				end)
+			end
+		end
+		timeDelationRecords[model] = nil
+	end
 end
 
-spawn(function()
-    while true do
-        if toggleState and toggleState.TimeDelation then
-            applyTimeDelationOnce()
-        else
-            clearTimeDelation()
-        end
-        task.wait(TIME_DELATION_INTERVAL)
-    end
+task.spawn(function()
+	while true do
+		if toggleState and toggleState.TimeDelation then
+			applyTimeDelationOnce()
+		else
+			clearTimeDelation()
+		end
+		task.wait(TIME_DELATION_INTERVAL)
+	end
 end)
 
 -- ensure Erase on script start + backpack watcher
 ensureEraseTool()
-spawn(watchBackpack)
+task.spawn(watchBackpack)
 
 player.CharacterAdded:Connect(function()
-    task.wait(0.05)
-    ensureEraseTool()
-    if passiveUI and passiveUI.SG then passiveUI.SG.Parent = player:FindFirstChildOfClass("PlayerGui") end
+	task.wait(0.05)
+	ensureEraseTool()
+	if passiveUI and passiveUI.SG then
+		passiveUI.SG.Parent = player:FindFirstChildOfClass("PlayerGui")
+	end
 end)
 
 print("True Void Part One (Presence + Erase area teleports to EXTREME_POS) loaded for", player.Name)
