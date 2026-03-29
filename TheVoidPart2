@@ -1,7 +1,8 @@
--- VoidAbility_v2_domain_sendloop_handles.lua
+-- VoidAbility_v3_domain_sendloop_handles.lua
 -- Place in StarterPlayer -> StarterPlayerScripts (client)
--- CLICK DOES NOT TRIGGER DOMAIN. Clicks use sendModelToVoidWithHandle exactly like original.
--- Changes: entry float runs simultaneously for player + NPCs; player's velocities cleared every 0.5s for a short duration after floats.
+-- Click ability stays send-to-void only. Tool is handleless, with a temporary invisible handle that self-removes after 1 second.
+-- Void's Domain stays intact.
+-- Added: separate Go to domain / Exit domain toggle and Return Everything button.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -16,6 +17,8 @@ local Camera = Workspace.CurrentCamera
 local TOOL_NAME = "Void."
 local DOMAIN_BUTTON_NAME = "VoidDomainBtn"
 local SECOND_BUTTON_NAME = "SendAllToVoidBtn"
+local TOGGLE_BUTTON_NAME = "DomainTravelBtn"
+local RETURN_BUTTON_NAME = "ReturnEverythingBtn"
 
 local VOID_FALLEN_HEIGHT = -500
 local VOID_MIN_OFFSET = 10
@@ -28,844 +31,1268 @@ local DOMAIN_FLOAT_TIME = 3
 local DOMAIN_ENTRY_LIFT_TIME = 1.2
 local SEND_ALL_VOID_DELAY = 0.01
 
--- Velocity cleanup settings (clears player's velocities every CLEAR_VEL_INTERVAL seconds for CLEAR_VEL_DURATION seconds)
 local CLEAR_VEL_INTERVAL = 0.5
-local CLEAR_VEL_DURATION = 4 -- seconds
+local CLEAR_VEL_DURATION = 4
 
 -- Internal state
 local toolInstance = nil
-local domainActive = false
+local domainActive = false -- original Void's Domain state
+local softDomainActive = false -- separate Go to domain / Exit domain state
+
 local domainState = {
-    originalTime = nil,
-    createdFolder = nil,
-    npcRecords = {}, -- model -> {hum, origWalk, origJump, origPlatform, partOffsets = {part->Vector3}, destHRP = Vector3, floatOffset = Vector3}
-    playerOriginalCFrame = nil,
-    playerOriginalPlatformStand = nil,
-    playerOriginalWalk = nil,
-    playerOriginalJump = nil,
-    playerHRPCanCollide = nil,
-    entryAnchor = nil,
-    isFloating = false,
+	originalTime = nil,
+	createdFolder = nil,
+	npcRecords = {}, -- model -> record
+	playerOriginalCFrame = nil,
+	playerOriginalPlatformStand = nil,
+	playerOriginalWalk = nil,
+	playerOriginalJump = nil,
+	playerHRPCanCollide = nil,
+	entryAnchor = nil,
+	isFloating = false,
 }
+
+local softState = {
+	originalTime = nil,
+	createdFolder = nil,
+	playerOriginalCFrame = nil,
+	playerOriginalPlatformStand = nil,
+	playerOriginalWalk = nil,
+	playerOriginalJump = nil,
+	playerHRPCanCollide = nil,
+	entryAnchor = nil,
+	npcRecords = {}, -- model -> record
+}
+
 local trackedVoidSelections = {} -- model -> humanoid
+local goDomainButtonRef = nil -- current "Go to domain / Exit domain" button
 
 -- Helpers
-local function isPlayerCharacter(model) return model and Players:GetPlayerFromCharacter(model) ~= nil end
+local function isPlayerCharacter(model)
+	return model and Players:GetPlayerFromCharacter(model) ~= nil
+end
+
 local function isNPC(model)
-    if not model or not model:IsA("Model") then return false end
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    return hum and not Players:GetPlayerFromCharacter(model)
+	if not model or not model:IsA("Model") then return false end
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	return hum and not Players:GetPlayerFromCharacter(model)
 end
 
 local function getModelRoot(model)
-    if not model then return nil end
-    return model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
+	if not model then return nil end
+	return model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
 end
 
 local function getModelSizeExtent(model)
-    if not model then return Vector3.new(1,1,1) end
-    local ok, size = pcall(function() return model:GetExtentsSize() end)
-    if ok and typeof(size) == "Vector3" then return size end
-    local minP, maxP
-    for _,p in ipairs(model:GetDescendants()) do
-        if p:IsA("BasePart") then
-            local half = p.Size * 0.5
-            local pMin = p.Position - half
-            local pMax = p.Position + half
-            if not minP then minP = pMin; maxP = pMax
-            else
-                minP = Vector3.new(math.min(minP.X, pMin.X), math.min(minP.Y, pMin.Y), math.min(minP.Z, pMin.Z))
-                maxP = Vector3.new(math.max(maxP.X, pMax.X), math.max(maxP.Y, pMax.Y), math.max(maxP.Z, pMax.Z))
-            end
-        end
-    end
-    if minP and maxP then return maxP - minP end
-    return Vector3.new(1,1,1)
+	if not model then return Vector3.new(1,1,1) end
+	local ok, size = pcall(function() return model:GetExtentsSize() end)
+	if ok and typeof(size) == "Vector3" then return size end
+	local minP, maxP
+	for _,p in ipairs(model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			local half = p.Size * 0.5
+			local pMin = p.Position - half
+			local pMax = p.Position + half
+			if not minP then
+				minP = pMin
+				maxP = pMax
+			else
+				minP = Vector3.new(math.min(minP.X, pMin.X), math.min(minP.Y, pMin.Y), math.min(minP.Z, pMin.Z))
+				maxP = Vector3.new(math.max(maxP.X, pMax.X), math.max(maxP.Y, pMax.Y), math.max(maxP.Z, pMax.Z))
+			end
+		end
+	end
+	if minP and maxP then return maxP - minP end
+	return Vector3.new(1,1,1)
 end
 
 local function screenRayFindHumanoid(screenX, screenY, maxDistance, snapRadius)
-    maxDistance = maxDistance or 2000
-    snapRadius = snapRadius or 8
-    if not Camera then Camera = Workspace.CurrentCamera end
-    local ray = Camera:ScreenPointToRay(screenX, screenY)
-    local origin = ray.Origin
-    local dir = ray.Direction.Unit
-    local bestHum, bestModel, bestProj = nil, nil, math.huge
-    for _, desc in ipairs(Workspace:GetDescendants()) do
-        if desc and desc:IsA("Humanoid") then
-            local h = desc
-            local model = h.Parent
-            if model and model:IsA("Model") and not Players:GetPlayerFromCharacter(model) then
-                local hrp = getModelRoot(model)
-                if hrp and hrp:IsA("BasePart") then
-                    local toHRP = hrp.Position - origin
-                    local proj = toHRP:Dot(dir)
-                    if proj > 0 and proj <= maxDistance then
-                        local closestPoint = origin + dir * proj
-                        local perpDist = (hrp.Position - closestPoint).Magnitude
-                        if perpDist <= snapRadius and proj < bestProj then
-                            bestHum = h
-                            bestModel = model
-                            bestProj = proj
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return bestHum, bestModel
+	maxDistance = maxDistance or 2000
+	snapRadius = snapRadius or 8
+	if not Camera then Camera = Workspace.CurrentCamera end
+	local ray = Camera:ScreenPointToRay(screenX, screenY)
+	local origin = ray.Origin
+	local dir = ray.Direction.Unit
+	local bestHum, bestModel, bestProj = nil, nil, math.huge
+	for _, desc in ipairs(Workspace:GetDescendants()) do
+		if desc and desc:IsA("Humanoid") then
+			local h = desc
+			local model = h.Parent
+			if model and model:IsA("Model") and not Players:GetPlayerFromCharacter(model) then
+				local hrp = getModelRoot(model)
+				if hrp and hrp:IsA("BasePart") then
+					local toHRP = hrp.Position - origin
+					local proj = toHRP:Dot(dir)
+					if proj > 0 and proj <= maxDistance then
+						local closestPoint = origin + dir * proj
+						local perpDist = (hrp.Position - closestPoint).Magnitude
+						if perpDist <= snapRadius and proj < bestProj then
+							bestHum = h
+							bestModel = model
+							bestProj = proj
+						end
+					end
+				end
+			end
+		end
+	end
+	return bestHum, bestModel
 end
 
 local function ensureVoidTool()
-    local bp = localPlayer:FindFirstChildOfClass("Backpack")
-    if not bp then return end
-    local existing = bp:FindFirstChild(TOOL_NAME) or (localPlayer.Character and localPlayer.Character:FindFirstChild(TOOL_NAME))
-    if existing and existing:IsA("Tool") then return existing end
-    local tool = Instance.new("Tool")
-    tool.Name = TOOL_NAME
-    tool.RequiresHandle = false
-    tool.CanBeDropped = false
-    tool.Parent = bp
-    return tool
+	local bp = localPlayer:FindFirstChildOfClass("Backpack")
+	if not bp then return end
+
+	local existing = bp:FindFirstChild(TOOL_NAME) or (localPlayer.Character and localPlayer.Character:FindFirstChild(TOOL_NAME))
+	if existing and existing:IsA("Tool") then
+		existing.RequiresHandle = false
+		return existing
+	end
+
+	local tool = Instance.new("Tool")
+	tool.Name = TOOL_NAME
+	tool.RequiresHandle = false
+	tool.CanBeDropped = false
+	tool.Parent = bp
+
+	-- Temporary invisible handle, then remove it after 1 second.
+	task.spawn(function()
+		task.wait(1)
+		if tool and tool.Parent then
+			local handle = tool:FindFirstChild("Handle")
+			if handle then
+				pcall(function() handle:Destroy() end)
+			end
+		end
+	end)
+
+	return tool
 end
 
--- Teleport model to Void (above FallenPartsDestroyHeight) — same logic as original (instant send).
+local function createTemporaryHandle(tool)
+	if not tool or not tool:IsA("Tool") then return end
+	tool.RequiresHandle = false
+	local old = tool:FindFirstChild("Handle")
+	if old then
+		pcall(function() old:Destroy() end)
+	end
+
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.new(1, 1, 1)
+	handle.Transparency = 1
+	handle.CanCollide = false
+	handle.CanQuery = false
+	handle.CanTouch = false
+	handle.Massless = true
+	handle.Anchored = false
+	handle.Parent = tool
+
+	task.delay(1, function()
+		if handle and handle.Parent then
+			pcall(function() handle:Destroy() end)
+		end
+	end)
+end
+
+-- Teleport model to Void (same logic as original)
 local function sendModelToVoidWithHandle(tool, model, source)
-    if not model or not model.Parent then return end
-    local hrp = getModelRoot(model)
-    if not hrp or not hrp:IsA("BasePart") then return end
+	if not model or not model.Parent then return end
+	local hrp = getModelRoot(model)
+	if not hrp or not hrp:IsA("BasePart") then return end
 
-    pcall(function() Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT end)
+	pcall(function() Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT end)
 
-    local ext = getModelSizeExtent(model)
-    local sizeBasedOffset = math.max(VOID_MIN_OFFSET, ext.Y * 0.5 + math.max(ext.X, ext.Z) * 0.25)
-    local targetY = VOID_FALLEN_HEIGHT + sizeBasedOffset
+	local ext = getModelSizeExtent(model)
+	local sizeBasedOffset = math.max(VOID_MIN_OFFSET, ext.Y * 0.5 + math.max(ext.X, ext.Z) * 0.25)
+	local targetY = VOID_FALLEN_HEIGHT + sizeBasedOffset
 
-    for _, part in ipairs(model:GetDescendants()) do
-        if part:IsA("BasePart") then
-            pcall(function() part.CFrame = CFrame.new(part.Position.X, targetY, part.Position.Z) end)
-        end
-    end
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			pcall(function() part.CFrame = CFrame.new(part.Position.X, targetY, part.Position.Z) end)
+		end
+	end
 end
 
 local function trackSelectionAndRestoreOnDeaths(selectionTable)
-    local remaining = {}
-    for model, hum in pairs(selectionTable) do
-        if model and model.Parent and hum and hum.Parent then
-            remaining[model] = hum
-        end
-    end
-    if next(remaining) == nil then
-        pcall(function() Workspace.FallenPartsDestroyHeight = 0/0 end)
-        return
-    end
+	local remaining = {}
+	for model, hum in pairs(selectionTable) do
+		if model and model.Parent and hum and hum.Parent then
+			remaining[model] = hum
+		end
+	end
+	if next(remaining) == nil then
+		pcall(function() Workspace.FallenPartsDestroyHeight = 0/0 end)
+		return
+	end
 
-    local count = 0
-    local conns = {}
-    for model, hum in pairs(remaining) do
-        count = count + 1
-        local function onDied()
-            if conns[model] then
-                pcall(function() conns[model]:Disconnect() end)
-                conns[model] = nil
-            end
-            remaining[model] = nil
-            count = count - 1
-            if count <= 0 then
-                pcall(function() Workspace.FallenPartsDestroyHeight = 0/0 end)
-            end
-        end
-        conns[model] = hum.Died:Connect(onDied)
-    end
+	local count = 0
+	local conns = {}
+	for model, hum in pairs(remaining) do
+		count = count + 1
+		local function onDied()
+			if conns[model] then
+				pcall(function() conns[model]:Disconnect() end)
+				conns[model] = nil
+			end
+			remaining[model] = nil
+			count = count - 1
+			if count <= 0 then
+				pcall(function() Workspace.FallenPartsDestroyHeight = 0/0 end)
+			end
+		end
+		conns[model] = hum.Died:Connect(onDied)
+	end
 end
 
--- Domain utilities (create/destroy)
+-- Domain utilities
 local function createDomainBox()
-    local root = Instance.new("Folder")
-    root.Name = "VoidDomainTemp"
-    root.Parent = Workspace
-    -- floor
-    local floor = Instance.new("Part")
-    floor.Name = "VoidFloor"
-    floor.Size = Vector3.new(DOMAIN_BOX_SIZE.X, 2, DOMAIN_BOX_SIZE.Z)
-    floor.Anchored = true
-    floor.CanCollide = true
-    floor.Position = DOMAIN_BOX_WORLD_POS
-    floor.BrickColor = BrickColor.new("Really black")
-    floor.Material = Enum.Material.SmoothPlastic
-    floor.Parent = root
-    -- walls & ceiling (kept simple)
-    local halfX = DOMAIN_BOX_SIZE.X/2
-    local halfZ = DOMAIN_BOX_SIZE.Z/2
-    local wallThickness = 4
-    local wallHeight = DOMAIN_BOX_SIZE.Y
-    local function makeWall(pos, size, name)
-        local w = Instance.new("Part")
-        w.Name = name
-        w.Size = size
-        w.Anchored = true
-        w.CanCollide = true
-        w.Position = pos
-        w.BrickColor = BrickColor.new("Really black")
-        w.Material = Enum.Material.SmoothPlastic
-        w.Parent = root
-        return w
-    end
-    local center = DOMAIN_BOX_WORLD_POS
-    makeWall(center + Vector3.new(0, wallHeight/2 + 1, halfZ + wallThickness/2),
-             Vector3.new(DOMAIN_BOX_SIZE.X, wallHeight, wallThickness), "Wall_N")
-    makeWall(center + Vector3.new(0, wallHeight/2 + 1, -halfZ - wallThickness/2),
-             Vector3.new(DOMAIN_BOX_SIZE.X, wallHeight, wallThickness), "Wall_S")
-    makeWall(center + Vector3.new(halfX + wallThickness/2, wallHeight/2 + 1, 0),
-             Vector3.new(wallThickness, wallHeight, DOMAIN_BOX_SIZE.Z), "Wall_E")
-    makeWall(center + Vector3.new(-halfX - wallThickness/2, wallHeight/2 + 1, 0),
-             Vector3.new(wallThickness, wallHeight, DOMAIN_BOX_SIZE.Z), "Wall_W")
-    local ceiling = Instance.new("Part")
-    ceiling.Name = "VoidCeiling"
-    ceiling.Size = Vector3.new(DOMAIN_BOX_SIZE.X, 2, DOMAIN_BOX_SIZE.Z)
-    ceiling.Anchored = true
-    ceiling.CanCollide = true
-    ceiling.Position = center + Vector3.new(0, wallHeight + 2, 0)
-    ceiling.BrickColor = BrickColor.new("Really black")
-    ceiling.Material = Enum.Material.SmoothPlastic
-    ceiling.Parent = root
+	local root = Instance.new("Folder")
+	root.Name = "VoidDomainTemp"
+	root.Parent = Workspace
 
-    return root
+	local floor = Instance.new("Part")
+	floor.Name = "VoidFloor"
+	floor.Size = Vector3.new(DOMAIN_BOX_SIZE.X, 2, DOMAIN_BOX_SIZE.Z)
+	floor.Anchored = true
+	floor.CanCollide = true
+	floor.Position = DOMAIN_BOX_WORLD_POS
+	floor.BrickColor = BrickColor.new("Really black")
+	floor.Material = Enum.Material.SmoothPlastic
+	floor.Parent = root
+
+	local halfX = DOMAIN_BOX_SIZE.X/2
+	local halfZ = DOMAIN_BOX_SIZE.Z/2
+	local wallThickness = 4
+	local wallHeight = DOMAIN_BOX_SIZE.Y
+
+	local function makeWall(pos, size, name)
+		local w = Instance.new("Part")
+		w.Name = name
+		w.Size = size
+		w.Anchored = true
+		w.CanCollide = true
+		w.Position = pos
+		w.BrickColor = BrickColor.new("Really black")
+		w.Material = Enum.Material.SmoothPlastic
+		w.Parent = root
+		return w
+	end
+
+	local center = DOMAIN_BOX_WORLD_POS
+	makeWall(center + Vector3.new(0, wallHeight/2 + 1, halfZ + wallThickness/2), Vector3.new(DOMAIN_BOX_SIZE.X, wallHeight, wallThickness), "Wall_N")
+	makeWall(center + Vector3.new(0, wallHeight/2 + 1, -halfZ - wallThickness/2), Vector3.new(DOMAIN_BOX_SIZE.X, wallHeight, wallThickness), "Wall_S")
+	makeWall(center + Vector3.new(halfX + wallThickness/2, wallHeight/2 + 1, 0), Vector3.new(wallThickness, wallHeight, DOMAIN_BOX_SIZE.Z), "Wall_E")
+	makeWall(center + Vector3.new(-halfX - wallThickness/2, wallHeight/2 + 1, 0), Vector3.new(wallThickness, wallHeight, DOMAIN_BOX_SIZE.Z), "Wall_W")
+
+	local ceiling = Instance.new("Part")
+	ceiling.Name = "VoidCeiling"
+	ceiling.Size = Vector3.new(DOMAIN_BOX_SIZE.X, 2, DOMAIN_BOX_SIZE.Z)
+	ceiling.Anchored = true
+	ceiling.CanCollide = true
+	ceiling.Position = center + Vector3.new(0, wallHeight + 2, 0)
+	ceiling.BrickColor = BrickColor.new("Really black")
+	ceiling.Material = Enum.Material.SmoothPlastic
+	ceiling.Parent = root
+
+	return root
 end
 
 local function destroyDomainBox(folder)
-    if not folder then return end
-    pcall(function() folder:Destroy() end)
+	if not folder then return end
+	pcall(function() folder:Destroy() end)
 end
 
--- Small helper: check if a world position is inside the domain box
 local function isPositionInsideDomain(pos)
-    if not pos then return false end
-    local center = DOMAIN_BOX_WORLD_POS
-    local half = DOMAIN_BOX_SIZE * 0.5
-    local diff = pos - center
-    return math.abs(diff.X) <= half.X and math.abs(diff.Y) <= half.Y and math.abs(diff.Z) <= half.Z
+	if not pos then return false end
+	local center = DOMAIN_BOX_WORLD_POS
+	local half = DOMAIN_BOX_SIZE * 0.5
+	local diff = pos - center
+	return math.abs(diff.X) <= half.X and math.abs(diff.Y) <= half.Y and math.abs(diff.Z) <= half.Z
 end
 
--- Lock / restore NPC data in domain
-local function lockNPCInDomain(model)
-    if not model then return end
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    if domainState.npcRecords[model] then return end
-    local rec = {}
-    rec.hum = hum
-    rec.origWalk = hum.WalkSpeed
-    rec.origJump = hum.JumpPower or 0
-    rec.origPlatform = hum.PlatformStand
-    rec.partOffsets = {}    -- part -> offset from HRP (Vector3)
-    rec.destHRP = nil
-    rec.floatOffset = nil
-    pcall(function()
-        hum.WalkSpeed = 0
-        if hum.JumpPower ~= nil then hum.JumpPower = 0 end
-        hum.PlatformStand = true
-    end)
-    domainState.npcRecords[model] = rec
-end
-
-local function updateNPCPartOffsetsAndDest(model, destHRP)
-    if not model then return end
-    local rec = domainState.npcRecords[model]
-    if not rec then return end
-    local hrp = getModelRoot(model)
-    if not hrp or not hrp:IsA("BasePart") then return end
-    rec.partOffsets = {}
-    for _, p in ipairs(model:GetDescendants()) do
-        if p:IsA("BasePart") then
-            rec.partOffsets[p] = p.Position - hrp.Position
-        end
-    end
-    rec.destHRP = destHRP
-end
-
-local function restoreNPCFromDomain(model)
-    if not model then return end
-    local rec = domainState.npcRecords[model]
-    if not rec then return end
-    local hum = rec.hum
-    pcall(function()
-        if hum and hum.Parent then
-            hum.WalkSpeed = rec.origWalk or hum.WalkSpeed
-            if hum.JumpPower ~= nil then hum.JumpPower = rec.origJump or hum.JumpPower end
-            hum.PlatformStand = rec.origPlatform or false
-        end
-    end)
-    domainState.npcRecords[model] = nil
-end
-
--- Clears HRP velocities periodically (interval seconds) for duration seconds
 local function clearVelocityPeriodic(hrp, interval, duration)
-    if not hrp then return end
-    spawn(function()
-        local iterations = math.max(1, math.ceil(duration / math.max(0.0001, interval)))
-        for i = 1, iterations do
-            if not hrp or not hrp.Parent then break end
-            pcall(function()
-                if hrp.AssemblyLinearVelocity ~= nil then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-                if hrp.AssemblyAngularVelocity ~= nil then hrp.AssemblyAngularVelocity = Vector3.new(0,0,0) end
-            end)
-            task.wait(interval)
-        end
-        -- final safety clear
-        if hrp and hrp.Parent then
-            pcall(function()
-                if hrp.AssemblyLinearVelocity ~= nil then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-                if hrp.AssemblyAngularVelocity ~= nil then hrp.AssemblyAngularVelocity = Vector3.new(0,0,0) end
-            end)
-        end
-    end)
+	if not hrp then return end
+	task.spawn(function()
+		local iterations = math.max(1, math.ceil(duration / math.max(0.0001, interval)))
+		for _ = 1, iterations do
+			if not hrp or not hrp.Parent then break end
+			pcall(function()
+				if hrp.AssemblyLinearVelocity ~= nil then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+				if hrp.AssemblyAngularVelocity ~= nil then hrp.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+			end)
+			task.wait(interval)
+		end
+		if hrp and hrp.Parent then
+			pcall(function()
+				if hrp.AssemblyLinearVelocity ~= nil then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+				if hrp.AssemblyAngularVelocity ~= nil then hrp.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+			end)
+		end
+	end)
 end
 
--- Move NPCs into the domain: compute destinations; apply NPC parts with a float animation (entry float)
--- Modified so player and NPCs float together (single shared anchor).
+local function captureModelRecord(model)
+	if not model then return nil end
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	if not hum then return nil end
+	local root = getModelRoot(model)
+	if not root then return nil end
+
+	local rec = {
+		model = model,
+		hum = hum,
+		root = root,
+		origWalk = hum.WalkSpeed,
+		origJump = hum.JumpPower or 0,
+		origPlatform = hum.PlatformStand,
+		origRootAnchored = root.Anchored,
+		origRootCanCollide = root.CanCollide,
+		origRootCFrame = root.CFrame,
+		partLocalCFrames = {},
+		partAnchored = {},
+		partCanCollide = {},
+		destHRP = nil,
+		floatOffset = nil,
+	}
+
+	for _, p in ipairs(model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			rec.partLocalCFrames[p] = root.CFrame:ToObjectSpace(p.CFrame)
+			rec.partAnchored[p] = p.Anchored
+			rec.partCanCollide[p] = p.CanCollide
+		end
+	end
+
+	return rec
+end
+
+local function applyStun(rec, anchored)
+	if not rec or not rec.hum or not rec.hum.Parent then return end
+	pcall(function()
+		rec.hum.WalkSpeed = 0
+		if rec.hum.JumpPower ~= nil then rec.hum.JumpPower = 0 end
+		rec.hum.PlatformStand = true
+	end)
+	if anchored and rec.model and rec.model.Parent then
+		for _, p in ipairs(rec.model:GetDescendants()) do
+			if p:IsA("BasePart") then
+				pcall(function() p.Anchored = true end)
+			end
+		end
+	end
+end
+
+local function unanchorButKeepStunned(rec)
+	if not rec or not rec.model or not rec.model.Parent then return end
+	for _, p in ipairs(rec.model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			pcall(function() p.Anchored = false end)
+		end
+	end
+	pcall(function()
+		if rec.hum and rec.hum.Parent then
+			rec.hum.WalkSpeed = 0
+			if rec.hum.JumpPower ~= nil then rec.hum.JumpPower = 0 end
+			rec.hum.PlatformStand = true
+		end
+	end)
+end
+
+local function restoreModelFromRecord(rec, restoreHumanoid)
+	if not rec or not rec.model or not rec.model.Parent then return end
+	local root = getModelRoot(rec.model) or rec.root
+	if not root then return end
+
+	pcall(function()
+		for part, localCF in pairs(rec.partLocalCFrames or {}) do
+			if part and part.Parent then
+				part.CFrame = rec.origRootCFrame * localCF
+			end
+		end
+	end)
+
+	for part, anchored in pairs(rec.partAnchored or {}) do
+		if part and part.Parent then
+			pcall(function() part.Anchored = anchored end)
+		end
+	end
+
+	for part, canCollide in pairs(rec.partCanCollide or {}) do
+		if part and part.Parent then
+			pcall(function() part.CanCollide = canCollide end)
+		end
+	end
+
+	if restoreHumanoid and rec.hum and rec.hum.Parent then
+		pcall(function()
+			rec.hum.WalkSpeed = rec.origWalk or rec.hum.WalkSpeed
+			if rec.hum.JumpPower ~= nil then rec.hum.JumpPower = rec.origJump or rec.hum.JumpPower end
+			rec.hum.PlatformStand = rec.origPlatform or false
+		end)
+	end
+end
+
+local function restorePlayerStateFrom(state, hrp, hum)
+	if hum and hum.Parent then
+		pcall(function()
+			hum.PlatformStand = state.playerOriginalPlatformStand or false
+			if state.playerOriginalWalk then hum.WalkSpeed = state.playerOriginalWalk end
+			if hum.JumpPower ~= nil and state.playerOriginalJump ~= nil then hum.JumpPower = state.playerOriginalJump end
+		end)
+	end
+	if hrp and hrp.Parent then
+		pcall(function()
+			if state.playerHRPCanCollide ~= nil then
+				hrp.CanCollide = state.playerHRPCanCollide
+			else
+				hrp.CanCollide = true
+			end
+		end)
+	end
+end
+
+local function collectNPCsAround(position, radius)
+	local list = {}
+	for _,desc in ipairs(Workspace:GetDescendants()) do
+		if desc:IsA("Humanoid") then
+			local model = desc.Parent
+			if model and isNPC(model) then
+				local hrp = getModelRoot(model)
+				if hrp and (hrp.Position - position).Magnitude <= radius then
+					table.insert(list, {hum = desc, model = model, hrp = hrp})
+				end
+			end
+		end
+	end
+	return list
+end
+
+-- Existing Void's Domain logic
 local function moveIntoDomain(npcList)
-    local playerChar = localPlayer.Character
-    local playerHRP = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
-    local playerHum = playerChar and playerChar:FindFirstChildOfClass("Humanoid")
-    if not playerHRP or not playerHum then return end
+	local playerChar = localPlayer.Character
+	local playerHRP = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
+	local playerHum = playerChar and playerChar:FindFirstChildOfClass("Humanoid")
+	if not playerHRP or not playerHum then return end
 
-    domainState.playerOriginalCFrame = playerHRP.CFrame
-    domainState.playerOriginalPlatformStand = playerHum.PlatformStand
-    domainState.playerOriginalWalk = playerHum.WalkSpeed
-    domainState.playerOriginalJump = playerHum.JumpPower or 0
-    local origCanCollide
-    pcall(function() origCanCollide = playerHRP.CanCollide end)
-    domainState.playerHRPCanCollide = origCanCollide
+	domainState.playerOriginalCFrame = playerHRP.CFrame
+	domainState.playerOriginalPlatformStand = playerHum.PlatformStand
+	domainState.playerOriginalWalk = playerHum.WalkSpeed
+	domainState.playerOriginalJump = playerHum.JumpPower or 0
+	local origCanCollide
+	pcall(function() origCanCollide = playerHRP.CanCollide end)
+	domainState.playerHRPCanCollide = origCanCollide
 
-    if domainState.entryAnchor and domainState.entryAnchor.Parent then
-        pcall(function() domainState.entryAnchor:Destroy() end)
-        domainState.entryAnchor = nil
-    end
+	if domainState.entryAnchor and domainState.entryAnchor.Parent then
+		pcall(function() domainState.entryAnchor:Destroy() end)
+		domainState.entryAnchor = nil
+	end
 
-    pcall(function()
-        playerHRP.CFrame = playerHRP.CFrame + Vector3.new(0,4,0)
-        if playerHRP.AssemblyLinearVelocity then playerHRP.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-        if playerHRP.AssemblyAngularVelocity then playerHRP.AssemblyAngularVelocity = Vector3.new(0,0,0) end
-        playerHRP.CanCollide = false
-    end)
+	pcall(function()
+		playerHRP.CFrame = playerHRP.CFrame + Vector3.new(0, 4, 0)
+		if playerHRP.AssemblyLinearVelocity then playerHRP.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+		if playerHRP.AssemblyAngularVelocity then playerHRP.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+		playerHRP.CanCollide = false
+	end)
 
-    local center = DOMAIN_BOX_WORLD_POS
-    local halfX = DOMAIN_BOX_SIZE.X / 2 - 2
-    local halfZ = DOMAIN_BOX_SIZE.Z / 2 - 2
-    local prPos = playerHRP.Position
-    for _, entry in ipairs(npcList) do
-        local m = entry.model
-        local hrp = entry.hrp
-        if m and hrp and hrp.Parent then
-            lockNPCInDomain(m)
-            local offset = hrp.Position - prPos
-            local nx = math.clamp(offset.X, -halfX, halfX)
-            local nz = math.clamp(offset.Z, -halfZ, halfZ)
-            local ny = 3
-            local destHRP = center + Vector3.new(nx, ny + 1, nz)
-            updateNPCPartOffsetsAndDest(m, destHRP)
-        end
-    end
+	local center = DOMAIN_BOX_WORLD_POS
+	local halfX = DOMAIN_BOX_SIZE.X / 2 - 2
+	local halfZ = DOMAIN_BOX_SIZE.Z / 2 - 2
+	local prPos = playerHRP.Position
 
-    -- Create a single shared anchor to lift both the player and the NPCs at the same time
-    local sharedAnchor = Instance.new("Part")
-    sharedAnchor.Name = "Void_SharedLiftAnchor_" .. tostring(tick())
-    sharedAnchor.Size = Vector3.new(1,1,1)
-    sharedAnchor.Anchored = true
-    sharedAnchor.CanCollide = false
-    sharedAnchor.Transparency = 1
-    sharedAnchor.CFrame = playerHRP.CFrame
-    sharedAnchor.Parent = Workspace
-    domainState.entryAnchor = sharedAnchor
+	for _, entry in ipairs(npcList) do
+		local m = entry.model
+		if m and m.Parent then
+			local rec = captureModelRecord(m)
+			if rec then
+				pcall(function()
+					rec.hum.WalkSpeed = 0
+					if rec.hum.JumpPower ~= nil then rec.hum.JumpPower = 0 end
+					rec.hum.PlatformStand = true
+				end)
+				domainState.npcRecords[m] = rec
+				local offset = entry.hrp.Position - prPos
+				local nx = math.clamp(offset.X, -halfX, halfX)
+				local nz = math.clamp(offset.Z, -halfZ, halfZ)
+				local ny = 3
+				rec.destHRP = center + Vector3.new(nx, ny + 1, nz)
+			end
+		end
+	end
 
-    pcall(function() playerHum.PlatformStand = false end)
+	local sharedAnchor = Instance.new("Part")
+	sharedAnchor.Name = "Void_SharedLiftAnchor_" .. tostring(tick())
+	sharedAnchor.Size = Vector3.new(1,1,1)
+	sharedAnchor.Anchored = true
+	sharedAnchor.CanCollide = false
+	sharedAnchor.Transparency = 1
+	sharedAnchor.CFrame = playerHRP.CFrame
+	sharedAnchor.Parent = Workspace
+	domainState.entryAnchor = sharedAnchor
 
-    -- compute per-NPC float offsets relative to the sharedAnchor start position
-    local anchorStartPos = sharedAnchor.Position
-    for model, rec in pairs(domainState.npcRecords) do
-        if model and model.Parent and rec and rec.hum and rec.hum.Parent then
-            local npcHRP = getModelRoot(model)
-            if npcHRP and npcHRP.Parent then
-                rec.floatOffset = npcHRP.Position - anchorStartPos
-                if not rec.partOffsets or next(rec.partOffsets) == nil then
-                    rec.partOffsets = {}
-                    if npcHRP then
-                        for _, p in ipairs(model:GetDescendants()) do
-                            if p:IsA("BasePart") then
-                                rec.partOffsets[p] = p.Position - npcHRP.Position
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
+	local anchorStartPos = sharedAnchor.Position
+	for model, rec in pairs(domainState.npcRecords) do
+		if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+			local npcHRP = getModelRoot(model)
+			if npcHRP and npcHRP.Parent then
+				rec.floatOffset = npcHRP.Position - anchorStartPos
+			end
+		end
+	end
 
-    -- lift both player and NPCs together
-    local start = sharedAnchor.Position
-    local target = start + Vector3.new(0, DOMAIN_ENTRY_LIFT, 0)
-    local dur = DOMAIN_ENTRY_LIFT_TIME
-    local elapsed = 0
-    domainState.isFloating = true
-    while elapsed < dur do
-        local dt = RunService.Heartbeat:Wait()
-        elapsed = elapsed + dt
-        local alpha = math.min(elapsed / dur, 1)
-        local newPos = start:Lerp(target, alpha)
-        sharedAnchor.Position = newPos
+	local start = sharedAnchor.Position
+	local target = start + Vector3.new(0, DOMAIN_ENTRY_LIFT, 0)
+	local dur = DOMAIN_ENTRY_LIFT_TIME
+	local elapsed = 0
+	domainState.isFloating = true
 
-        -- move player to anchor
-        if playerHRP and playerHRP.Parent then
-            pcall(function() playerHRP.CFrame = CFrame.new(sharedAnchor.Position) end)
-        end
+	while elapsed < dur do
+		local dt = RunService.Heartbeat:Wait()
+		elapsed = elapsed + dt
+		local alpha = math.min(elapsed / dur, 1)
+		local newPos = start:Lerp(target, alpha)
+		sharedAnchor.Position = newPos
 
-        -- move NPC parts relative to anchor
-        for model, rec in pairs(domainState.npcRecords) do
-            if model and model.Parent and rec and rec.hum and rec.hum.Parent and rec.floatOffset then
-                local npcHRPPos = sharedAnchor.Position + rec.floatOffset
-                for part, localOff in pairs(rec.partOffsets or {}) do
-                    if part and part.Parent then
-                        local curPos = part.Position
-                        local targetPos = npcHRPPos + localOff
-                        local lerped = curPos:Lerp(targetPos, math.min(1, alpha))
-                        pcall(function()
-                            part.CFrame = CFrame.new(lerped)
-                            if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-                            if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
-                        end)
-                    end
-                end
-            end
-        end
-    end
+		if playerHRP and playerHRP.Parent then
+			pcall(function() playerHRP.CFrame = CFrame.new(sharedAnchor.Position) end)
+		end
 
-    domainState.isFloating = false
-    task.wait(0.05)
+		for model, rec in pairs(domainState.npcRecords) do
+			if model and model.Parent and rec and rec.hum and rec.hum.Parent and rec.floatOffset then
+				local npcHRPPos = sharedAnchor.Position + rec.floatOffset
+				for part, localOff in pairs(rec.partLocalCFrames or {}) do
+					if part and part.Parent then
+						local targetPos = (CFrame.new(npcHRPPos) * localOff).Position
+						local curPos = part.Position
+						local lerped = curPos:Lerp(targetPos, math.min(1, alpha))
+						pcall(function()
+							part.CFrame = CFrame.new(lerped)
+							if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+							if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+						end)
+					end
+				end
+			end
+		end
+	end
 
-    -- final placement inside domain (player + NPCs)
-    local insidePos = center + Vector3.new(0, 10, 0)
-    if playerHRP and playerHRP.Parent then
-        pcall(function() playerHRP.CFrame = CFrame.new(insidePos) end)
-    end
+	domainState.isFloating = false
+	task.wait(0.05)
 
-    for model, rec in pairs(domainState.npcRecords) do
-        if rec and rec.destHRP and rec.partOffsets then
-            for part, localOff in pairs(rec.partOffsets) do
-                if part and part.Parent then
-                    pcall(function()
-                        part.CFrame = CFrame.new(rec.destHRP + localOff)
-                        if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-                        if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
-                    end)
-                end
-            end
-        end
-    end
+	local insidePos = center + Vector3.new(0, 10, 0)
+	if playerHRP and playerHRP.Parent then
+		pcall(function() playerHRP.CFrame = CFrame.new(insidePos) end)
+	end
 
-    -- clear some residual player velocity repeatedly to avoid fling
-    if playerHRP and playerHRP.Parent then
-        clearVelocityPeriodic(playerHRP, CLEAR_VEL_INTERVAL, CLEAR_VEL_DURATION)
-    end
+	for model, rec in pairs(domainState.npcRecords) do
+		if rec and rec.destHRP then
+			for part, localCF in pairs(rec.partLocalCFrames or {}) do
+				if part and part.Parent then
+					pcall(function()
+						part.CFrame = CFrame.new(rec.destHRP) * localCF
+						if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+						if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+					end)
+				end
+			end
+		end
+	end
 
-    if sharedAnchor and sharedAnchor.Parent then pcall(function() sharedAnchor:Destroy() end) end
-    domainState.entryAnchor = nil
+	if playerHRP and playerHRP.Parent then
+		clearVelocityPeriodic(playerHRP, CLEAR_VEL_INTERVAL, CLEAR_VEL_DURATION)
+	end
 
-    pcall(function()
-        if domainState.playerHRPCanCollide ~= nil then
-            playerHRP.CanCollide = domainState.playerHRPCanCollide
-        else
-            playerHRP.CanCollide = true
-        end
-    end)
+	if sharedAnchor and sharedAnchor.Parent then pcall(function() sharedAnchor:Destroy() end) end
+	domainState.entryAnchor = nil
+
+	pcall(function()
+		if domainState.playerHRPCanCollide ~= nil then
+			playerHRP.CanCollide = domainState.playerHRPCanCollide
+		else
+			playerHRP.CanCollide = true
+		end
+	end)
 end
 
--- Float & exit (smooth float then teleport to void at end)
+local updateTravelButtonText
+
 local function exitDomainByClick()
-    if not domainActive then return end
+	if not domainActive then return end
 
-    local playerChar = localPlayer.Character
-    local hrp = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
-    local hum = playerChar and playerChar:FindFirstChildOfClass("Humanoid")
+	local playerChar = localPlayer.Character
+	local hrp = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
+	local hum = playerChar and playerChar:FindFirstChildOfClass("Humanoid")
 
-    if not hrp or not hum then
-        for model, rec in pairs(domainState.npcRecords) do
-            if rec and rec.hum and rec.hum.Parent and rec.hum.Health > 0 then
-                pcall(function() rec.hum.Health = 0 end)
-            end
-            restoreNPCFromDomain(model)
-        end
-        domainState.npcRecords = {}
-        if domainState.originalTime then pcall(function() Lighting.ClockTime = domainState.originalTime end) domainState.originalTime = nil end
-        destroyDomainBox(domainState.createdFolder); domainState.createdFolder = nil
-        if domainState.entryAnchor and domainState.entryAnchor.Parent then pcall(function() domainState.entryAnchor:Destroy() end) end
-        domainState.entryAnchor = nil
-        domainActive = false
-        return
-    end
+	if not hrp or not hum then
+		for model, rec in pairs(domainState.npcRecords) do
+			if rec and rec.hum and rec.hum.Parent and rec.hum.Health > 0 then
+				pcall(function() rec.hum.Health = 0 end)
+			end
+			restoreModelFromRecord(rec, true)
+		end
+		domainState.npcRecords = {}
+		if domainState.originalTime then pcall(function() Lighting.ClockTime = domainState.originalTime end) domainState.originalTime = nil end
+		destroyDomainBox(domainState.createdFolder); domainState.createdFolder = nil
+		if domainState.entryAnchor and domainState.entryAnchor.Parent then pcall(function() domainState.entryAnchor:Destroy() end) end
+		domainState.entryAnchor = nil
+		domainActive = false
+		return
+	end
 
-    local floatAnchor = Instance.new("Part")
-    floatAnchor.Name = "Void_FloatAnchor_" .. tostring(tick())
-    floatAnchor.Size = Vector3.new(1,1,1)
-    floatAnchor.Anchored = true
-    floatAnchor.CanCollide = false
-    floatAnchor.Transparency = 1
-    floatAnchor.CFrame = hrp.CFrame
-    floatAnchor.Parent = Workspace
+	local floatAnchor = Instance.new("Part")
+	floatAnchor.Name = "Void_FloatAnchor_" .. tostring(tick())
+	floatAnchor.Size = Vector3.new(1,1,1)
+	floatAnchor.Anchored = true
+	floatAnchor.CanCollide = false
+	floatAnchor.Transparency = 1
+	floatAnchor.CFrame = hrp.CFrame
+	floatAnchor.Parent = Workspace
 
-    if domainState.entryAnchor and domainState.entryAnchor.Parent then
-        pcall(function() domainState.entryAnchor:Destroy() end)
-        domainState.entryAnchor = nil
-    end
+	if domainState.entryAnchor and domainState.entryAnchor.Parent then
+		pcall(function() domainState.entryAnchor:Destroy() end)
+		domainState.entryAnchor = nil
+	end
 
-    local prevPlatformStand = hum.PlatformStand
-    pcall(function() hum.PlatformStand = true end)
+	pcall(function() hum.PlatformStand = true end)
 
-    -- compute per-NPC float offsets
-    local playerStartPos = hrp.Position
-    for model, rec in pairs(domainState.npcRecords) do
-        if model and model.Parent and rec and rec.hum and rec.hum.Parent then
-            local npcHRP = getModelRoot(model)
-            if npcHRP and npcHRP.Parent then
-                rec.floatOffset = npcHRP.Position - playerStartPos
-                if not rec.partOffsets or next(rec.partOffsets) == nil then
-                    rec.partOffsets = {}
-                    if npcHRP then
-                        for _, p in ipairs(model:GetDescendants()) do
-                            if p:IsA("BasePart") then
-                                rec.partOffsets[p] = p.Position - npcHRP.Position
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
+	local playerStartPos = hrp.Position
+	for model, rec in pairs(domainState.npcRecords) do
+		if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+			local npcHRP = getModelRoot(model)
+			if npcHRP and npcHRP.Parent then
+				rec.floatOffset = npcHRP.Position - playerStartPos
+			end
+		end
+	end
 
-    -- float animation (lerp)
-    local start = floatAnchor.Position
-    local target = start + Vector3.new(0, DOMAIN_FLOAT_HEIGHT, 0)
-    local dur = DOMAIN_FLOAT_TIME
-    local elapsed = 0
-    domainState.isFloating = true
+	local start = floatAnchor.Position
+	local target = start + Vector3.new(0, DOMAIN_FLOAT_HEIGHT, 0)
+	local dur = DOMAIN_FLOAT_TIME
+	local elapsed = 0
+	domainState.isFloating = true
 
-    while elapsed < dur do
-        local dt = RunService.Heartbeat:Wait()
-        elapsed = elapsed + dt
-        local alpha = math.min(elapsed / dur, 1)
-        floatAnchor.Position = start:Lerp(target, alpha)
+	while elapsed < dur do
+		local dt = RunService.Heartbeat:Wait()
+		elapsed = elapsed + dt
+		local alpha = math.min(elapsed / dur, 1)
+		floatAnchor.Position = start:Lerp(target, alpha)
 
-        if hrp and hrp.Parent then
-            pcall(function() hrp.CFrame = CFrame.new(floatAnchor.Position) end)
-        end
+		if hrp and hrp.Parent then
+			pcall(function() hrp.CFrame = CFrame.new(floatAnchor.Position) end)
+		end
 
-        for model, rec in pairs(domainState.npcRecords) do
-            if model and model.Parent and rec and rec.hum and rec.hum.Parent then
-                local npcHRP = getModelRoot(model)
-                if npcHRP and npcHRP.Parent and rec.floatOffset then
-                    local newHRPPos = floatAnchor.Position + rec.floatOffset
-                    for part, localOff in pairs(rec.partOffsets or {}) do
-                        if part and part.Parent then
-                            local curPos = part.Position
-                            local targetPos = newHRPPos + localOff
-                            local lerped = curPos:Lerp(targetPos, math.min(1, alpha))
-                            pcall(function()
-                                part.CFrame = CFrame.new(lerped)
-                                if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-                                if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
-                            end)
-                        end
-                    end
-                end
-            end
-        end
-    end
+		for model, rec in pairs(domainState.npcRecords) do
+			if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+				local npcHRP = getModelRoot(model)
+				if npcHRP and npcHRP.Parent and rec.floatOffset then
+					local newHRPPos = floatAnchor.Position + rec.floatOffset
+					for part, localCF in pairs(rec.partLocalCFrames or {}) do
+						if part and part.Parent then
+							local targetPos = (CFrame.new(newHRPPos) * localCF).Position
+							local curPos = part.Position
+							local lerped = curPos:Lerp(targetPos, math.min(1, alpha))
+							pcall(function()
+								part.CFrame = CFrame.new(lerped)
+								if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+								if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+							end)
+						end
+					end
+				end
+			end
+		end
+	end
 
-    domainState.isFloating = false
-    task.wait(0.05)
+	domainState.isFloating = false
+	task.wait(0.05)
 
-    -- teleport NPCs to void (same-frame group send)
-    for model, rec in pairs(domainState.npcRecords) do
-        if model and model.Parent and rec and rec.hum and rec.hum.Parent then
-            pcall(function() Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT end)
-            local toolToUse = toolInstance or ensureVoidTool()
-            if toolToUse then
-                pcall(function() sendModelToVoidWithHandle(toolToUse, model, "domain_exit") end)
-            else
-                pcall(function() sendModelToVoidWithHandle(nil, model, "domain_exit") end)
-            end
-            pcall(function() if rec.hum and rec.hum.Parent then rec.hum.Health = 0 end end)
-        end
-    end
+	for model, rec in pairs(domainState.npcRecords) do
+		if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+			pcall(function() Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT end)
+			local toolToUse = toolInstance or ensureVoidTool()
+			if toolToUse then
+				pcall(function() sendModelToVoidWithHandle(toolToUse, model, "domain_exit") end)
+			else
+				pcall(function() sendModelToVoidWithHandle(nil, model, "domain_exit") end)
+			end
+			pcall(function() if rec.hum and rec.hum.Parent then rec.hum.Health = 0 end end)
+		end
+	end
 
-    -- clear player velocities repeatedly after float to avoid fling
-    if hrp and hrp.Parent then
-        clearVelocityPeriodic(hrp, CLEAR_VEL_INTERVAL, CLEAR_VEL_DURATION)
-    end
+	if hrp and hrp.Parent then
+		clearVelocityPeriodic(hrp, CLEAR_VEL_INTERVAL, CLEAR_VEL_DURATION)
+	end
 
-    if domainState.playerOriginalCFrame and hrp and hrp.Parent then
-        pcall(function() hrp.CFrame = domainState.playerOriginalCFrame end)
-    end
+	if domainState.playerOriginalCFrame and hrp and hrp.Parent then
+		pcall(function() hrp.CFrame = domainState.playerOriginalCFrame end)
+	end
 
-    for model, _ in pairs(domainState.npcRecords) do domainState.npcRecords[model] = nil end
+	for model, _ in pairs(domainState.npcRecords) do domainState.npcRecords[model] = nil end
 
-    if domainState.originalTime then pcall(function() Lighting.ClockTime = domainState.originalTime end) domainState.originalTime = nil end
-    destroyDomainBox(domainState.createdFolder); domainState.createdFolder = nil
-    if floatAnchor and floatAnchor.Parent then pcall(function() floatAnchor:Destroy() end) end
-    if domainState.entryAnchor and domainState.entryAnchor.Parent then pcall(function() domainState.entryAnchor:Destroy() end) end
-    domainState.entryAnchor = nil
+	if domainState.originalTime then pcall(function() Lighting.ClockTime = domainState.originalTime end) domainState.originalTime = nil end
+	destroyDomainBox(domainState.createdFolder); domainState.createdFolder = nil
+	if floatAnchor and floatAnchor.Parent then pcall(function() floatAnchor:Destroy() end) end
+	if domainState.entryAnchor and domainState.entryAnchor.Parent then pcall(function() domainState.entryAnchor:Destroy() end) end
+	domainState.entryAnchor = nil
 
-    pcall(function()
-        if hum and hum.Parent then
-            hum.PlatformStand = domainState.playerOriginalPlatformStand or false
-            if domainState.playerOriginalWalk then hum.WalkSpeed = domainState.playerOriginalWalk end
-            if hum.JumpPower ~= nil and domainState.playerOriginalJump ~= nil then hum.JumpPower = domainState.playerOriginalJump end
-        end
-    end)
+	restorePlayerStateFrom(domainState, hrp, hum)
 
-    pcall(function()
-        if hrp and hrp.Parent then
-            if domainState.playerHRPCanCollide ~= nil then hrp.CanCollide = domainState.playerHRPCanCollide else hrp.CanCollide = true end
-        end
-    end)
+	domainState.playerOriginalCFrame = nil
+	domainState.playerOriginalPlatformStand = nil
+	domainState.playerOriginalWalk = nil
+	domainState.playerOriginalJump = nil
+	domainState.playerHRPCanCollide = nil
+	domainActive = false
+	updateTravelButtonText()
+end
 
-    domainState.playerOriginalCFrame = nil
-    domainState.playerOriginalPlatformStand = nil
-    domainState.playerOriginalWalk = nil
-    domainState.playerOriginalJump = nil
-    domainState.playerHRPCanCollide = nil
-    domainActive = false
+-- Separate Go to domain / Exit domain toggle
+local function setSoftButtonText(btn)
+	if not btn then return end
+	btn.Text = softDomainActive and "Exit domain" or "Go to domain"
+end
+
+local function setReturnButtonVisible(btn)
+	if not btn then return end
+	btn.Visible = softDomainActive or domainActive
+end
+
+local function setVoidButtonText(btn)
+	if not btn then return end
+	btn.Text = (domainActive or softDomainActive) and "Exit domain" or "Void's Domain"
+end
+
+updateTravelButtonText = function()
+	if goDomainButtonRef then
+		if domainActive or softDomainActive then
+			goDomainButtonRef.Text = "Exit domain"
+		else
+			goDomainButtonRef.Text = "Go to domain"
+		end
+	end
+end
+
+local function enterSoftDomain(btnToggle, btnReturn)
+	local char = localPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum then return end
+
+	softDomainActive = true
+	setSoftButtonText(btnToggle)
+	setReturnButtonVisible(btnReturn)
+	updateTravelButtonText()
+
+	softState.originalTime = Lighting and Lighting.ClockTime or nil
+	pcall(function() Lighting.ClockTime = 2 end)
+
+	if softState.createdFolder and softState.createdFolder.Parent then
+		pcall(function() softState.createdFolder:Destroy() end)
+	end
+	softState.createdFolder = createDomainBox()
+
+	softState.playerOriginalCFrame = hrp.CFrame
+	softState.playerOriginalPlatformStand = hum.PlatformStand
+	softState.playerOriginalWalk = hum.WalkSpeed
+	softState.playerOriginalJump = hum.JumpPower or 0
+	pcall(function() softState.playerHRPCanCollide = hrp.CanCollide end)
+
+	local playerPos = hrp.Position
+	local nearby = collectNPCsAround(playerPos, DOMAIN_RADIUS)
+
+	for _, item in ipairs(nearby) do
+		local model = item.model
+		if model and model.Parent then
+			local rec = softState.npcRecords[model]
+			if not rec then
+				rec = captureModelRecord(model)
+				if rec then
+					softState.npcRecords[model] = rec
+					applyStun(rec, true)
+					rec.softTouched = true
+				end
+			else
+				unanchorButKeepStunned(rec)
+				rec.softTouched = true
+			end
+		end
+	end
+
+	local liftAnchor = Instance.new("Part")
+	liftAnchor.Name = "SoftDomainAnchor_" .. tostring(tick())
+	liftAnchor.Size = Vector3.new(1,1,1)
+	liftAnchor.Anchored = true
+	liftAnchor.CanCollide = false
+	liftAnchor.Transparency = 1
+	liftAnchor.CFrame = hrp.CFrame
+	liftAnchor.Parent = Workspace
+	softState.entryAnchor = liftAnchor
+
+	local start = liftAnchor.Position
+	local target = start + Vector3.new(0, DOMAIN_ENTRY_LIFT, 0)
+	local elapsed = 0
+
+	while elapsed < DOMAIN_ENTRY_LIFT_TIME do
+		local dt = RunService.Heartbeat:Wait()
+		elapsed = elapsed + dt
+		local alpha = math.clamp(elapsed / DOMAIN_ENTRY_LIFT_TIME, 0, 1)
+		local newPos = start:Lerp(target, alpha)
+		liftAnchor.Position = newPos
+		if hrp and hrp.Parent then
+			pcall(function() hrp.CFrame = CFrame.new(newPos) end)
+		end
+	end
+
+	if hrp and hrp.Parent then
+		pcall(function() hrp.CFrame = CFrame.new(DOMAIN_BOX_WORLD_POS + Vector3.new(0, 10, 0)) end)
+		clearVelocityPeriodic(hrp, CLEAR_VEL_INTERVAL, CLEAR_VEL_DURATION)
+	end
+
+	restorePlayerStateFrom(softState, hrp, hum)
+end
+
+local function exitSoftDomain(btnToggle, btnReturn)
+	local char = localPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum then
+		softDomainActive = false
+		setSoftButtonText(btnToggle)
+		setReturnButtonVisible(btnReturn)
+		return
+	end
+
+	if softState.entryAnchor and softState.entryAnchor.Parent then
+		pcall(function() softState.entryAnchor:Destroy() end)
+	end
+	softState.entryAnchor = nil
+
+	local start = hrp.Position
+	local target = start + Vector3.new(0, DOMAIN_FLOAT_HEIGHT, 0)
+	local anchor = Instance.new("Part")
+	anchor.Name = "SoftExitAnchor_" .. tostring(tick())
+	anchor.Size = Vector3.new(1,1,1)
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.Transparency = 1
+	anchor.Position = start
+	anchor.Parent = Workspace
+
+	local elapsed = 0
+	while elapsed < DOMAIN_FLOAT_TIME do
+		local dt = RunService.Heartbeat:Wait()
+		elapsed = elapsed + dt
+		local alpha = math.clamp(elapsed / DOMAIN_FLOAT_TIME, 0, 1)
+		anchor.Position = start:Lerp(target, alpha)
+		if hrp and hrp.Parent then
+			pcall(function() hrp.CFrame = CFrame.new(anchor.Position) end)
+		end
+	end
+
+	-- Ditch NPCs where they are: they remain anchored/stunned.
+	for model, rec in pairs(softState.npcRecords) do
+		if rec and rec.model and rec.model.Parent then
+			applyStun(rec, true)
+		end
+	end
+
+	if hrp and hrp.Parent then
+		pcall(function() hrp.CFrame = softState.playerOriginalCFrame or hrp.CFrame end)
+		clearVelocityPeriodic(hrp, CLEAR_VEL_INTERVAL, CLEAR_VEL_DURATION)
+	end
+
+	if softState.createdFolder then
+		destroyDomainBox(softState.createdFolder)
+		softState.createdFolder = nil
+	end
+
+	if softState.originalTime then
+		pcall(function() Lighting.ClockTime = softState.originalTime end)
+		softState.originalTime = nil
+	end
+
+	if anchor and anchor.Parent then pcall(function() anchor:Destroy() end) end
+	softDomainActive = false
+	setSoftButtonText(btnToggle)
+	setReturnButtonVisible(btnReturn)
+	restorePlayerStateFrom(softState, hrp, hum)
+end
+
+local function returnEverything(btnReturn)
+	local playerChar = localPlayer.Character
+	local hrp = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
+	local hum = playerChar and playerChar:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum then return end
+
+	local activeRecords = {}
+	local state = nil
+
+	if domainActive and next(domainState.npcRecords) ~= nil then
+		state = domainState
+		for model, rec in pairs(domainState.npcRecords) do
+			if rec then table.insert(activeRecords, rec) end
+		end
+	elseif softDomainActive and next(softState.npcRecords) ~= nil then
+		state = softState
+		for model, rec in pairs(softState.npcRecords) do
+			if rec then table.insert(activeRecords, rec) end
+		end
+	else
+		return
+	end
+
+	local floatAnchor = Instance.new("Part")
+	floatAnchor.Name = "ReturnEverythingAnchor_" .. tostring(tick())
+	floatAnchor.Size = Vector3.new(1,1,1)
+	floatAnchor.Anchored = true
+	floatAnchor.CanCollide = false
+	floatAnchor.Transparency = 1
+	floatAnchor.CFrame = hrp.CFrame
+	floatAnchor.Parent = Workspace
+
+	local playerStart = hrp.Position
+	for _, rec in ipairs(activeRecords) do
+		if rec and rec.root and rec.root.Parent then
+			rec.floatOffset = rec.root.Position - playerStart
+		end
+	end
+
+	local start = floatAnchor.Position
+	local target = start + Vector3.new(0, DOMAIN_ENTRY_LIFT, 0)
+	local elapsed = 0
+	while elapsed < DOMAIN_ENTRY_LIFT_TIME do
+		local dt = RunService.Heartbeat:Wait()
+		elapsed = elapsed + dt
+		local alpha = math.clamp(elapsed / DOMAIN_ENTRY_LIFT_TIME, 0, 1)
+		local newPos = start:Lerp(target, alpha)
+		floatAnchor.Position = newPos
+		if hrp and hrp.Parent then
+			pcall(function() hrp.CFrame = CFrame.new(newPos) end)
+		end
+		for _, rec in ipairs(activeRecords) do
+			if rec and rec.model and rec.model.Parent and rec.floatOffset then
+				local targetRootPos = newPos + rec.floatOffset
+				for part, localCF in pairs(rec.partLocalCFrames or {}) do
+					if part and part.Parent then
+						local desired = CFrame.new(targetRootPos) * localCF
+						pcall(function()
+							part.CFrame = part.CFrame:Lerp(desired, alpha)
+							if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+							if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+						end)
+					end
+				end
+			end
+		end
+	end
+
+	for _, rec in ipairs(activeRecords) do
+		restoreModelFromRecord(rec, false)
+	end
+
+	if state and state.playerOriginalCFrame then
+		pcall(function() hrp.CFrame = state.playerOriginalCFrame end)
+	end
+	restorePlayerStateFrom(state or softState, hrp, hum)
+
+	if floatAnchor and floatAnchor.Parent then pcall(function() floatAnchor:Destroy() end) end
+	setReturnButtonVisible(btnReturn)
+	updateTravelButtonText()
 end
 
 -- GUI builder
 local function createVoidGUI(tool)
-    local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
-    local existingSG = playerGui:FindFirstChild("VoidTool_GUI")
-    if existingSG then
-        existingSG.Enabled = true
-        local frame = existingSG:FindFirstChild("Frame")
-        local btn = frame and frame:FindFirstChild(DOMAIN_BUTTON_NAME)
-        local btn2 = frame and frame:FindFirstChild(SECOND_BUTTON_NAME)
-        return existingSG, btn, btn2
-    end
+	local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui") or localPlayer:WaitForChild("PlayerGui")
+	local existingSG = playerGui:FindFirstChild("VoidTool_GUI")
+	if existingSG then
+		existingSG.Enabled = true
+		local frame = existingSG:FindFirstChild("Frame")
+		local btn = frame and frame:FindFirstChild(DOMAIN_BUTTON_NAME)
+		local btn2 = frame and frame:FindFirstChild(SECOND_BUTTON_NAME)
+		local btn3 = frame and frame:FindFirstChild(TOGGLE_BUTTON_NAME)
+		local btn4 = frame and frame:FindFirstChild(RETURN_BUTTON_NAME)
+		return existingSG, btn, btn2, btn3, btn4
+	end
 
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "VoidTool_GUI"
-    sg.ResetOnSpawn = false
-    sg.Parent = playerGui
+	local sg = Instance.new("ScreenGui")
+	sg.Name = "VoidTool_GUI"
+	sg.ResetOnSpawn = false
+	sg.Parent = playerGui
 
-    local frame = Instance.new("Frame")
-    frame.Name = "Frame"
-    frame.Parent = sg
-    frame.Size = UDim2.new(0, 220, 0, 64)
-    frame.Position = UDim2.new(0.5, -110, 0, 8)
-    frame.BackgroundTransparency = 0.2
-    frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
-    frame.BorderSizePixel = 0
+	local frame = Instance.new("Frame")
+	frame.Name = "Frame"
+	frame.Parent = sg
+	frame.Size = UDim2.new(0, 220, 0, 124)
+	frame.Position = UDim2.new(0.5, -110, 0, 8)
+	frame.BackgroundTransparency = 0.2
+	frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+	frame.BorderSizePixel = 0
 
-    local btn = Instance.new("TextButton", frame)
-    btn.Size = UDim2.new(0, 200, 0, 28)
-    btn.Position = UDim2.new(0, 10, 0, 6)
-    btn.Font = Enum.Font.SourceSansBold
-    btn.TextSize = 16
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Text = "Void's Domain"
-    btn.Name = DOMAIN_BUTTON_NAME
+	local function makeButton(name, y, text)
+		local b = Instance.new("TextButton")
+		b.Size = UDim2.new(0, 200, 0, 24)
+		b.Position = UDim2.new(0, 10, 0, y)
+		b.Font = Enum.Font.SourceSansBold
+		b.TextSize = 16
+		b.TextColor3 = Color3.new(1,1,1)
+		b.BackgroundTransparency = 0
+		b.BackgroundColor3 = Color3.fromRGB(35,35,35)
+		b.BorderSizePixel = 0
+		b.Text = text
+		b.Name = name
+		b.Parent = frame
+		return b
+	end
 
-    local btn2 = Instance.new("TextButton", frame)
-    btn2.Size = UDim2.new(0,200,0,28)
-    btn2.Position = UDim2.new(0,10,0,34)
-    btn2.Font = Enum.Font.SourceSansBold
-    btn2.TextSize = 16
-    btn2.TextColor3 = Color3.new(1,1,1)
-    btn2.Text = "Send All to Void"
-    btn2.Name = SECOND_BUTTON_NAME
+	local btn = makeButton(DOMAIN_BUTTON_NAME, 6, "Void's Domain")
+	local btn2 = makeButton(SECOND_BUTTON_NAME, 34, "Send All to Void")
+	local btn3 = makeButton(TOGGLE_BUTTON_NAME, 62, "Go to domain")
+	local btn4 = makeButton(RETURN_BUTTON_NAME, 90, "Return Everything")
+	btn4.Visible = false
 
-    return sg, btn, btn2
+	return sg, btn, btn2, btn3, btn4
 end
 
--- Wire the tool
 local function wireVoidTool(tool)
-    if not tool or not tool:IsA("Tool") then return end
-    if tool:FindFirstChild("__VoidWired") then return end
-    local marker = Instance.new("BoolValue")
-    marker.Name = "__VoidWired"
-    marker.Parent = tool
+	if not tool or not tool:IsA("Tool") then return end
+	if tool:FindFirstChild("__VoidWired") then return end
+	tool.RequiresHandle = false
 
-    local guiSG, domainBtn, sendAllBtn
-    local mouse
-    local clickConn
-    local domainBtnConn, sendAllConn
+	local marker = Instance.new("BoolValue")
+	marker.Name = "__VoidWired"
+	marker.Parent = tool
 
-    local function onUnequip()
-        if clickConn then clickConn:Disconnect(); clickConn = nil end
-        if domainBtnConn then domainBtnConn:Disconnect(); domainBtnConn = nil end
-        if sendAllConn then sendAllConn:Disconnect(); sendAllConn = nil end
-        if guiSG and guiSG.Parent then guiSG.Enabled = false end
-    end
+	createTemporaryHandle(tool)
 
-    tool.Equipped:Connect(function(m)
-        mouse = m or localPlayer:GetMouse()
-        guiSG, domainBtn, sendAllBtn = createVoidGUI(tool)
-        if guiSG then guiSG.Enabled = true end
+	local guiSG, domainBtn, sendAllBtn, goDomainBtn, returnBtn
+	local mouse
+	local clickConn
+	local domainBtnConn, sendAllConn, goDomainConn, returnConn
 
-        if domainBtn then
-            domainBtnConn = domainBtn.MouseButton1Click:Connect(function()
-                if domainActive then
-                    exitDomainByClick()
-                    return
-                end
+	local function refreshReturnButton()
+		if returnBtn then
+			returnBtn.Visible = domainActive or softDomainActive
+		end
+	end
 
-                local char = localPlayer.Character
-                local pr = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"))
-                if not pr then return end
-                domainActive = true
-                domainState.originalTime = Lighting and Lighting.ClockTime or nil
-                pcall(function() Lighting.ClockTime = 2 end)
+	local function refreshGoText()
+		updateTravelButtonText()
+	end
 
-                local npcList = {}
-                for _,desc in ipairs(Workspace:GetDescendants()) do
-                    if desc:IsA("Humanoid") then
-                        local model = desc.Parent
-                        if model and isNPC(model) then
-                            local hrp = getModelRoot(model)
-                            if hrp and (hrp.Position - pr.Position).Magnitude <= DOMAIN_RADIUS then
-                                table.insert(npcList, {hum = desc, model = model, hrp = hrp})
-                            end
-                        end
-                    end
-                end
+	local function refreshVoidText()
+		setVoidButtonText(domainBtn)
+	end
 
-                local boxFolder = createDomainBox()
-                domainState.createdFolder = boxFolder
-                moveIntoDomain(npcList)
+	local function onUnequip()
+		if clickConn then clickConn:Disconnect(); clickConn = nil end
+		if domainBtnConn then domainBtnConn:Disconnect(); domainBtnConn = nil end
+		if sendAllConn then sendAllConn:Disconnect(); sendAllConn = nil end
+		if goDomainConn then goDomainConn:Disconnect(); goDomainConn = nil end
+		if returnConn then returnConn:Disconnect(); returnConn = nil end
+		if guiSG and guiSG.Parent then guiSG.Enabled = false end
+		goDomainButtonRef = nil
+	end
 
-                -- Monitor: if local player leaves domain, kill NPCs and clean up
-                spawn(function()
-                    while domainActive do
-                        RunService.Heartbeat:Wait()
-                        local pChar = localPlayer.Character
-                        local pHRP = pChar and pChar:FindFirstChild("HumanoidRootPart")
-                        if not pHRP or not pHRP.Parent then
-                            break
-                        end
-                        if not isPositionInsideDomain(pHRP.Position) then
-                            break
-                        end
-                    end
+	tool.Equipped:Connect(function(m)
+		mouse = m or localPlayer:GetMouse()
+		guiSG, domainBtn, sendAllBtn, goDomainBtn, returnBtn = createVoidGUI(tool)
+		goDomainButtonRef = goDomainBtn
+		if guiSG then guiSG.Enabled = true end
+		refreshGoText()
+		refreshVoidText()
+		refreshReturnButton()
 
-                    if domainActive then
-                        for model, rec in pairs(domainState.npcRecords) do
-                            if rec and rec.hum and rec.hum.Parent and rec.hum.Health > 0 then
-                                pcall(function() rec.hum.Health = 0 end)
-                            end
-                            restoreNPCFromDomain(model)
-                        end
-                        domainState.npcRecords = {}
-                        if domainState.originalTime then pcall(function() Lighting.ClockTime = domainState.originalTime end) domainState.originalTime = nil end
-                        destroyDomainBox(domainState.createdFolder); domainState.createdFolder = nil
-                        if domainState.entryAnchor and domainState.entryAnchor.Parent then pcall(function() domainState.entryAnchor:Destroy() end) end
-                        domainState.entryAnchor = nil
-                        domainActive = false
-                    end
-                end)
+		if domainBtn then
+			domainBtnConn = domainBtn.MouseButton1Click:Connect(function()
+				if domainActive then
+					exitDomainByClick()
+					refreshReturnButton()
+					refreshVoidText()
+					return
+				end
 
-                -- Also watch for NPC deaths while domain is active; if all NPCs die, close domain
-                spawn(function()
-                    local still = {}
-                    for _, e in ipairs(npcList) do
-                        if e.model and e.hum and e.hum.Parent and e.hum.Health > 0 then
-                            still[e.model] = e.hum
-                        end
-                    end
-                    if next(still) == nil then return end
-                    local count = 0
-                    local conns = {}
-                    for model, hum in pairs(still) do
-                        count = count + 1
-                        conns[model] = hum.Died:Connect(function()
-                            pcall(function() conns[model]:Disconnect() end)
-                            conns[model] = nil
-                            count = count - 1
-                            if count <= 0 then exitDomainByClick() end
-                        end)
-                    end
-                end)
-            end)
-        end
+				if softDomainActive then
+					exitSoftDomain(goDomainBtn, returnBtn)
+					refreshGoText()
+					refreshVoidText()
+					refreshReturnButton()
+					return
+				end
 
-        if sendAllBtn then
-            sendAllConn = sendAllBtn.MouseButton1Click:Connect(function()
-                pcall(function() Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT end)
-                for _,desc in ipairs(Workspace:GetDescendants()) do
-                    if desc:IsA("Humanoid") then
-                        local model = desc.Parent
-                        if model and isNPC(model) then
-                            spawn(function()
-                                local toolToUse = toolInstance or ensureVoidTool()
-                                if toolToUse then
-                                    pcall(function() sendModelToVoidWithHandle(toolToUse, model, "sendAll") end)
-                                else
-                                    sendModelToVoidWithHandle(nil, model, "sendAll")
-                                end
-                                task.wait(SEND_ALL_VOID_DELAY)
-                            end)
-                        end
-                    end
-                end
-            end)
-        end
+				local char = localPlayer.Character
+				local pr = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"))
+				if not pr then return end
+				domainActive = true
+				refreshGoText()
+				domainState.originalTime = Lighting and Lighting.ClockTime or nil
+				pcall(function() Lighting.ClockTime = 2 end)
 
-        -- CLICK HANDLER: Send to void immediately (exact same logic as original script), do NOT trigger domain.
-        clickConn = mouse.Button1Down:Connect(function()
-            local x,y = mouse.X, mouse.Y
-            local hum, model = screenRayFindHumanoid(x, y, 2000, 10)
-            if not hum or not model then
-                local tgt = mouse.Target
-                if tgt then
-                    local node = tgt
-                    for i=1,10 do
-                        if not node then break end
-                        local h = node:FindFirstChildOfClass("Humanoid")
-                        if h and isNPC(h.Parent) then
-                            hum, model = h, h.Parent
-                            break
-                        end
-                        node = node.Parent
-                    end
-                end
-            end
+				local npcList = collectNPCsAround(pr.Position, DOMAIN_RADIUS)
 
-            if not hum or not model then return end
+				local boxFolder = createDomainBox()
+				domainState.createdFolder = boxFolder
+				moveIntoDomain(npcList)
 
-            -- Use the same send logic as the original: sendModelToVoidWithHandle and track selection for restore-on-death
-            local toolToUse = toolInstance or ensureVoidTool()
-            if toolToUse then
-                pcall(function() sendModelToVoidWithHandle(toolToUse, model, "click") end)
-            else
-                pcall(function() sendModelToVoidWithHandle(nil, model, "click") end)
-            end
+				refreshVoidText()
+				refreshReturnButton()
 
-            trackedVoidSelections[model] = hum
-            trackSelectionAndRestoreOnDeaths(trackedVoidSelections)
-        end)
-    end)
+				task.spawn(function()
+					while domainActive do
+						RunService.Heartbeat:Wait()
+						local pChar = localPlayer.Character
+						local pHRP = pChar and pChar:FindFirstChild("HumanoidRootPart")
+						if not pHRP or not pHRP.Parent then
+							break
+						end
+						if not isPositionInsideDomain(pHRP.Position) then
+							break
+						end
+					end
 
-    tool.Unequipped:Connect(onUnequip)
+					if domainActive then
+						for model, rec in pairs(domainState.npcRecords) do
+							if rec and rec.hum and rec.hum.Parent and rec.hum.Health > 0 then
+								pcall(function() rec.hum.Health = 0 end)
+							end
+							restoreModelFromRecord(rec, true)
+						end
+						domainState.npcRecords = {}
+						if domainState.originalTime then pcall(function() Lighting.ClockTime = domainState.originalTime end) domainState.originalTime = nil end
+						destroyDomainBox(domainState.createdFolder); domainState.createdFolder = nil
+						if domainState.entryAnchor and domainState.entryAnchor.Parent then pcall(function() domainState.entryAnchor:Destroy() end) end
+						domainState.entryAnchor = nil
+						domainActive = false
+						refreshGoText()
+						refreshVoidText()
+						refreshReturnButton()
+					end
+				end)
+
+				task.spawn(function()
+					local still = {}
+					for _, e in ipairs(npcList) do
+						if e.model and e.hum and e.hum.Parent and e.hum.Health > 0 then
+							still[e.model] = e.hum
+						end
+					end
+					if next(still) == nil then return end
+					local count = 0
+					local conns = {}
+					for model, hum in pairs(still) do
+						count = count + 1
+						conns[model] = hum.Died:Connect(function()
+							pcall(function() conns[model]:Disconnect() end)
+							conns[model] = nil
+							count = count - 1
+							if count <= 0 then
+								exitDomainByClick()
+								refreshVoidText()
+								refreshReturnButton()
+							end
+						end)
+					end
+				end)
+			end)
+		end
+
+		if sendAllBtn then
+			sendAllConn = sendAllBtn.MouseButton1Click:Connect(function()
+				pcall(function() Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT end)
+				for _,desc in ipairs(Workspace:GetDescendants()) do
+					if desc:IsA("Humanoid") then
+						local model = desc.Parent
+						if model and isNPC(model) then
+							task.spawn(function()
+								local toolToUse = toolInstance or ensureVoidTool()
+								if toolToUse then
+									pcall(function() sendModelToVoidWithHandle(toolToUse, model, "sendAll") end)
+								else
+									sendModelToVoidWithHandle(nil, model, "sendAll")
+								end
+								task.wait(SEND_ALL_VOID_DELAY)
+							end)
+						end
+					end
+				end
+			end)
+		end
+
+		if goDomainBtn then
+			goDomainConn = goDomainBtn.MouseButton1Click:Connect(function()
+				if domainActive then
+					exitDomainByClick()
+				elseif not softDomainActive then
+					enterSoftDomain(goDomainBtn, returnBtn)
+				else
+					exitSoftDomain(goDomainBtn, returnBtn)
+				end
+				refreshGoText()
+				refreshVoidText()
+				refreshReturnButton()
+			end)
+		end
+
+		if returnBtn then
+			returnConn = returnBtn.MouseButton1Click:Connect(function()
+				returnEverything(returnBtn)
+				refreshReturnButton()
+			end)
+		end
+
+		refreshGoText()
+		refreshReturnButton()
+
+		-- CLICK HANDLER: send to void immediately, do not trigger domain
+		clickConn = mouse.Button1Down:Connect(function()
+			local x, y = mouse.X, mouse.Y
+			local hum, model = screenRayFindHumanoid(x, y, 2000, 10)
+			if not hum or not model then
+				local tgt = mouse.Target
+				if tgt then
+					local node = tgt
+					for _ = 1, 10 do
+						if not node then break end
+						local h = node:FindFirstChildOfClass("Humanoid")
+						if h and isNPC(h.Parent) then
+							hum, model = h, h.Parent
+							break
+						end
+						node = node.Parent
+					end
+				end
+			end
+
+			if not hum or not model then return end
+
+			local toolToUse = toolInstance or ensureVoidTool()
+			if toolToUse then
+				pcall(function() sendModelToVoidWithHandle(toolToUse, model, "click") end)
+			else
+				pcall(function() sendModelToVoidWithHandle(nil, model, "click") end)
+			end
+
+			trackedVoidSelections[model] = hum
+			trackSelectionAndRestoreOnDeaths(trackedVoidSelections)
+		end)
+	end)
+
+	tool.Unequipped:Connect(onUnequip)
 end
 
--- Ensure tool on spawn and wire
 local function onCharacterAdded()
-    task.wait(0.05)
-    local t = ensureVoidTool()
-    if t then
-        toolInstance = t
-        wireVoidTool(t)
-    end
+	task.wait(0.05)
+	local t = ensureVoidTool()
+	if t then
+		toolInstance = t
+		wireVoidTool(t)
+	end
 end
 
 toolInstance = ensureVoidTool()
-if toolInstance then wireVoidTool(toolInstance) end
+if toolInstance then
+	wireVoidTool(toolInstance)
+end
+
 localPlayer.CharacterAdded:Connect(onCharacterAdded)
 
-print("Void. tool v2 (click = send to void; domain simultaneous float + velocity clears added) loaded for", localPlayer.Name)
+print("Void. tool v3 loaded for", localPlayer.Name)
