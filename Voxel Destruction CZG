@@ -1,0 +1,578 @@
+-- Voxel Destruction System
+-- Put this Script inside a Part or a Model.
+
+local container = script.Parent
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local Debris = game:GetService("Debris")
+
+local CONFIG = {
+	MinImpactSpeed = 150, -- only 150+ can damage voxelizable structures
+	MinWakeSpeed = 150,   -- only 150+ can wake anchored voxel debris
+	MinMoverSpeed = 18,
+	SlideIgnoreNormalY = 0.70,
+	HeartbeatScanInterval = 0.05,
+
+	FragmentSize = 1,
+	MaxFragmentsPerPart = 700,
+	FragmentLifetime = 12,
+
+	VelocityToForce = 1.0,
+	ForceToThrowSpeed = 1.6,
+	MaxThrowSpeed = 180,
+
+	BaseDestroyRadius = 4,
+	RadiusPerForce = 0.08,
+	MaxDestroyRadius = 24,
+
+	ExplosionProcessDelay = 0.03, -- lets Explosion properties settle after parenting
+
+	DestructionSoundId = "rbxassetid://0",
+	GlassSoundId = "rbxassetid://0",
+	DestructionVolume = 0.9,
+	GlassVolume = 1.0,
+}
+
+local FORCE_MOVER_CLASSES = {
+	BodyVelocity = true,
+	BodyForce = true,
+	VectorForce = true,
+	LinearVelocity = true,
+	AngularVelocity = true,
+	AlignPosition = true,
+	AlignOrientation = true,
+	Torque = true,
+	LineForce = true,
+}
+
+local destroyedParts = {}
+local touchedConnections = {}
+local hookedExplosions = {}
+local processedExplosions = {}
+local lastPositions = {}
+
+local voxelDebrisFolder = Workspace:FindFirstChild("VoxelDebris")
+if not voxelDebrisFolder then
+	voxelDebrisFolder = Instance.new("Folder")
+	voxelDebrisFolder.Name = "VoxelDebris"
+	voxelDebrisFolder.Parent = Workspace
+end
+
+local function isTargetPart(part)
+	if not part or not part:IsA("BasePart") then
+		return false
+	end
+
+	if container:IsA("BasePart") then
+		return part == container
+	end
+
+	return part:IsDescendantOf(container)
+end
+
+local function isVoxelDebrisPart(part)
+	if not part or not part:IsA("BasePart") then
+		return false
+	end
+
+	if part:GetAttribute("IsVoxelDebris") == true then
+		return true
+	end
+
+	local parent = part.Parent
+	return parent and parent:IsA("Folder") and parent.Name == "VoxelDebris"
+end
+
+local function getTargetParts()
+	local list = {}
+	if container:IsA("BasePart") then
+		table.insert(list, container)
+	elseif container:IsA("Model") then
+		for _, inst in ipairs(container:GetDescendants()) do
+			if inst:IsA("BasePart") then
+				table.insert(list, inst)
+			end
+		end
+	end
+	return list
+end
+
+local function getBoundsForContainer()
+	if container:IsA("BasePart") then
+		return container.CFrame, container.Size
+	elseif container:IsA("Model") then
+		return container:GetBoundingBox()
+	end
+	return CFrame.new(), Vector3.new(4, 4, 4)
+end
+
+local function playSoundAt(position, soundId, volume)
+	if not soundId or soundId == "" or soundId == "rbxassetid://0" then
+		return
+	end
+
+	local emitter = Instance.new("Part")
+	emitter.Anchored = true
+	emitter.CanCollide = false
+	emitter.CanTouch = false
+	emitter.CanQuery = false
+	emitter.Transparency = 1
+	emitter.Size = Vector3.new(1, 1, 1)
+	emitter.CFrame = CFrame.new(position)
+	emitter.Parent = Workspace
+
+	local sound = Instance.new("Sound")
+	sound.SoundId = soundId
+	sound.Volume = volume or 1
+	sound.RollOffMaxDistance = 120
+	sound.Parent = emitter
+	sound:Play()
+
+	Debris:AddItem(emitter, 4)
+end
+
+local function isGlassPart(part)
+	return part and part:IsA("BasePart") and part.Material == Enum.Material.Glass
+end
+
+local function containsForceMover(inst)
+	if not inst then
+		return false
+	end
+
+	for _, d in ipairs(inst:GetDescendants()) do
+		if FORCE_MOVER_CLASSES[d.ClassName] then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function getClosestPointOnPart(part, worldPoint)
+	local localPoint = part.CFrame:PointToObjectSpace(worldPoint)
+	local half = part.Size * 0.5
+
+	local clamped = Vector3.new(
+		math.clamp(localPoint.X, -half.X, half.X),
+		math.clamp(localPoint.Y, -half.Y, half.Y),
+		math.clamp(localPoint.Z, -half.Z, half.Z)
+	)
+
+	return part.CFrame:PointToWorldSpace(clamped)
+end
+
+local function partIntersectsSphere(part, center, radius)
+	local closest = getClosestPointOnPart(part, center)
+	return (closest - center).Magnitude <= radius
+end
+
+local function isSlidingContact(targetPart, otherPart)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { otherPart, container }
+	params.IgnoreWater = true
+
+	local origin = otherPart.Position + Vector3.new(0, 1.5, 0)
+	local result = Workspace:Raycast(origin, Vector3.new(0, -4, 0), params)
+
+	if result and result.Instance and isTargetPart(result.Instance) and result.Normal.Y > CONFIG.SlideIgnoreNormalY then
+		return true
+	end
+
+	return false
+end
+
+local function getVisualSources(part)
+	local sources = {}
+	for _, child in ipairs(part:GetDescendants()) do
+		if child:IsA("Decal") or child:IsA("Texture") or child:IsA("SurfaceAppearance") then
+			table.insert(sources, child)
+		end
+	end
+	return sources
+end
+
+local function applyVisualSources(voxel, sources)
+	for _, source in ipairs(sources) do
+		local clone = source:Clone()
+		clone.Parent = voxel
+	end
+end
+
+local function computeImpactForce(targetPart, otherPart, overrideSpeed)
+	local speed = otherPart.AssemblyLinearVelocity.Magnitude
+
+	if overrideSpeed and overrideSpeed > speed then
+		speed = overrideSpeed
+	end
+
+	if containsForceMover(otherPart) then
+		speed += CONFIG.MinMoverSpeed
+	end
+
+	return speed * CONFIG.VelocityToForce
+end
+
+local function makeDamageRadius(force)
+	return math.clamp(
+		CONFIG.BaseDestroyRadius + (force * CONFIG.RadiusPerForce),
+		CONFIG.FragmentSize,
+		CONFIG.MaxDestroyRadius
+	)
+end
+
+local function wakeVoxelDebris(voxel, sourcePosition, force, sourceVelocity)
+	if not voxel or not voxel:IsA("BasePart") then
+		return
+	end
+	if not isVoxelDebrisPart(voxel) then
+		return
+	end
+
+	local dir = voxel.Position - sourcePosition
+	if dir.Magnitude < 0.001 then
+		dir = Vector3.new(math.random() - 0.5, math.random(), math.random() - 0.5)
+	end
+	dir = dir.Unit
+
+	local throwSpeed = math.clamp(force * CONFIG.ForceToThrowSpeed, 18, CONFIG.MaxThrowSpeed)
+	local upward = Vector3.new(0, math.clamp(force * 0.25, 0, 45), 0)
+
+	voxel.Anchored = false
+	voxel.CanTouch = true
+	voxel.CanQuery = true
+	voxel.AssemblyLinearVelocity = (sourceVelocity or Vector3.zero) + (dir * throwSpeed) + upward
+
+	Debris:AddItem(voxel, CONFIG.FragmentLifetime)
+end
+
+local function hookVoxelDebrisTouch(voxel)
+	if touchedConnections[voxel] then
+		return
+	end
+
+	if not voxel.CanTouch then
+		voxel.CanTouch = true
+	end
+
+	touchedConnections[voxel] = voxel.Touched:Connect(function(other)
+		if not other or not other:IsA("BasePart") then
+			return
+		end
+
+		-- Voxels cannot damage voxelizable structures, and they cannot chain-react off each other.
+		if isTargetPart(other) or isVoxelDebrisPart(other) then
+			return
+		end
+
+		local speed = other.AssemblyLinearVelocity.Magnitude
+		if speed < CONFIG.MinWakeSpeed then
+			return
+		end
+
+		wakeVoxelDebris(voxel, other.Position, speed, other.AssemblyLinearVelocity)
+	end)
+end
+
+local function voxelizePart(part, damageCenter, damageRadius, force)
+	if destroyedParts[part] then
+		return
+	end
+	destroyedParts[part] = true
+
+	local sourceCF = part.CFrame
+	local sourceSize = part.Size
+	local sourceColor = part.Color
+	local sourceMaterial = part.Material
+	local sourceTransparency = part.Transparency
+	local sourceReflectance = part.Reflectance
+	local sourceCanCollide = part.CanCollide
+	local sourceAssemblyVelocity = part.AssemblyLinearVelocity
+
+	local visualSources = getVisualSources(part)
+
+	if isGlassPart(part) then
+		playSoundAt(damageCenter, CONFIG.GlassSoundId, CONFIG.GlassVolume)
+	else
+		playSoundAt(damageCenter, CONFIG.DestructionSoundId, CONFIG.DestructionVolume)
+	end
+
+	local half = sourceSize * 0.5
+	local frag = CONFIG.FragmentSize
+	local created = 0
+
+	local function gridFloor(v)
+		return math.floor(v / frag) * frag
+	end
+
+	-- Voxels only fully inside the blast sphere are destroyed.
+	-- Voxels that are partially inside remain anchored and persist.
+	local voxelKeepPadding = (frag * math.sqrt(3)) * 0.5
+	local destroyThreshold = math.max(0, damageRadius - voxelKeepPadding)
+
+	local localCenter = sourceCF:PointToObjectSpace(damageCenter)
+	local minX = gridFloor(localCenter.X - damageRadius)
+	local maxX = gridFloor(localCenter.X + damageRadius)
+	local minY = gridFloor(localCenter.Y - damageRadius)
+	local maxY = gridFloor(localCenter.Y + damageRadius)
+	local minZ = gridFloor(localCenter.Z - damageRadius)
+	local maxZ = gridFloor(localCenter.Z + damageRadius)
+
+	part:Destroy()
+
+	local throwSpeed = math.clamp(force * CONFIG.ForceToThrowSpeed, 18, CONFIG.MaxThrowSpeed)
+
+	for x = minX, maxX, frag do
+		for y = minY, maxY, frag do
+			for z = minZ, maxZ, frag do
+				if created >= CONFIG.MaxFragmentsPerPart then
+					break
+				end
+
+				local localPos = Vector3.new(x + frag * 0.5, y + frag * 0.5, z + frag * 0.5)
+
+				if math.abs(localPos.X) <= half.X and math.abs(localPos.Y) <= half.Y and math.abs(localPos.Z) <= half.Z then
+					local worldPos = sourceCF:PointToWorldSpace(localPos)
+					local distFromDamage = (worldPos - damageCenter).Magnitude
+
+					local voxel = Instance.new("Part")
+					voxel.Name = "Voxel"
+					voxel:SetAttribute("IsVoxelDebris", true)
+					voxel.Size = Vector3.new(frag, frag, frag)
+					voxel.Material = sourceMaterial
+					voxel.Color = sourceColor
+					voxel.Transparency = sourceTransparency
+					voxel.Reflectance = sourceReflectance
+					voxel.TopSurface = Enum.SurfaceType.Smooth
+					voxel.BottomSurface = Enum.SurfaceType.Smooth
+					voxel.CanTouch = true
+					voxel.CanQuery = true
+					voxel.CanCollide = sourceCanCollide
+					voxel.CFrame = CFrame.new(worldPos)
+					voxel.Parent = voxelDebrisFolder
+
+					applyVisualSources(voxel, visualSources)
+					hookVoxelDebrisTouch(voxel)
+
+					if distFromDamage <= destroyThreshold then
+						voxel.Anchored = false
+
+						local dir = (worldPos - damageCenter)
+						if dir.Magnitude < 0.001 then
+							dir = Vector3.new(math.random() - 0.5, math.random(), math.random() - 0.5)
+						end
+						dir = dir.Unit
+
+						local outwardVelocity = dir * throwSpeed
+						local upward = Vector3.new(0, math.clamp(force * 0.25, 0, 45), 0)
+
+						voxel.AssemblyLinearVelocity = sourceAssemblyVelocity + outwardVelocity + upward
+						Debris:AddItem(voxel, CONFIG.FragmentLifetime)
+					else
+						voxel.Anchored = true
+						voxel.AssemblyLinearVelocity = Vector3.zero
+					end
+
+					created += 1
+				end
+			end
+		end
+	end
+end
+
+local function applyDamageToPart(part, damageCenter, force, damageRadiusOverride)
+	if destroyedParts[part] then
+		return
+	end
+	if not part or not part:IsA("BasePart") then
+		return
+	end
+
+	local damageRadius = damageRadiusOverride or makeDamageRadius(force)
+
+	if not partIntersectsSphere(part, damageCenter, damageRadius) then
+		return
+	end
+
+	voxelizePart(part, damageCenter, damageRadius, force)
+end
+
+local function applyAreaDamage(center, force, radiusOverride)
+	local radius = radiusOverride or makeDamageRadius(force)
+
+	for _, part in ipairs(Workspace:GetPartBoundsInRadius(center, radius)) do
+		if isTargetPart(part) and not destroyedParts[part] then
+			if partIntersectsSphere(part, center, radius) then
+				applyDamageToPart(part, center, force, radius)
+			end
+		end
+	end
+end
+
+local function wakeDebrisInRadius(center, force, sourceVelocity, radiusOverride)
+	local radius = radiusOverride or makeDamageRadius(force)
+
+	for _, part in ipairs(Workspace:GetPartBoundsInRadius(center, radius)) do
+		if isVoxelDebrisPart(part) and part.Anchored then
+			wakeVoxelDebris(part, center, force, sourceVelocity)
+		end
+	end
+end
+
+local function hookTouched(part)
+	if touchedConnections[part] then
+		return
+	end
+
+	if not part.CanTouch then
+		part.CanTouch = true
+	end
+
+	touchedConnections[part] = part.Touched:Connect(function(other)
+		if not other or destroyedParts[part] then
+			return
+		end
+		if not other:IsA("BasePart") then
+			return
+		end
+
+		-- Voxels cannot trigger damage on structures.
+		if isTargetPart(other) or isVoxelDebrisPart(other) then
+			return
+		end
+
+		local incomingSpeed = other.AssemblyLinearVelocity.Magnitude
+		if incomingSpeed < CONFIG.MinImpactSpeed then
+			return
+		end
+
+		local force = computeImpactForce(part, other, incomingSpeed)
+		if force < CONFIG.MinImpactSpeed then
+			return
+		end
+
+		if isSlidingContact(part, other) then
+			return
+		end
+
+		local contactPoint = getClosestPointOnPart(part, other.Position)
+		applyAreaDamage(contactPoint, force)
+	end)
+end
+
+local function hookAllParts()
+	for _, part in ipairs(getTargetParts()) do
+		hookTouched(part)
+	end
+end
+
+hookAllParts()
+
+if container:IsA("Model") then
+	container.DescendantAdded:Connect(function(inst)
+		if inst:IsA("BasePart") then
+			hookTouched(inst)
+		end
+	end)
+end
+
+local function getExplosionForce(explosion)
+	local blastPressure = explosion.BlastPressure or 500000
+	return math.clamp(blastPressure / 7500, 40, 220)
+end
+
+local function processExplosion(explosion)
+	if processedExplosions[explosion] then
+		return
+	end
+	processedExplosions[explosion] = true
+
+	if not explosion or not explosion.Parent then
+		return
+	end
+	if not explosion:IsA("Explosion") then
+		return
+	end
+
+	local center = explosion.Position
+	local force = getExplosionForce(explosion)
+	local radius = math.max(explosion.BlastRadius or 0, makeDamageRadius(force))
+
+	-- Non-direct explosions should still damage nearby parts and voxel debris.
+	applyAreaDamage(center, force, radius)
+	wakeDebrisInRadius(center, force, Vector3.zero, radius)
+end
+
+local function hookExplosion(inst)
+	if hookedExplosions[inst] then
+		return
+	end
+	if not inst:IsA("Explosion") then
+		return
+	end
+
+	hookedExplosions[inst] = true
+
+	-- Keep direct-hit wake behavior for voxel debris.
+	inst.Hit:Connect(function(part, distance)
+		if not part or not part:IsA("BasePart") then
+			return
+		end
+
+		if not isVoxelDebrisPart(part) then
+			return
+		end
+
+		local force = getExplosionForce(inst)
+		wakeVoxelDebris(part, inst.Position, force, Vector3.zero)
+	end)
+
+	-- Area damage for direct and non-direct explosions.
+	task.delay(CONFIG.ExplosionProcessDelay, function()
+		if inst and inst.Parent then
+			processExplosion(inst)
+		end
+	end)
+end
+
+for _, inst in ipairs(Workspace:GetDescendants()) do
+	hookExplosion(inst)
+end
+
+Workspace.DescendantAdded:Connect(hookExplosion)
+
+local heartbeatAccum = 0
+RunService.Heartbeat:Connect(function(dt)
+	if container:IsA("BasePart") then
+		return
+	end
+
+	heartbeatAccum += dt
+	if heartbeatAccum < CONFIG.HeartbeatScanInterval then
+		return
+	end
+
+	local scanDt = heartbeatAccum
+	heartbeatAccum = 0
+
+	local boundsCF, boundsSize = getBoundsForContainer()
+	local scanSize = boundsSize + Vector3.new(8, 8, 8)
+
+	for _, part in ipairs(Workspace:GetPartBoundsInBox(boundsCF, scanSize)) do
+		if part:IsA("BasePart") and not isTargetPart(part) and not isVoxelDebrisPart(part) then
+			local prev = lastPositions[part]
+			lastPositions[part] = part.Position
+
+			if prev then
+				local speed = (part.Position - prev).Magnitude / math.max(scanDt, 1/240)
+
+				if speed >= CONFIG.MinImpactSpeed then
+					applyAreaDamage(part.Position, speed)
+					wakeDebrisInRadius(part.Position, speed, part.AssemblyLinearVelocity)
+					return
+				end
+			end
+		end
+	end
+end)
