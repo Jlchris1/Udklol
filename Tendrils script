@@ -1,0 +1,2585 @@
+local RunService = game:GetService("RunService")
+local PhysicsService = game:GetService("PhysicsService")
+local Players = game:GetService("Players")
+local Debris = game:GetService("Debris")
+local ServerStorage = game:GetService("ServerStorage")
+local Workspace = game:GetService("Workspace")
+
+local BASE_TENDRIL_COUNT = 4
+local DEFAULT_TENDRIL_LENGTH = 32
+
+local BASE_THICKNESS = 2
+local TIP_THICKNESS = 0.7
+
+local BASE_SEGMENT_SPACING = 0.72
+
+local WIGGLE_SPEED = 2.8
+local STRETCH_AMOUNT = 0.22
+
+local SWEEP_SPEED = 0.95
+local SWIRL_SPEED = 0.75
+local MAX_SWEEP_ANGLE = math.rad(90)
+local MAX_SWIRL_ANGLE = math.rad(90)
+
+local WORLD_UP = Vector3.new(0, 1, 0)
+local WORLD_RIGHT = Vector3.new(1, 0, 0)
+
+local NPC_GROUP = "NPCBody"
+local TENDRIL_GROUP = "Tendrils"
+local POINT_PREFIX = "TendrilPoint"
+
+local PATROL_SPEED = 23
+local CHASE_SPEED = 50
+local SEARCH_RADIUS = 180
+local GRAB_RANGE = 14
+
+local LIMB_TEAR_TIME = 5
+local LIMB_DAMAGE = 20
+
+local HOLD_HEIGHT = 8
+local HOLD_FORWARD = 7
+
+local TORN_SOUND_ID = 9113542694
+local CAUGHT_SOUND_ID = 140036116780803
+local MONSTER_SOUND_ID = 140014800390276
+local IMPACT_SOUND_ID = 108369762362634
+
+local EAT_TELEPORT_POS = Vector3.new(900620.813, -224.282, 911.828)
+
+local FINAL_DRAG_TIME = 8.5
+local FINAL_DRAG_LERP = 0.045
+local FINAL_DRAG_MIN_OFFSET = 0.55
+local FINAL_DRAG_MAX_OFFSET = 6.5
+
+local SOURCE_ROOT_BACK_MIN = 0.35
+local SOURCE_ROOT_SIDE_MAX_SCALE = 0.65
+local SOURCE_ROOT_UP_MAX_SCALE = 0.55
+
+local DUBBLE_DOOR_REGEN_TIME = 300
+local DOOR_FLING_VELOCITY = 200
+local HALLWAY_TENDRIL_RANGE = 9
+local ROOM_TENDRIL_RANGE = 10
+local ROOM_LOST_SIGHT_TIME = 1.3
+local ROOM_ENTRY_MEMORY_TIME = 7
+
+local DENT_TICKS = 5
+local DENT_ANGLE_DEGREES = 5
+local DOOR_HOLD_TIME = 2
+local DOOR_PULL_TIME = 1.35
+local DOOR_YANK_TIME = 0.18
+
+local POINT_CONFIG = {}
+
+local function ensureCollisionGroup(name)
+	pcall(function()
+		PhysicsService:RegisterCollisionGroup(name)
+	end)
+end
+
+ensureCollisionGroup(NPC_GROUP)
+ensureCollisionGroup(TENDRIL_GROUP)
+pcall(function()
+	PhysicsService:CollisionGroupSetCollidable(NPC_GROUP, TENDRIL_GROUP, false)
+	PhysicsService:CollisionGroupSetCollidable(TENDRIL_GROUP, "Default", false)
+end)
+
+local function safeUnit(v)
+	if v.Magnitude < 0.001 then
+		return Vector3.zero
+	end
+	return v.Unit
+end
+
+local function rotateAroundAxis(v, axis, angle)
+	local a = safeUnit(axis)
+	if a == Vector3.zero or math.abs(angle) < 1e-6 then
+		return v
+	end
+	local c = math.cos(angle)
+	local s = math.sin(angle)
+	return v * c + a:Cross(v) * s + a * (a:Dot(v)) * (1 - c)
+end
+
+local function frameFromForward(pos, forwardDir, upHint)
+	local forward = safeUnit(forwardDir)
+	if forward == Vector3.zero then
+		forward = Vector3.new(0, 0, -1)
+	end
+
+	local up = safeUnit(upHint or WORLD_UP)
+	if up == Vector3.zero or math.abs(up:Dot(forward)) > 0.92 then
+		up = WORLD_UP
+		if math.abs(up:Dot(forward)) > 0.92 then
+			up = WORLD_RIGHT
+		end
+	end
+
+	local right = up:Cross(forward)
+	if right.Magnitude < 0.001 then
+		up = WORLD_RIGHT
+		right = up:Cross(forward)
+	end
+
+	right = right.Unit
+	local realUp = forward:Cross(right).Unit
+	return CFrame.fromMatrix(pos, right, realUp, -forward)
+end
+
+local function soundId(id)
+	return "rbxassetid://" .. tostring(id)
+end
+
+local function playSound(parent, id, volume, looped, playbackSpeed)
+	if not parent then
+		return nil
+	end
+
+	local s = Instance.new("Sound")
+	s.SoundId = soundId(id)
+	s.Volume = volume or 1
+	s.Looped = looped or false
+	s.PlaybackSpeed = playbackSpeed or 1
+	s.RollOffMaxDistance = 90
+	s.Parent = parent
+	s:Play()
+
+	if not looped then
+		Debris:AddItem(s, 12)
+	end
+
+	return s
+end
+
+local function createSphere(parent)
+	local part = Instance.new("Part")
+	part.Name = "TendrilSphere"
+	part.Anchored = true
+	part.Massless = true
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.Material = Enum.Material.SmoothPlastic
+	part.Shape = Enum.PartType.Ball
+	part.Color = Color3.fromRGB(0, 0, 0)
+	part.Size = Vector3.new(BASE_THICKNESS, BASE_THICKNESS, BASE_THICKNESS)
+	part.CollisionGroup = TENDRIL_GROUP
+	part.Parent = parent
+	return part
+end
+
+local function getRigRoot(model)
+	return model:FindFirstChild("HumanoidRootPart")
+		or model.PrimaryPart
+		or model:FindFirstChild("Torso")
+		or model:FindFirstChild("UpperTorso")
+end
+
+local function getTorsoPart(model, fallback)
+	return model:FindFirstChild("UpperTorso")
+		or model:FindFirstChild("Torso")
+		or fallback
+end
+
+local function setRigCollisionGroup(rig)
+	for _, inst in ipairs(rig:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.CollisionGroup = NPC_GROUP
+		end
+	end
+end
+
+local function setModelCollisionGroup(model, groupName)
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.CollisionGroup = groupName
+		end
+	end
+end
+
+local function setModelCanCollide(model, canCollide)
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.CanCollide = canCollide
+		end
+	end
+end
+
+local function setModelCanQuery(model, canQuery)
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.CanQuery = canQuery
+		end
+	end
+end
+
+local function forcePlatformStand(model)
+	if not model or not model.Parent then
+		return
+	end
+
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.PlatformStand = true
+		humanoid.AutoRotate = false
+		humanoid.Sit = false
+		pcall(function()
+			humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+		end)
+	end
+end
+
+local function readChildTextValue(part, childName)
+	local child = part:FindFirstChild(childName)
+	if not child then
+		return nil
+	end
+
+	if child:IsA("StringValue") then
+		return child.Value
+	elseif child:IsA("NumberValue") then
+		return tostring(child.Value)
+	elseif child:IsA("IntValue") then
+		return tostring(child.Value)
+	end
+
+	return nil
+end
+
+local function readChildBoolValue(part, childName, defaultValue)
+	local child = part:FindFirstChild(childName)
+	if child and child:IsA("BoolValue") then
+		return child.Value
+	end
+	return defaultValue
+end
+
+local function parseNumber(text)
+	if text == nil then
+		return nil
+	end
+	local n = tonumber(tostring(text):match("[-%d%.]+"))
+	return n
+end
+
+local function parseColorValue(text)
+	if not text then
+		return nil
+	end
+
+	local nums = {}
+	for n in tostring(text):gmatch("[-%d%.]+") do
+		table.insert(nums, tonumber(n))
+	end
+
+	if #nums >= 3 then
+		local r = math.clamp(nums[1], 0, 255)
+		local g = math.clamp(nums[2], 0, 255)
+		local b = math.clamp(nums[3], 0, 255)
+		return Color3.fromRGB(r, g, b)
+	end
+
+	return nil
+end
+
+local function getPointIndex(name)
+	local num = name:match("^" .. POINT_PREFIX .. "(%d+)$")
+	if num then
+		return tonumber(num)
+	end
+	if name == POINT_PREFIX then
+		return 0
+	end
+	return nil
+end
+
+local function getPointSettingsFromPart(part)
+	local cfg = {
+		length = DEFAULT_TENDRIL_LENGTH,
+		width = BASE_THICKNESS,
+		swayIntensity = 1,
+		color = Color3.fromRGB(0, 0, 0),
+		segmentAmount = nil,
+		attackEnabled = true,
+		attackRange = nil,
+	}
+
+	local lenText = readChildTextValue(part, "Length")
+	local widthText = readChildTextValue(part, "Width")
+	local swayText = readChildTextValue(part, "SwayIntensity")
+	local colorText = readChildTextValue(part, "Color")
+	local segText = readChildTextValue(part, "SegmentAmount")
+	local attackRangeText = readChildTextValue(part, "AttackRange")
+
+	local len = parseNumber(lenText)
+	local width = parseNumber(widthText)
+	local sway = parseNumber(swayText)
+	local seg = parseNumber(segText)
+	local attackRange = parseNumber(attackRangeText)
+
+	if len and len > 0 then
+		cfg.length = len
+	end
+
+	if width and width > 0 then
+		cfg.width = width
+	end
+
+	if sway and sway >= 0 then
+		cfg.swayIntensity = sway
+	end
+
+	if seg and seg >= 2 then
+		cfg.segmentAmount = math.floor(seg)
+	end
+
+	if attackRange and attackRange > 0 then
+		cfg.attackRange = attackRange
+	end
+
+	local color = parseColorValue(colorText)
+	if color then
+		cfg.color = color
+	end
+
+	cfg.attackEnabled = readChildBoolValue(part, "Attack", true) ~= false
+
+	return cfg
+end
+
+local function getPointSettingsFromOverride(partName, cfg)
+	local override = POINT_CONFIG[partName]
+	if override then
+		for k, v in pairs(override) do
+			cfg[k] = v
+		end
+	end
+	return cfg
+end
+
+local function getPartByNames(model, names)
+	for _, name in ipairs(names) do
+		local part = model:FindFirstChild(name, true)
+		if part and part:IsA("BasePart") then
+			return part
+		end
+	end
+	return nil
+end
+
+local function collectTendrilPointParts(rigModel, holderFolder)
+	local points = {}
+
+	for _, inst in ipairs(rigModel:GetDescendants()) do
+		if inst:IsA("BasePart") and not inst:IsDescendantOf(holderFolder) then
+			local index = getPointIndex(inst.Name)
+			if index ~= nil then
+				table.insert(points, {
+					part = inst,
+					index = index,
+					config = getPointSettingsFromOverride(inst.Name, getPointSettingsFromPart(inst)),
+				})
+			end
+		end
+	end
+
+	table.sort(points, function(a, b)
+		if a.index == b.index then
+			return a.part.Name < b.part.Name
+		end
+		return a.index < b.index
+	end)
+
+	return points
+end
+
+local function buildDefaultRootOffsets(count, torsoSize)
+	local offsets = {}
+	local backDistance = math.max(torsoSize.Z * 0.5 + 0.45, 0.85)
+	local ringRadius = math.max(torsoSize.X * 0.38, 1.65)
+
+	if count == 1 then
+		offsets[1] = Vector3.new(0, 0, backDistance)
+		return offsets
+	end
+
+	if count == 2 then
+		local x = ringRadius * 0.65
+		offsets[1] = Vector3.new(-x, 0, backDistance)
+		offsets[2] = Vector3.new(x, 0, backDistance)
+		return offsets
+	end
+
+	local angleOffset = -math.pi / 2
+	for i = 1, count do
+		local angle = angleOffset + ((i - 1) / count) * math.pi * 2
+		local x = math.cos(angle) * ringRadius
+		local y = math.sin(angle) * (ringRadius * 0.72)
+		offsets[i] = Vector3.new(x, y, backDistance)
+	end
+
+	return offsets
+end
+
+local function getBackCenterOffset(torsoSize)
+	return Vector3.new(0, torsoSize.Y * 0.05, math.max(torsoSize.Z * 0.5 + 0.55, 0.9))
+end
+
+local rig = script.Parent
+if not rig or not rig:IsA("Model") then
+	error("Put this script inside a rig Model.")
+end
+
+local rigRoot = getRigRoot(rig)
+if not rigRoot or not rigRoot:IsA("BasePart") then
+	error("Rig needs a HumanoidRootPart, PrimaryPart, Torso, or UpperTorso.")
+end
+
+local torsoPart = getTorsoPart(rig, rigRoot)
+if not torsoPart or not torsoPart:IsA("BasePart") then
+	error("Rig needs a torso/root part.")
+end
+
+local npcHumanoid = rig:FindFirstChildOfClass("Humanoid")
+if not npcHumanoid then
+	error("Rig needs a Humanoid.")
+end
+
+npcHumanoid.WalkSpeed = PATROL_SPEED
+npcHumanoid.AutoRotate = true
+
+local monsterDeathCleanupScheduled = false
+local function scheduleMonsterDespawn()
+	if monsterDeathCleanupScheduled then
+		return
+	end
+	monsterDeathCleanupScheduled = true
+
+	task.delay(5, function()
+		if rig and rig.Parent then
+			rig:Destroy()
+		end
+	end)
+end
+
+npcHumanoid.Died:Connect(scheduleMonsterDespawn)
+
+setRigCollisionGroup(rig)
+
+local holder = Instance.new("Folder")
+holder.Name = "Tendrils"
+holder.Parent = rig
+
+local tendrils = {}
+local grabbing = false
+local currentAttackTargetPart = nil
+local currentAttackIntensity = 0
+
+local protectedCreatureNames = {}
+
+local function refreshProtectedCreatureNames()
+	table.clear(protectedCreatureNames)
+
+	for _, folderName in ipairs({ "TunnelsCreatures", "DesertCreatures" }) do
+		local folder = ServerStorage:FindFirstChild(folderName)
+		if folder then
+			for _, inst in ipairs(folder:GetDescendants()) do
+				if inst:IsA("Model") then
+					protectedCreatureNames[inst.Name] = true
+				end
+			end
+		end
+	end
+end
+
+refreshProtectedCreatureNames()
+
+task.spawn(function()
+	while rig.Parent do
+		refreshProtectedCreatureNames()
+		task.wait(10)
+	end
+end)
+
+local function isProtectedCreature(model)
+	return protectedCreatureNames[model.Name] == true
+end
+
+local function getModelRoot(model)
+	return model:FindFirstChild("HumanoidRootPart")
+		or model.PrimaryPart
+		or model:FindFirstChild("LowerTorso")
+		or model:FindFirstChild("Torso")
+		or model:FindFirstChild("UpperTorso")
+end
+
+local function isValidTargetModel(model)
+	if not model or model == rig then
+		return false
+	end
+
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 then
+		return false
+	end
+
+	if isProtectedCreature(model) then
+		return false
+	end
+
+	if Players:GetPlayerFromCharacter(model) then
+		return true
+	end
+
+	if model.Name == "DesertZombie" or model:GetAttribute("DesertZombie") then
+		return true
+	end
+
+	return true
+end
+
+local function getLimbSpecs(model)
+	local isR15 = model:FindFirstChild("UpperTorso") ~= nil
+
+	if isR15 then
+		local defs = {
+			{
+				name = "LeftArm",
+				parts = { "LeftUpperArm", "LeftLowerArm", "LeftHand" },
+				grab = { "LeftHand", "LeftLowerArm", "LeftUpperArm" },
+			},
+			{
+				name = "RightArm",
+				parts = { "RightUpperArm", "RightLowerArm", "RightHand" },
+				grab = { "RightHand", "RightLowerArm", "RightUpperArm" },
+			},
+			{
+				name = "LeftLeg",
+				parts = { "LeftUpperLeg", "LeftLowerLeg", "LeftFoot" },
+				grab = { "LeftFoot", "LeftLowerLeg", "LeftUpperLeg" },
+			},
+			{
+				name = "RightLeg",
+				parts = { "RightUpperLeg", "RightLowerLeg", "RightFoot" },
+				grab = { "RightFoot", "RightLowerLeg", "RightUpperLeg" },
+			},
+		}
+
+		local specs = {}
+		for _, def in ipairs(defs) do
+			local parts = {}
+			for _, name in ipairs(def.parts) do
+				local p = model:FindFirstChild(name, true)
+				if p and p:IsA("BasePart") then
+					table.insert(parts, p)
+				end
+			end
+
+			if #parts > 0 then
+				table.insert(specs, {
+					name = def.name,
+					parts = parts,
+					grabPart = getPartByNames(model, def.grab) or parts[1],
+				})
+			end
+		end
+
+		return specs
+	end
+
+	local defs = {
+		{ name = "LeftArm", parts = { "Left Arm" }, grab = { "Left Arm" } },
+		{ name = "RightArm", parts = { "Right Arm" }, grab = { "Right Arm" } },
+		{ name = "LeftLeg", parts = { "Left Leg" }, grab = { "Left Leg" } },
+		{ name = "RightLeg", parts = { "Right Leg" }, grab = { "Right Leg" } },
+	}
+
+	local specs = {}
+	for _, def in ipairs(defs) do
+		local parts = {}
+		for _, name in ipairs(def.parts) do
+			local p = model:FindFirstChild(name, true)
+			if p and p:IsA("BasePart") then
+				table.insert(parts, p)
+			end
+		end
+
+		if #parts > 0 then
+			table.insert(specs, {
+				name = def.name,
+				parts = parts,
+				grabPart = parts[1],
+			})
+		end
+	end
+
+	return specs
+end
+
+local function makePartSet(parts)
+	local set = {}
+	for _, part in ipairs(parts) do
+		set[part] = true
+	end
+	return set
+end
+
+local function destroyConnectionsForParts(model, parts)
+	local set = makePartSet(parts)
+
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("Motor6D") or inst:IsA("Weld") or inst:IsA("ManualWeld") or inst:IsA("WeldConstraint") or inst:IsA("NoCollisionConstraint") then
+			local p0 = inst.Part0
+			local p1 = inst.Part1
+			if (p0 and set[p0]) or (p1 and set[p1]) then
+				inst:Destroy()
+			end
+		elseif inst:IsA("BallSocketConstraint") or inst:IsA("HingeConstraint") or inst:IsA("SpringConstraint") or inst:IsA("AlignPosition") or inst:IsA("AlignOrientation") then
+			local a0 = inst.Attachment0
+			local a1 = inst.Attachment1
+			local p0 = a0 and a0.Parent
+			local p1 = a1 and a1.Parent
+			if (p0 and set[p0]) or (p1 and set[p1]) then
+				inst:Destroy()
+			end
+		elseif inst:IsA("Attachment") then
+			if set[inst.Parent] then
+				inst:Destroy()
+			end
+		end
+	end
+end
+
+local function createTemporaryChainWelds(parts)
+	local welds = {}
+	for i = 1, #parts - 1 do
+		local w = Instance.new("WeldConstraint")
+		w.Part0 = parts[i]
+		w.Part1 = parts[i + 1]
+		w.Parent = parts[i]
+		table.insert(welds, w)
+	end
+	return welds
+end
+
+local function setModelAnchored(model, anchored)
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.Anchored = anchored
+		end
+	end
+end
+
+local function teleportModelToPosition(model, position)
+	if not model or not model.Parent then
+		return
+	end
+
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.AssemblyLinearVelocity = Vector3.zero
+			inst.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("Humanoid") then
+			inst.PlatformStand = true
+			inst.AutoRotate = false
+			inst.Sit = false
+			pcall(function()
+				inst:ChangeState(Enum.HumanoidStateType.Physics)
+			end)
+		end
+	end
+
+	pcall(function()
+		model:PivotTo(CFrame.new(position))
+	end)
+end
+
+local function isModelTouchingPart(model, part)
+	if not model or not part or not part.Parent then
+		return false
+	end
+
+	local params = OverlapParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { rig, holder }
+	params.MaxParts = 50
+
+	local hits = workspace:GetPartBoundsInBox(part.CFrame, part.Size + Vector3.new(0.8, 0.8, 0.8), params)
+	for _, hit in ipairs(hits) do
+		if hit:IsDescendantOf(model) then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function getMonsterHeadPart()
+	local head = rig:FindFirstChild("Head", true)
+	if head and head:IsA("BasePart") then
+		return head
+	end
+	return rigRoot
+end
+
+local function getAllBaseParts(model)
+	local parts = {}
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			table.insert(parts, inst)
+		end
+	end
+	return parts
+end
+
+local function ragdollModel(model)
+	if not model or not model.Parent then
+		return
+	end
+
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.PlatformStand = true
+		humanoid.AutoRotate = false
+		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+	end
+
+	for _, motor in ipairs(model:GetDescendants()) do
+		if motor:IsA("Motor6D") and motor.Part0 and motor.Part1 then
+			local att0 = Instance.new("Attachment")
+			att0.Name = "RagdollAttachment0"
+			att0.CFrame = motor.C0
+			att0.Parent = motor.Part0
+
+			local att1 = Instance.new("Attachment")
+			att1.Name = "RagdollAttachment1"
+			att1.CFrame = motor.C1
+			att1.Parent = motor.Part1
+
+			local socket = Instance.new("BallSocketConstraint")
+			socket.Name = "RagdollSocket"
+			socket.Attachment0 = att0
+			socket.Attachment1 = att1
+			socket.LimitsEnabled = true
+			socket.TwistLimitsEnabled = true
+			socket.UpperAngle = 65
+			socket.TwistLowerAngle = -65
+			socket.TwistUpperAngle = 65
+			socket.Parent = motor.Parent
+
+			motor:Destroy()
+		end
+	end
+
+	for _, part in ipairs(getAllBaseParts(model)) do
+		part.CanCollide = true
+	end
+end
+
+local function destroyTendril(t)
+	if not t or t._dead then
+		return
+	end
+
+	t._dead = true
+	for _, p in ipairs(t.parts) do
+		if p and p.Parent then
+			p:Destroy()
+		end
+	end
+end
+
+local function calcSegmentCount(length, explicitSegmentAmount)
+	if explicitSegmentAmount and explicitSegmentAmount >= 2 then
+		return math.floor(explicitSegmentAmount)
+	end
+	return math.max(18, math.floor(length / BASE_SEGMENT_SPACING) + 1)
+end
+
+local function addTendril(spec)
+	local length = spec.length or DEFAULT_TENDRIL_LENGTH
+	local segmentCount = spec.segmentCount or calcSegmentCount(length, spec.segmentAmount)
+	local segmentSpacing = length / math.max(segmentCount - 1, 1)
+
+	local rootPart = createSphere(holder)
+	rootPart.Name = "TendrilRoot"
+
+	local chain = { rootPart }
+	for _ = 2, segmentCount do
+		table.insert(chain, createSphere(holder))
+	end
+
+	local tendril = {
+		parts = chain,
+		segmentCount = segmentCount,
+		segmentSpacing = segmentSpacing,
+		length = length,
+		seed = math.random(1, 1000000) * (#tendrils + 1),
+		phase = math.random() * math.pi * 2,
+		sideSign = spec.sideSign or 1,
+		liftSign = spec.liftSign or 1,
+		sourcePart = spec.sourcePart,
+		grabTargetPart = spec.grabTargetPart,
+		localOffset = spec.localOffset or Vector3.zero,
+		thicknessScale = spec.thicknessScale or 1,
+		lengthScale = spec.lengthScale or 1,
+		markerSizeScale = spec.markerSizeScale or 0.25,
+		sweepScale = spec.sweepScale or 1,
+		swirlScale = spec.swirlScale or 1,
+		freeRoamScale = spec.freeRoamScale or 1,
+		repelScale = spec.repelScale or 1,
+		baseIndex = spec.baseIndex or 0,
+		lockTipPart = spec.lockTipPart,
+		attackEnabled = spec.attackEnabled ~= false,
+		attackRange = spec.attackRange,
+		color = spec.color or Color3.fromRGB(0, 0, 0),
+
+		retreatMode = false,
+		retreatUntil = 0,
+		retreatTargetPart = nil,
+		retreatMonsterRoot = nil,
+	}
+
+	table.insert(tendrils, tendril)
+	return tendril
+end
+
+local function spawnAttackTendril(targetPart, sideSign, liftSign, localOffset, extra)
+	extra = extra or {}
+	return addTendril({
+		localOffset = localOffset or Vector3.new((sideSign or 1) * 2.5, torsoPart.Size.Y * 0.5, 0),
+		sideSign = sideSign or 1,
+		liftSign = liftSign or 1,
+		thicknessScale = extra.thicknessScale or 1.08,
+		lengthScale = extra.lengthScale or 1.12,
+		markerSizeScale = extra.markerSizeScale or 0.18,
+		sweepScale = extra.sweepScale or 0.22,
+		swirlScale = extra.swirlScale or 0.16,
+		freeRoamScale = extra.freeRoamScale or 0.05,
+		repelScale = extra.repelScale or 1,
+		grabTargetPart = targetPart,
+		lockTipPart = targetPart,
+		attackEnabled = extra.attackEnabled ~= false,
+		attackRange = extra.attackRange,
+		color = extra.color,
+		length = extra.length,
+		segmentAmount = extra.segmentAmount,
+	})
+end
+
+local function spawnPullPairTendrils(targetPart, sideSign, liftSign, localOffset, extra)
+	extra = extra or {}
+	local xSpread = extra.pairSpreadX or 1.35
+	local ySpread = extra.pairSpreadY or 0.35
+	local first = spawnAttackTendril(
+		targetPart,
+		sideSign,
+		liftSign,
+		localOffset + Vector3.new(xSpread, ySpread, 0),
+		extra
+	)
+	local second = spawnAttackTendril(
+		targetPart,
+		-sideSign,
+		-liftSign,
+		localOffset + Vector3.new(-xSpread, -ySpread, 0),
+		extra
+	)
+	return { first, second }
+end
+
+local function beginTendrilRetreat(tendrilList, limbRootPart, monsterRoot, duration)
+	duration = duration or 1.0
+	local expireAt = os.clock() + duration
+
+	for _, t in ipairs(tendrilList) do
+		if t then
+			t.retreatMode = true
+			t.retreatUntil = expireAt
+			t.retreatTargetPart = limbRootPart
+			t.retreatMonsterRoot = monsterRoot
+			t.lockTipPart = limbRootPart
+			t.freeRoamScale = 0
+			t.sweepScale = 0
+			t.swirlScale = 0
+			t.repelScale = math.max(t.repelScale or 1, 1) * 1.8
+		end
+	end
+
+	task.delay(duration + 0.05, function()
+		for _, t in ipairs(tendrilList) do
+			destroyTendril(t)
+		end
+	end)
+end
+
+local function updateHeldTargetPosition(targetRoot, monsterRoot)
+	if not targetRoot or not targetRoot.Parent or not monsterRoot or not monsterRoot.Parent then
+		return
+	end
+	targetRoot.CFrame = monsterRoot.CFrame * CFrame.new(0, HOLD_HEIGHT, -HOLD_FORWARD)
+end
+
+local function getNearestMouthMonsterRoot()
+	return rigRoot
+end
+
+local function slowlyBringVictimToMouth(targetModel, targetRoot, monsterHeadPart)
+	if not targetModel or not targetRoot or not targetRoot.Parent then
+		return
+	end
+	if not monsterHeadPart or not monsterHeadPart.Parent then
+		return
+	end
+
+	setModelCollisionGroup(targetModel, NPC_GROUP)
+	setModelCanCollide(targetModel, false)
+	setModelCanQuery(targetModel, false)
+	forcePlatformStand(targetModel)
+
+	local feastTendrils = spawnPullPairTendrils(
+		targetRoot,
+		1,
+		1,
+		Vector3.new(0, torsoPart.Size.Y * 0.35, -(torsoPart.Size.Z * 0.5 + 1.2)),
+		{
+			thicknessScale = 1.18,
+			lengthScale = 1.12,
+			markerSizeScale = 0.2,
+			sweepScale = 0.0,
+			swirlScale = 0.0,
+			freeRoamScale = 0,
+			pairSpreadX = 1.55,
+			pairSpreadY = 0.22,
+			attackEnabled = true,
+		}
+	)
+
+	local start = os.clock()
+
+	while targetModel.Parent and targetRoot.Parent and monsterHeadPart.Parent do
+		forcePlatformStand(targetModel)
+
+		local distance = (targetRoot.Position - monsterHeadPart.Position).Magnitude
+		local approachOffset = math.clamp(distance * 0.5, FINAL_DRAG_MIN_OFFSET, FINAL_DRAG_MAX_OFFSET)
+		local mouthPos = monsterHeadPart.Position + monsterHeadPart.CFrame.LookVector * approachOffset + monsterHeadPart.CFrame.UpVector * 0.12
+
+		targetRoot.Anchored = false
+		targetRoot.CanCollide = false
+		targetRoot.CanQuery = false
+		targetRoot.AssemblyLinearVelocity = targetRoot.AssemblyLinearVelocity:Lerp((mouthPos - targetRoot.Position) * 2.5, 0.1)
+		targetRoot.AssemblyAngularVelocity = targetRoot.AssemblyAngularVelocity:Lerp(Vector3.zero, 0.15)
+
+		local pivot = targetModel:GetPivot()
+		local desired = CFrame.new(mouthPos, monsterHeadPart.Position)
+		targetModel:PivotTo(pivot:Lerp(desired, FINAL_DRAG_LERP))
+
+		if isModelTouchingPart(targetModel, monsterHeadPart) or distance <= 1.05 or os.clock() - start >= FINAL_DRAG_TIME then
+			break
+		end
+
+		task.wait(0.05)
+	end
+
+	for _, t in ipairs(feastTendrils) do
+		destroyTendril(t)
+	end
+end
+
+local function dragDetachedLimbToMouth(parts, monsterRoot, monsterHeadPart)
+	if not parts or #parts == 0 then
+		return
+	end
+	if not monsterRoot or not monsterRoot.Parent or not monsterHeadPart or not monsterHeadPart.Parent then
+		return
+	end
+
+	local ordered = table.clone(parts)
+	local rootPart = ordered[1]
+	if not rootPart or not rootPart.Parent then
+		return
+	end
+
+	for _, part in ipairs(ordered) do
+		if part and part.Parent then
+			part.Anchored = false
+			part.CanCollide = true
+			part.CanTouch = true
+			part.CanQuery = true
+			part.CollisionGroup = "Default"
+			part.AssemblyLinearVelocity = Vector3.zero
+			part.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+
+	local offsets = {}
+	local baseCF = rootPart.CFrame
+	for i, part in ipairs(ordered) do
+		offsets[i] = baseCF:ToObjectSpace(part.CFrame)
+	end
+
+	local stageCF = monsterRoot.CFrame * CFrame.new(
+		0,
+		torsoPart.Size.Y * 0.15,
+		-(torsoPart.Size.Z * 1.1 + 2.8)
+	)
+
+	for i, part in ipairs(ordered) do
+		part.CFrame = stageCF * offsets[i]
+	end
+
+	local carryTendrils = spawnPullPairTendrils(
+		rootPart,
+		1,
+		1,
+		Vector3.new(0, 0, 0),
+		{
+			thicknessScale = 1.0,
+			lengthScale = 1.0,
+			markerSizeScale = 0.12,
+			sweepScale = 0.0,
+			swirlScale = 0.0,
+			freeRoamScale = 0,
+			pairSpreadX = 0.95,
+			pairSpreadY = 0.2,
+			attackEnabled = true,
+		}
+	)
+
+	local start = os.clock()
+	local carryCF = stageCF
+
+	while rootPart.Parent and monsterHeadPart.Parent do
+		local distance = (rootPart.Position - monsterHeadPart.Position).Magnitude
+		local approachOffset = math.clamp(distance * 0.5, FINAL_DRAG_MIN_OFFSET, FINAL_DRAG_MAX_OFFSET)
+		local mouthPos = monsterHeadPart.Position + monsterHeadPart.CFrame.LookVector * approachOffset + monsterHeadPart.CFrame.UpVector * 0.12
+		local desiredCF = CFrame.new(mouthPos, monsterHeadPart.Position)
+
+		carryCF = carryCF:Lerp(desiredCF, FINAL_DRAG_LERP)
+
+		for i, part in ipairs(ordered) do
+			if part and part.Parent then
+				part.CFrame = carryCF * offsets[i]
+				part.AssemblyLinearVelocity = Vector3.zero
+				part.AssemblyAngularVelocity = Vector3.zero
+			end
+		end
+
+		if distance <= 1.05 or os.clock() - start >= FINAL_DRAG_TIME then
+			break
+		end
+
+		task.wait(0.05)
+	end
+
+	for _, t in ipairs(carryTendrils) do
+		destroyTendril(t)
+	end
+
+	for _, part in ipairs(ordered) do
+		if part and part.Parent then
+			part.Anchored = true
+			part.CanCollide = true
+			part.CanTouch = true
+			part.CanQuery = false
+			part.CFrame = CFrame.new(EAT_TELEPORT_POS)
+			part.Anchored = false
+		end
+	end
+end
+
+local function eatLimbParts(parts, monsterRoot, monsterHeadPart)
+	if #parts == 0 or not monsterRoot or not monsterRoot.Parent then
+		return
+	end
+
+	local ordered = table.clone(parts)
+
+	for _, part in ipairs(ordered) do
+		part.Anchored = true
+		part.CanCollide = true
+		part.CanTouch = true
+		part.CanQuery = true
+		part.CollisionGroup = "Default"
+		part.AssemblyLinearVelocity = Vector3.zero
+		part.AssemblyAngularVelocity = Vector3.zero
+	end
+
+	local welds = {}
+	if #ordered > 1 then
+		welds = createTemporaryChainWelds(ordered)
+	end
+
+	task.spawn(function()
+		dragDetachedLimbToMouth(ordered, monsterRoot, monsterHeadPart)
+	end)
+
+	task.delay(0.15, function()
+		for _, w in ipairs(welds) do
+			if w and w.Parent then
+				w:Destroy()
+			end
+		end
+	end)
+end
+
+local function severLimbGroup(model, parts, monsterRoot, monsterHeadPart)
+	if #parts == 0 then
+		return
+	end
+
+	destroyConnectionsForParts(model, parts)
+	eatLimbParts(parts, monsterRoot, monsterHeadPart)
+end
+
+local function isPointInsideBox(boxCF, boxSize, worldPos)
+	local p = boxCF:PointToObjectSpace(worldPos)
+	return math.abs(p.X) <= boxSize.X * 0.5
+		and math.abs(p.Y) <= boxSize.Y * 0.5
+		and math.abs(p.Z) <= boxSize.Z * 0.5
+end
+
+local function getFloorPart()
+	if not rigRoot or not rigRoot.Parent then
+		return nil
+	end
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { rig, holder }
+	params.IgnoreWater = true
+
+	local result = workspace:Raycast(rigRoot.Position, Vector3.new(0, -10, 0), params)
+	return result and result.Instance or nil
+end
+
+local function isTunnelFloor()
+	local floor = getFloorPart()
+	if not floor then
+		return false
+	end
+
+	if floor.Name == "TunnelsFloor" then
+		return true
+	end
+
+	if floor.Name == "SnowPlate" or floor.Name == "Grass Block" or floor.Name == "DesertPlate" then
+		return false
+	end
+
+	return false
+end
+
+local function getRoomModels()
+	local rooms = {}
+	for _, inst in ipairs(workspace:GetDescendants()) do
+		if inst:IsA("Model") and (inst.Name == "TunnelRoom" or inst.Name == "Room") then
+			table.insert(rooms, inst)
+		end
+	end
+	return rooms
+end
+
+local doorTemplateCache = {}
+local brokenDoorGuard = {}
+local roomEntryMemory = {}
+local roomPresenceState = {}
+local sightState = {}
+
+local function rememberDoorTemplate(doorModel)
+	if not doorModel or not doorModel.Parent then
+		return nil
+	end
+
+	if doorTemplateCache[doorModel] then
+		return doorTemplateCache[doorModel]
+	end
+
+	local ok, clone = pcall(function()
+		return doorModel:Clone()
+	end)
+
+	if not ok or not clone then
+		return nil
+	end
+
+	local cache = {
+		template = clone,
+		pivot = doorModel:GetPivot(),
+		parent = doorModel.Parent,
+		source = doorModel,
+		restored = false,
+	}
+
+	doorTemplateCache[doorModel] = cache
+	return cache
+end
+
+local function restoreDoorTemplate(cache)
+	if not cache or cache.restored then
+		return
+	end
+
+	cache.restored = true
+	local parent = cache.parent
+	if not parent or not parent.Parent then
+		parent = workspace
+	end
+
+	local clone = cache.template:Clone()
+	clone.Parent = parent
+	pcall(function()
+		clone:PivotTo(cache.pivot)
+	end)
+end
+
+local function zeroModelVelocities(model)
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.AssemblyLinearVelocity = Vector3.zero
+			inst.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+end
+
+local function findCorePart(model)
+	local preferred = getPartByNames(model, {
+		"Door",
+		"DoorPart",
+		"Root",
+		"Main",
+		"Frame",
+		"Center",
+		"Top",
+		"TopPart",
+		"Above",
+		"Header",
+		"UpperPart",
+		"Wall",
+		"Front",
+		"FrontWall",
+	})
+	if preferred then
+		return preferred
+	end
+
+	return getModelRoot(model) or model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function collectBreakableParts(rootModel, excludedModelNames)
+	local excluded = {}
+	if excludedModelNames then
+		for _, child in ipairs(rootModel:GetDescendants()) do
+			if child:IsA("Model") then
+				for _, exName in ipairs(excludedModelNames) do
+					if child.Name == exName then
+						excluded[child] = true
+					end
+				end
+			end
+		end
+	end
+
+	local parts = {}
+	for _, inst in ipairs(rootModel:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			local skip = false
+			for exModel in pairs(excluded) do
+				if inst:IsDescendantOf(exModel) then
+					skip = true
+					break
+				end
+			end
+			if not skip then
+				table.insert(parts, inst)
+			end
+		end
+	end
+
+	return parts
+end
+
+local function applyDoorBreakSequence(rootModel, monsterRoot, opts)
+	opts = opts or {}
+	if not rootModel or not rootModel.Parent or not monsterRoot or not monsterRoot.Parent then
+		return
+	end
+
+	local parts = collectBreakableParts(rootModel, opts.excludeNames or {})
+	if #parts == 0 then
+		return
+	end
+
+	local cache = rememberDoorTemplate(rootModel)
+	local originalCFrames = {}
+	for _, part in ipairs(parts) do
+		originalCFrames[part] = part.CFrame
+	end
+
+	local monsterPos = monsterRoot.Position
+	local modelPivot = rootModel:GetPivot()
+	local modelCenter = modelPivot.Position
+	local pullDir = safeUnit(monsterPos - modelCenter)
+	if pullDir == Vector3.zero then
+		pullDir = -monsterRoot.CFrame.LookVector
+	end
+
+	local holdTime = opts.holdTime or DOOR_HOLD_TIME
+	local pullTime = opts.pullTime or DOOR_PULL_TIME
+	local yankTime = opts.yankTime or DOOR_YANK_TIME
+	local canCollideAfter = opts.canCollideAfter ~= false
+	local blowVelocity = opts.blowVelocity or DOOR_FLING_VELOCITY
+
+	local doorCore = findCorePart(rootModel)
+	if doorCore then
+		local holdPair = spawnPullPairTendrils(
+			doorCore,
+			1,
+			1,
+			Vector3.zero,
+			{
+				thicknessScale = 1.12,
+				lengthScale = 1.08,
+				markerSizeScale = 0.16,
+				sweepScale = 0,
+				swirlScale = 0,
+				freeRoamScale = 0,
+				pairSpreadX = 1.2,
+				pairSpreadY = 0.18,
+				attackEnabled = false,
+			}
+		)
+		playSound(doorCore, IMPACT_SOUND_ID, 0.8, false)
+		task.wait(holdTime)
+
+		local function perPartDentStep(tickRatio)
+			for _, part in ipairs(parts) do
+				if part and part.Parent then
+					local baseCF = originalCFrames[part] or part.CFrame
+					local fromMonster = safeUnit(part.Position - monsterPos)
+					if fromMonster == Vector3.zero then
+						fromMonster = pullDir
+					end
+
+					local inward = safeUnit((fromMonster * 0.7) + (pullDir * 0.3))
+					local dentOffset = inward * (0.18 * tickRatio)
+
+					local rot = math.rad(DENT_ANGLE_DEGREES) * tickRatio
+					local rx = math.random(-1, 1) * rot
+					local ry = math.random(-1, 1) * rot
+					local rz = math.random(-1, 1) * rot
+
+					part.CFrame = baseCF * CFrame.new(dentOffset) * CFrame.Angles(rx, ry, rz)
+				end
+			end
+		end
+
+		for tick = 1, DENT_TICKS do
+			perPartDentStep(tick / DENT_TICKS)
+			task.wait(pullTime / DENT_TICKS)
+		end
+
+		for _, part in ipairs(parts) do
+			if part and part.Parent then
+				part.CanCollide = canCollideAfter
+				part.CanTouch = true
+				part.CanQuery = true
+			end
+		end
+
+		destroyConnectionsForParts(rootModel, parts)
+
+		for _, part in ipairs(parts) do
+			if part and part.Parent then
+				part.Anchored = false
+				part.AssemblyLinearVelocity = (pullDir * blowVelocity)
+					+ Vector3.new(math.random(-20, 20), math.random(-5, 20), math.random(-20, 20))
+				part.AssemblyAngularVelocity = Vector3.new(
+					math.random(-8, 8),
+					math.random(-8, 8),
+					math.random(-8, 8)
+				)
+			end
+		end
+
+		task.wait(yankTime)
+		beginTendrilRetreat(holdPair, doorCore, monsterRoot, 0.7)
+	end
+
+	task.delay(8, function()
+		if rootModel and rootModel.Parent then
+			rootModel:Destroy()
+		end
+	end)
+
+	if cache then
+		task.delay(DUBBLE_DOOR_REGEN_TIME, function()
+			restoreDoorTemplate(cache)
+			brokenDoorGuard[rootModel] = nil
+		end)
+	else
+		task.delay(DUBBLE_DOOR_REGEN_TIME, function()
+			brokenDoorGuard[rootModel] = nil
+		end)
+	end
+end
+
+local function getHallwayDoorModels()
+	local list = {}
+	for _, inst in ipairs(workspace:GetDescendants()) do
+		if inst:IsA("Model") and (inst.Name == "DubbleHallwayDoor" or inst.Name == "DubbleDoors") then
+			table.insert(list, inst)
+		end
+	end
+	return list
+end
+
+local function isModelTouchingAnyTendril(model, rangePadding)
+	if not model or not model.Parent then
+		return false
+	end
+
+	local ok, boxCF, boxSize = pcall(function()
+		return model:GetBoundingBox()
+	end)
+	if not ok then
+		return false
+	end
+
+	local parts = {}
+	for _, t in ipairs(tendrils) do
+		if t and not t._dead then
+			for _, p in ipairs(t.parts) do
+				if p and p.Parent then
+					table.insert(parts, p)
+				end
+			end
+		end
+	end
+
+	local threshold = rangePadding or 0
+	for _, p in ipairs(parts) do
+		local d = (p.Position - boxCF.Position).Magnitude
+		local half = math.max(boxSize.X, boxSize.Y, boxSize.Z) * 0.5
+		local pHalf = math.max(p.Size.X, p.Size.Y, p.Size.Z) * 0.5
+		if d <= half + pHalf + threshold then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function roomModelNameMatches(roomModel)
+	return roomModel and (roomModel.Name == "TunnelRoom" or roomModel.Name == "Room")
+end
+
+local function getTunnelRoomContainingPosition(pos)
+	for _, roomModel in ipairs(getRoomModels()) do
+		local ok, boxCF, boxSize = pcall(function()
+			return roomModel:GetBoundingBox()
+		end)
+
+		if ok and isPointInsideBox(boxCF, boxSize, pos) then
+			return roomModel
+		end
+	end
+
+	return nil
+end
+
+local function markTunnelRoomEntry(roomModel, targetModel)
+	if not roomModel or not roomModel.Parent then
+		return
+	end
+	if not targetModel or not targetModel.Parent then
+		return
+	end
+
+	local entry = roomEntryMemory[roomModel]
+	if not entry then
+		entry = {
+			seenEntry = false,
+			lastSeenTarget = nil,
+			lastSeenTime = 0,
+		}
+		roomEntryMemory[roomModel] = entry
+	end
+
+	entry.seenEntry = true
+	entry.lastSeenTarget = targetModel
+	entry.lastSeenTime = os.clock()
+
+	task.spawn(function()
+		breakTunnelRoomDoors(roomModel)
+	end)
+end
+
+local function breakTunnelRoomDoors(roomModel)
+	if not roomModel or not roomModel.Parent then
+		return
+	end
+
+	local memory = roomEntryMemory[roomModel]
+	if not memory or not memory.seenEntry then
+		return
+	end
+
+	for _, inst in ipairs(roomModel:GetDescendants()) do
+		if inst:IsA("Model") and inst.Name == "MH_SingleDoor" then
+			if not brokenDoorGuard[inst] then
+				brokenDoorGuard[inst] = true
+				applyDoorBreakSequence(inst, rigRoot, {
+					excludeNames = {},
+					holdTime = DOOR_HOLD_TIME,
+					pullTime = DOOR_PULL_TIME,
+					yankTime = DOOR_YANK_TIME,
+					canCollideAfter = true,
+					blowVelocity = DOOR_FLING_VELOCITY,
+				})
+			end
+		end
+	end
+end
+
+local function breakHallwayDoorModel(doorModel)
+	if not doorModel or not doorModel.Parent then
+		return
+	end
+
+	if brokenDoorGuard[doorModel] then
+		return
+	end
+	brokenDoorGuard[doorModel] = true
+
+	local core = findCorePart(doorModel)
+	if not core then
+		brokenDoorGuard[doorModel] = nil
+		return
+	end
+
+	applyDoorBreakSequence(doorModel, rigRoot, {
+		excludeNames = { "DubbleDoor" },
+		holdTime = DOOR_HOLD_TIME,
+		pullTime = DOOR_PULL_TIME,
+		yankTime = DOOR_YANK_TIME,
+		canCollideAfter = true,
+		blowVelocity = DOOR_FLING_VELOCITY,
+	})
+end
+
+local function tearHallwayDoorsThatTouchTendrils()
+	for _, doorModel in ipairs(getHallwayDoorModels()) do
+		if not brokenDoorGuard[doorModel] and isModelTouchingAnyTendril(doorModel, HALLWAY_TENDRIL_RANGE) then
+			breakHallwayDoorModel(doorModel)
+		end
+	end
+end
+
+local function tearTunnelRoomDoorsThatTouchTendrils()
+	for _, roomModel in ipairs(getRoomModels()) do
+		local memory = roomEntryMemory[roomModel]
+		if memory and memory.seenEntry then
+			if isModelTouchingAnyTendril(roomModel, ROOM_TENDRIL_RANGE) then
+				breakTunnelRoomDoors(roomModel)
+			end
+		end
+	end
+end
+
+local function raycastVisionToTargetRoot(targetRoot)
+	if not targetRoot or not targetRoot.Parent then
+		return false, nil
+	end
+
+	local origin = rigRoot.Position + Vector3.new(0, 2.5, 0)
+	local destination = targetRoot.Position + Vector3.new(0, 2, 0)
+	local direction = destination - origin
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { rig, holder }
+	params.IgnoreWater = true
+
+	local result = Workspace:Raycast(origin, direction, params)
+	if not result then
+		return true, nil
+	end
+
+	local hit = result.Instance
+	if hit and hit:IsDescendantOf(targetRoot.Parent) then
+		return true, nil
+	end
+
+	return false, hit
+end
+
+local function getAllTargetCandidates()
+	local candidates = {}
+
+	for _, inst in ipairs(workspace:GetDescendants()) do
+		if inst:IsA("Model") and isValidTargetModel(inst) then
+			local root = getModelRoot(inst)
+			if root and root:IsA("BasePart") then
+				table.insert(candidates, inst)
+			end
+		end
+	end
+
+	return candidates
+end
+
+local function estimateTargetVelocity(model, history)
+	if not history or #history < 2 then
+		local root = getModelRoot(model)
+		return root and root.AssemblyLinearVelocity or Vector3.zero
+	end
+
+	local a = history[#history - 1]
+	local b = history[#history]
+	local dt = math.max(b.time - a.time, 0.05)
+	return (b.pos - a.pos) / dt
+end
+
+local function predictTargetPosition(model, root, history)
+	local vel = estimateTargetVelocity(model, history)
+	local distance = (root.Position - rigRoot.Position).Magnitude
+	local leadTime = math.clamp(distance / math.max(vel.Magnitude, 1), 0.2, 1.25)
+	leadTime = math.max(leadTime, math.clamp(distance / 42, 0.2, 1.25))
+	return root.Position + vel * leadTime
+end
+
+local function findNearestVisibleVictim()
+	local bestModel = nil
+	local bestDist = SEARCH_RADIUS
+
+	for _, model in ipairs(getAllTargetCandidates()) do
+		local root = getModelRoot(model)
+		if root and root:IsA("BasePart") then
+			local d = (root.Position - rigRoot.Position).Magnitude
+			if d < bestDist then
+				local visible, blocker = raycastVisionToTargetRoot(root)
+				if visible then
+					bestDist = d
+					bestModel = model
+				elseif blocker then
+					local blockerModel = blocker:FindFirstAncestorWhichIsA("Model")
+					if blockerModel and (blockerModel.Name == "DubbleHallwayDoor" or blockerModel.Name == "DubbleDoors") then
+						breakHallwayDoorModel(blockerModel)
+					end
+				end
+			end
+		end
+	end
+
+	return bestModel, bestDist
+end
+
+local function updateRoomEntryStateForTarget(targetModel, targetRoot)
+	if not targetModel or not targetRoot or not targetRoot.Parent then
+		return
+	end
+
+	local roomModel = getTunnelRoomContainingPosition(targetRoot.Position)
+	local prevState = sightState[targetModel]
+	if not prevState then
+		prevState = {
+			visible = false,
+			lastVisibleTime = 0,
+			lastVisibleRoom = nil,
+			lastVisiblePos = nil,
+		}
+		sightState[targetModel] = prevState
+	end
+
+	if roomModel then
+		local roomStates = roomPresenceState[roomModel]
+		if not roomStates then
+			roomStates = {}
+			roomPresenceState[roomModel] = roomStates
+		end
+
+		local wasInside = roomStates[targetModel] == true
+		roomStates[targetModel] = true
+
+		if not wasInside then
+			markTunnelRoomEntry(roomModel, targetModel)
+		end
+
+		prevState.lastVisibleRoom = roomModel
+	else
+		for rm, roomStates in pairs(roomPresenceState) do
+			if roomStates[targetModel] ~= nil then
+				roomStates[targetModel] = nil
+			end
+		end
+	end
+end
+
+local function inspectRoomForTarget(roomModel, duration)
+	local start = os.clock()
+
+	local ok, boxCF, boxSize = pcall(function()
+		return roomModel:GetBoundingBox()
+	end)
+
+	if not ok then
+		return nil
+	end
+
+	while os.clock() - start < duration do
+		if not rig.Parent or not rigRoot.Parent then
+			return nil
+		end
+
+		for _, inst in ipairs(workspace:GetDescendants()) do
+			if inst:IsA("Model") and inst ~= rig and isValidTargetModel(inst) then
+				local root = getModelRoot(inst)
+				if root and root:IsA("BasePart") and isPointInsideBox(boxCF, boxSize, root.Position) then
+					return inst
+				end
+			end
+		end
+
+		task.wait(0.2)
+	end
+
+	return nil
+end
+
+local roomSweepBusy = false
+
+local function tearAllRoomDoorsAndInspect(roomModel)
+	if not roomModel or not roomModel.Parent then
+		return nil
+	end
+
+	if not isTunnelFloor() then
+		return nil
+	end
+
+	local monsterRoot = rigRoot
+	local roomCenterPart = roomModel:FindFirstChildWhichIsA("BasePart", true)
+
+	local roomProbeTendrils = spawnPullPairTendrils(
+		roomCenterPart or monsterRoot,
+		1,
+		1,
+		Vector3.new(0, torsoPart.Size.Y * 0.2, -(torsoPart.Size.Z * 0.5 + 1.2)),
+		{
+			thicknessScale = 1.05,
+			lengthScale = 1.08,
+			markerSizeScale = 0.16,
+			sweepScale = 0.0,
+			swirlScale = 0.0,
+			freeRoamScale = 0.0,
+			pairSpreadX = 1.1,
+			pairSpreadY = 0.2,
+			attackEnabled = false,
+		}
+	)
+
+	local found = inspectRoomForTarget(roomModel, ROOM_LOST_SIGHT_TIME + 11)
+
+	if found then
+		breakTunnelRoomDoors(roomModel)
+	end
+
+	beginTendrilRetreat(roomProbeTendrils, roomCenterPart, monsterRoot, 0.85)
+	return found
+end
+
+local function processRoomSweep(targetModel)
+	if roomSweepBusy then
+		return
+	end
+	if not isTunnelFloor() then
+		return
+	end
+
+	roomSweepBusy = true
+
+	task.spawn(function()
+		local ok, err = pcall(function()
+			local rooms = getRoomModels()
+
+			for _, roomModel in ipairs(rooms) do
+				if not rig.Parent or not rigRoot.Parent then
+					break
+				end
+
+				if not isTunnelFloor() then
+					break
+				end
+
+				local roomMemoryEntry = roomEntryMemory[roomModel]
+				if roomMemoryEntry and roomMemoryEntry.seenEntry then
+					local target = tearAllRoomDoorsAndInspect(roomModel)
+					if target then
+						startGrab(target)
+						break
+					end
+				end
+			end
+		end)
+
+		if not ok then
+			warn(err)
+		end
+
+		roomSweepBusy = false
+	end)
+end
+
+local function breakNearbyHallwayDoors()
+	if not isTunnelFloor() then
+		return
+	end
+
+	for _, doorModel in ipairs(getHallwayDoorModels()) do
+		if not brokenDoorGuard[doorModel] then
+			local core = findCorePart(doorModel)
+			if core then
+				local d = (core.Position - rigRoot.Position).Magnitude
+				if d <= 72 then
+					breakHallwayDoorModel(doorModel)
+				end
+			end
+		end
+	end
+end
+
+local function runGrabSequence(targetModel)
+	local targetHumanoid = targetModel:FindFirstChildOfClass("Humanoid")
+	local targetRoot = getModelRoot(targetModel)
+
+	if not targetHumanoid or not targetRoot or not targetRoot:IsA("BasePart") then
+		return
+	end
+
+	if isProtectedCreature(targetModel) then
+		return
+	end
+
+	local monsterRoot = getNearestMouthMonsterRoot()
+	if not monsterRoot or not monsterRoot.Parent then
+		return
+	end
+
+	local limbSpecs = getLimbSpecs(targetModel)
+	local headPart = getMonsterHeadPart()
+
+	forcePlatformStand(targetModel)
+	targetHumanoid.WalkSpeed = 0
+	targetHumanoid.JumpPower = 0
+	targetHumanoid.BreakJointsOnDeath = false
+
+	targetRoot.Anchored = true
+	targetRoot.CanCollide = false
+	targetRoot.CanQuery = false
+
+	npcHumanoid.WalkSpeed = 0
+	npcHumanoid:Move(Vector3.zero, false)
+
+	currentAttackTargetPart = targetRoot
+	currentAttackIntensity = 1
+
+	local monsterLoopSound = playSound(monsterRoot, MONSTER_SOUND_ID, 1, true)
+	playSound(targetRoot, CAUGHT_SOUND_ID, 1, false)
+
+	local holdPair = spawnPullPairTendrils(
+		targetRoot,
+		1,
+		1,
+		Vector3.new(0, torsoPart.Size.Y * 0.55 + HOLD_HEIGHT, -(torsoPart.Size.Z * 0.45 + 1.4)),
+		{
+			thicknessScale = 1.2,
+			lengthScale = 1.18,
+			markerSizeScale = 0.2,
+			sweepScale = 0.0,
+			swirlScale = 0.0,
+			freeRoamScale = 0,
+			pairSpreadX = 1.65,
+			pairSpreadY = 0.25,
+			attackEnabled = true,
+		}
+	)
+
+	local keepHolding = true
+	task.spawn(function()
+		while keepHolding and targetRoot.Parent and monsterRoot.Parent and targetHumanoid.Health > 0 do
+			forcePlatformStand(targetModel)
+			updateHeldTargetPosition(targetRoot, monsterRoot)
+			task.wait()
+		end
+	end)
+
+	task.wait(0.25)
+
+	local limbsTorn = 0
+
+	for _, limb in ipairs(limbSpecs) do
+		if not targetModel.Parent or targetHumanoid.Health <= 0 then
+			break
+		end
+
+		local grabPart = limb.grabPart
+		if grabPart and grabPart.Parent then
+			local sideSign = ((grabPart.Position - monsterRoot.Position):Dot(monsterRoot.CFrame.RightVector) >= 0) and 1 or -1
+			local liftSign = ((grabPart.Position.Y - monsterRoot.Position.Y) >= 0) and 1 or -1
+
+			local limbPair = spawnPullPairTendrils(
+				grabPart,
+				sideSign,
+				liftSign,
+				Vector3.new(sideSign * 2.6, torsoPart.Size.Y * 0.35, -(torsoPart.Size.Z * 0.5 + 1.2)),
+				{
+					thicknessScale = 1.08,
+					lengthScale = 1.12,
+					markerSizeScale = 0.18,
+					sweepScale = 0.0,
+					swirlScale = 0.0,
+					freeRoamScale = 0,
+					pairSpreadX = 1.15,
+					pairSpreadY = 0.18,
+					attackEnabled = true,
+				}
+			)
+
+			local start = os.clock()
+			while os.clock() - start < LIMB_TEAR_TIME do
+				if not targetModel.Parent or targetHumanoid.Health <= 0 then
+					break
+				end
+				forcePlatformStand(targetModel)
+				updateHeldTargetPosition(targetRoot, monsterRoot)
+				task.wait(0.08)
+			end
+
+			if grabPart and grabPart.Parent then
+				severLimbGroup(targetModel, limb.parts, monsterRoot, headPart)
+				limbsTorn += 1
+				playSound(targetRoot, TORN_SOUND_ID, 1, false)
+				if targetHumanoid.Health > 0 then
+					targetHumanoid:TakeDamage(LIMB_DAMAGE)
+				end
+			end
+
+			beginTendrilRetreat(limbPair, grabPart, monsterRoot, 0.9)
+		end
+	end
+
+	keepHolding = false
+	for _, t in ipairs(holdPair) do
+		destroyTendril(t)
+	end
+
+	local function cleanupGrab()
+		if monsterLoopSound then
+			monsterLoopSound:Stop()
+			monsterLoopSound:Destroy()
+		end
+
+		currentAttackTargetPart = nil
+		currentAttackIntensity = 0
+		grabbing = false
+		npcHumanoid.WalkSpeed = PATROL_SPEED
+		npcHumanoid.AutoRotate = true
+	end
+
+	local allLimbsGone = (#limbSpecs > 0 and limbsTorn >= #limbSpecs)
+
+	if targetModel.Parent and targetRoot and targetRoot.Parent then
+		if allLimbsGone then
+			setModelAnchored(targetModel, false)
+			setModelCollisionGroup(targetModel, NPC_GROUP)
+			setModelCanCollide(targetModel, false)
+			setModelCanQuery(targetModel, false)
+
+			forcePlatformStand(targetModel)
+			targetHumanoid.WalkSpeed = 0
+			targetHumanoid.JumpPower = 0
+
+			currentAttackTargetPart = targetRoot
+			currentAttackIntensity = 1
+
+			local torsoPair = spawnPullPairTendrils(
+				targetRoot,
+				1,
+				1,
+				Vector3.new(0, torsoPart.Size.Y * 0.35, -(torsoPart.Size.Z * 0.5 + 1.2)),
+				{
+					thicknessScale = 1.18,
+					lengthScale = 1.12,
+					markerSizeScale = 0.2,
+					sweepScale = 0.0,
+					swirlScale = 0.0,
+					freeRoamScale = 0,
+					pairSpreadX = 1.55,
+					pairSpreadY = 0.22,
+					attackEnabled = true,
+				}
+			)
+
+			slowlyBringVictimToMouth(targetModel, targetRoot, headPart)
+
+			forcePlatformStand(targetModel)
+			teleportModelToPosition(targetModel, EAT_TELEPORT_POS)
+			ragdollModel(targetModel)
+
+			for _, t in ipairs(torsoPair) do
+				destroyTendril(t)
+			end
+
+			currentAttackTargetPart = nil
+			currentAttackIntensity = 0
+		else
+			forcePlatformStand(targetModel)
+			targetRoot.Anchored = false
+			targetRoot.CanCollide = true
+			targetRoot.CanQuery = true
+			targetRoot.AssemblyLinearVelocity = Vector3.new(0, -90, 0) + monsterRoot.CFrame.LookVector * 20
+			task.wait(0.25)
+			playSound(targetRoot, IMPACT_SOUND_ID, 1, false)
+
+			forcePlatformStand(targetModel)
+			teleportModelToPosition(targetModel, EAT_TELEPORT_POS)
+			ragdollModel(targetModel)
+
+			targetRoot.AssemblyLinearVelocity = Vector3.zero
+			targetRoot.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+
+	cleanupGrab()
+end
+
+local function startGrab(targetModel)
+	if grabbing then
+		return
+	end
+
+	grabbing = true
+	task.spawn(function()
+		local ok, err = pcall(function()
+			runGrabSequence(targetModel)
+		end)
+
+		if not ok then
+			warn(err)
+			grabbing = false
+			currentAttackTargetPart = nil
+			currentAttackIntensity = 0
+			npcHumanoid.WalkSpeed = PATROL_SPEED
+			npcHumanoid.AutoRotate = true
+		end
+	end)
+end
+
+local startGrabEvent = script:FindFirstChild("StartGrabEvent") or Instance.new("BindableEvent")
+startGrabEvent.Name = "StartGrabEvent"
+startGrabEvent.Parent = script
+startGrabEvent.Event:Connect(function(targetModel)
+	if typeof(targetModel) == "Instance" and targetModel:IsA("Model") then
+		startGrab(targetModel)
+	end
+end)
+
+local triggerRoomSweepEvent = script:FindFirstChild("TriggerRoomSweepEvent") or Instance.new("BindableEvent")
+triggerRoomSweepEvent.Name = "TriggerRoomSweepEvent"
+triggerRoomSweepEvent.Parent = script
+triggerRoomSweepEvent.Event:Connect(function(targetModel, escapedTooEarly)
+	if escapedTooEarly == false then
+		return
+	end
+	processRoomSweep(targetModel)
+end)
+
+local markTunnelRoomEntryEvent = script:FindFirstChild("MarkTunnelRoomEntryEvent") or Instance.new("BindableEvent")
+markTunnelRoomEntryEvent.Name = "MarkTunnelRoomEntryEvent"
+markTunnelRoomEntryEvent.Parent = script
+markTunnelRoomEntryEvent.Event:Connect(function(roomModel, targetModel)
+	if typeof(roomModel) == "Instance" and roomModel:IsA("Model") and roomModelNameMatches(roomModel) then
+		if typeof(targetModel) == "Instance" and targetModel:IsA("Model") then
+			markTunnelRoomEntry(roomModel, targetModel)
+		end
+	end
+end)
+
+local triggerDubbleDoorBreakEvent = script:FindFirstChild("TriggerDubbleDoorBreakEvent") or Instance.new("BindableEvent")
+triggerDubbleDoorBreakEvent.Name = "TriggerDubbleDoorBreakEvent"
+triggerDubbleDoorBreakEvent.Parent = script
+triggerDubbleDoorBreakEvent.Event:Connect(function()
+	breakNearbyHallwayDoors()
+end)
+
+local baseOffsets = buildDefaultRootOffsets(BASE_TENDRIL_COUNT, torsoPart.Size)
+
+for i = 1, BASE_TENDRIL_COUNT do
+	local offset = baseOffsets[i] or Vector3.new(0, 0, math.max(torsoPart.Size.Z * 0.5 + 0.45, 0.85))
+	addTendril({
+		localOffset = offset,
+		sideSign = (offset.X >= 0) and 1 or -1,
+		liftSign = (offset.Y >= 0) and 1 or -1,
+		baseIndex = i,
+		length = DEFAULT_TENDRIL_LENGTH,
+		attackEnabled = true,
+	})
+end
+
+addTendril({
+	localOffset = getBackCenterOffset(torsoPart.Size),
+	sideSign = 0,
+	liftSign = 0,
+	thicknessScale = 1.08,
+	lengthScale = 1.08,
+	markerSizeScale = 0.2,
+	sweepScale = 0.1,
+	swirlScale = 0.1,
+	freeRoamScale = 0.08,
+	repelScale = 1.05,
+	baseIndex = 5,
+	length = DEFAULT_TENDRIL_LENGTH,
+	attackEnabled = true,
+})
+
+local pointParts = collectTendrilPointParts(rig, holder)
+for _, entry in ipairs(pointParts) do
+	local part = entry.part
+	local cfg = entry.config
+
+	local widthScale = (cfg.width and cfg.width > 0) and (cfg.width / BASE_THICKNESS) or 1
+	local sway = cfg.swayIntensity or 1
+	local segmentAmount = cfg.segmentAmount
+	local length = cfg.length or DEFAULT_TENDRIL_LENGTH
+
+	addTendril({
+		sourcePart = part,
+		localOffset = Vector3.zero,
+		sideSign = (part.CFrame.RightVector.X >= 0) and 1 or -1,
+		liftSign = (part.CFrame.UpVector.Y >= 0) and 1 or -1,
+		thicknessScale = widthScale,
+		lengthScale = math.max(length / DEFAULT_TENDRIL_LENGTH, 0.1),
+		markerSizeScale = 0.25,
+		sweepScale = sway,
+		swirlScale = sway,
+		freeRoamScale = sway,
+		repelScale = 1,
+		baseIndex = entry.index + 5,
+		length = length,
+		segmentAmount = segmentAmount,
+		attackEnabled = cfg.attackEnabled,
+		attackRange = cfg.attackRange,
+		color = cfg.color,
+	})
+end
+
+task.spawn(function()
+	while rig.Parent and npcHumanoid.Parent do
+		if not grabbing then
+			breakNearbyHallwayDoors()
+		end
+		task.wait(0.25)
+	end
+end)
+
+task.spawn(function()
+	while rig.Parent and npcHumanoid.Parent do
+		tearHallwayDoorsThatTouchTendrils()
+		tearTunnelRoomDoorsThatTouchTendrils()
+		task.wait(0.2)
+	end
+end)
+
+task.spawn(function()
+	while rig.Parent and npcHumanoid.Parent do
+		if not grabbing then
+			local target, dist = findNearestVisibleVictim()
+			if target and dist <= GRAB_RANGE then
+				startGrab(target)
+			end
+		end
+		task.wait(0.12)
+	end
+end)
+
+task.spawn(function()
+	while rig.Parent and npcHumanoid.Parent do
+		if not grabbing then
+			for _, targetModel in ipairs(getAllTargetCandidates()) do
+				local targetRoot = getModelRoot(targetModel)
+				if targetRoot and targetRoot:IsA("BasePart") then
+					local visible = raycastVisionToTargetRoot(targetRoot)
+					if visible then
+						updateRoomEntryStateForTarget(targetModel, targetRoot)
+					else
+						local roomModel = getTunnelRoomContainingPosition(targetRoot.Position)
+						if roomModel then
+							local prev = sightState[targetModel]
+							if prev then
+								prev.visible = false
+								prev.lastVisibleRoom = roomModel
+								prev.lastVisiblePos = targetRoot.Position
+								prev.lastVisibleTime = os.clock()
+							end
+						end
+					end
+				end
+			end
+		end
+		task.wait(0.15)
+	end
+end)
+
+local function clampSourceRootOffset(tendril, sourcePart, localOffset)
+	local size = sourcePart.Size
+	local xLimit = math.max(size.X * SOURCE_ROOT_SIDE_MAX_SCALE, 1.15)
+	local yLimit = math.max(size.Y * SOURCE_ROOT_UP_MAX_SCALE, 1.15)
+	local backMin = math.max(size.Z * SOURCE_ROOT_BACK_MIN, 0.25)
+	local backMax = math.max(size.Z * 0.95, backMin + 0.1)
+
+	local x = math.clamp(localOffset.X, -xLimit, xLimit)
+	local y = math.clamp(localOffset.Y, -yLimit, yLimit)
+	local z = math.clamp(localOffset.Z, backMin, backMax)
+
+	return Vector3.new(x, y, z)
+end
+
+local conn
+conn = RunService.Heartbeat:Connect(function()
+	if not rig.Parent or not rigRoot.Parent then
+		conn:Disconnect()
+		if holder then
+			holder:Destroy()
+		end
+		return
+	end
+
+	for i = #tendrils, 1, -1 do
+		local t = tendrils[i]
+		if t._dead or not t.parts[1] or not t.parts[1].Parent then
+			table.remove(tendrils, i)
+		end
+	end
+
+	local now = os.clock()
+	local torsoCF = torsoPart.CFrame
+	local torsoPos = torsoCF.Position
+	local torsoRadius = math.max(torsoPart.Size.X, torsoPart.Size.Y, torsoPart.Size.Z) * 0.55
+
+	local attackMode = currentAttackTargetPart and currentAttackTargetPart.Parent and currentAttackIntensity > 0
+
+	for _, tendril in ipairs(tendrils) do
+		local parts = tendril.parts
+		local pointAttackMode = attackMode and tendril.attackEnabled
+		local sourceCF = tendril.sourcePart and tendril.sourcePart.Parent and tendril.sourcePart.CFrame or torsoCF
+		local localOffset = tendril.localOffset or Vector3.zero
+
+		if tendril.sourcePart then
+			local size = tendril.sourcePart.Size
+			local sizeOffset = Vector3.new(
+				size.X * tendril.markerSizeScale,
+				size.Y * tendril.markerSizeScale,
+				size.Z * tendril.markerSizeScale
+			)
+
+			localOffset = clampSourceRootOffset(tendril, tendril.sourcePart, localOffset + sizeOffset)
+		end
+
+		local rootPos = sourceCF:PointToWorldSpace(localOffset)
+		local baseForward
+		local upHint
+		local retreatActive = tendril.retreatMode
+			and tendril.retreatUntil > 0
+			and now <= tendril.retreatUntil
+			and tendril.retreatTargetPart
+			and tendril.retreatTargetPart.Parent
+
+		local attackInRange = true
+		if pointAttackMode and tendril.attackRange then
+			local targetPos = currentAttackTargetPart.Position
+			attackInRange = (targetPos - rootPos).Magnitude <= tendril.attackRange
+		end
+
+		if retreatActive then
+			local tipPos = tendril.retreatTargetPart.Position
+			local awayFromMonster = safeUnit(rootPos - torsoPos)
+			if awayFromMonster == Vector3.zero then
+				awayFromMonster = -torsoCF.LookVector
+			end
+
+			local towardTip = safeUnit(tipPos - rootPos)
+			baseForward = safeUnit((towardTip * 1.1) + (awayFromMonster * 1.25))
+			if baseForward == Vector3.zero then
+				baseForward = awayFromMonster
+			end
+			upHint = torsoCF.UpVector
+		elseif tendril.sourcePart then
+			if pointAttackMode and attackInRange then
+				local targetDir = safeUnit(currentAttackTargetPart.Position - rootPos)
+				if targetDir == Vector3.zero then
+					targetDir = safeUnit(-sourceCF.LookVector)
+				end
+
+				local n1 = math.noise(tendril.seed + 101, now * 0.8, 0)
+				local n2 = math.noise(tendril.seed + 202, 0, now * 0.8)
+				local n3 = math.noise(tendril.seed + 303, now * 0.7, 0)
+
+				local targetPull = 0.75 + currentAttackIntensity * 1.0
+				local sphereMotion =
+					sourceCF.RightVector * n1
+					+ sourceCF.UpVector * n2
+					+ (-sourceCF.LookVector) * n3
+					+ targetDir * targetPull
+
+				baseForward = safeUnit(sphereMotion)
+				if baseForward == Vector3.zero then
+					baseForward = targetDir
+				end
+
+				upHint = currentAttackTargetPart.CFrame.UpVector
+			else
+				local behindDir = -torsoCF.LookVector
+
+				local sideNoise = math.noise(tendril.seed + 101, now * 0.8, 0)
+				local upNoise = math.noise(tendril.seed + 202, 0, now * 0.8)
+				local twistNoise = math.noise(tendril.seed + 303, now * 0.7, 0)
+
+				local wild =
+					behindDir * 0.8
+					+ sourceCF.RightVector * (sideNoise * (0.55 * tendril.freeRoamScale))
+					+ sourceCF.UpVector * (upNoise * (0.42 * tendril.freeRoamScale))
+					+ (-sourceCF.LookVector) * (twistNoise * 0.35 * tendril.freeRoamScale)
+
+				baseForward = safeUnit(wild)
+				if baseForward == Vector3.zero then
+					baseForward = behindDir
+				end
+
+				local distFromRig = (rootPos - torsoPos).Magnitude
+				if distFromRig < torsoRadius * 1.05 then
+					baseForward = safeUnit(baseForward:Lerp(behindDir, 0.9))
+				end
+
+				upHint = sourceCF.UpVector
+			end
+		else
+			if pointAttackMode and attackInRange then
+				local targetDir = safeUnit(currentAttackTargetPart.Position - torsoPos)
+				baseForward = safeUnit(
+					targetDir
+						+ torsoCF.RightVector * tendril.sideSign * 0.25
+						+ torsoCF.UpVector * tendril.liftSign * 0.18
+				)
+				if baseForward == Vector3.zero then
+					baseForward = targetDir
+				end
+			else
+				baseForward = safeUnit(
+					(-torsoCF.LookVector * 0.78)
+						+ (torsoCF.RightVector * tendril.sideSign * 0.22)
+						+ (torsoCF.UpVector * tendril.liftSign * 0.12)
+				)
+			end
+			upHint = torsoCF.UpVector
+		end
+
+		if baseForward == Vector3.zero then
+			baseForward = -torsoCF.LookVector
+		end
+
+		local lungeScale = 1
+		if pointAttackMode and attackInRange then
+			lungeScale = 1 - (currentAttackIntensity * 0.9)
+		end
+
+		if retreatActive then
+			lungeScale = 0.25
+		end
+
+		local sweep = math.sin(now * SWEEP_SPEED + tendril.phase) * MAX_SWEEP_ANGLE * tendril.sweepScale * lungeScale
+		local swirl = math.clamp(
+			math.noise(tendril.seed + 77, now * SWIRL_SPEED, 0) * MAX_SWIRL_ANGLE * tendril.swirlScale * lungeScale,
+			-MAX_SWIRL_ANGLE,
+			MAX_SWIRL_ANGLE
+		)
+
+		local roll = sweep + swirl * 0.35
+		local rightDir = rotateAroundAxis(sourceCF.RightVector, baseForward, roll)
+		local upDir = rotateAroundAxis(sourceCF.UpVector, baseForward, roll)
+
+		local points = table.create(tendril.segmentCount)
+		points[1] = rootPos
+
+		local lastDir = safeUnit(baseForward * 0.72 + rightDir * (tendril.sideSign * 0.22) + upDir * (tendril.liftSign * 0.12))
+		if lastDir == Vector3.zero then
+			lastDir = baseForward
+		end
+
+		local lengthScale = tendril.lengthScale or 1
+
+		for segmentIndex = 2, tendril.segmentCount do
+			local alpha = (segmentIndex - 1) / (tendril.segmentCount - 1)
+			local inv = 1 - alpha
+
+			local n2 = math.noise(tendril.seed + 22, alpha * 2.4, now * (WIGGLE_SPEED * 0.92))
+			local n3 = math.noise(tendril.seed + 33, now * 0.75, alpha * 5.2)
+			local n4 = math.noise(tendril.seed + 44, now * 1.8, alpha * 7.0)
+
+			local waveA = math.sin(now * (2.0 + alpha * 0.35) + tendril.phase + alpha * 10.0)
+			local waveB = math.cos(now * (1.45 + alpha * 0.28) + tendril.phase * 1.3 + alpha * 6.0)
+			local waveC = math.sin(now * 3.7 + tendril.phase * 0.7 + alpha * 13.0)
+			local waveD = math.cos(now * 4.4 + tendril.phase * 1.9 + alpha * 9.0)
+
+			local curl = safeUnit(lastDir:Cross(upDir))
+			if curl == Vector3.zero then
+				curl = rightDir
+			end
+
+			local sway = safeUnit(upDir:Cross(curl))
+			if sway == Vector3.zero then
+				sway = rightDir
+			end
+
+			local spread =
+				baseForward * (0.95 - alpha * 0.25)
+				+ rightDir * ((n2 * 1.15 + waveA * 1.45) * (0.55 + alpha * 1.8) + tendril.sideSign * 0.3)
+				+ upDir * ((n3 * 1.05 + waveB * 1.25) * (0.5 + alpha * 1.5) + tendril.liftSign * 0.22)
+				+ curl * (waveC * 0.72 * inv + n4 * 0.35)
+				+ sway * (waveD * 0.38 * alpha)
+
+			if pointAttackMode and attackInRange then
+				local targetDir = safeUnit(currentAttackTargetPart.Position - (points[segmentIndex - 1] or rootPos))
+				if targetDir ~= Vector3.zero then
+					local attackBias = math.clamp((alpha - 0.2) / 0.8, 0, 1)
+					local chaseStrength = (0.2 + currentAttackIntensity * 1.15) * attackBias
+					spread = spread + targetDir * chaseStrength
+
+					if attackBias > 0.1 then
+						spread = spread:Lerp(targetDir, attackBias * currentAttackIntensity)
+					end
+				end
+			end
+
+			if tendril.sourcePart and not pointAttackMode and not retreatActive then
+				local behindDir = -sourceCF.LookVector
+				local roam =
+					sourceCF.RightVector * math.sin(now * 1.7 + tendril.phase + alpha * 5.0)
+					+ sourceCF.UpVector * math.cos(now * 1.45 + tendril.phase * 1.2 + alpha * 4.0)
+					+ (-sourceCF.LookVector) * math.sin(now * 1.1 + tendril.phase * 0.8 + alpha * 6.0)
+
+				spread = spread
+					+ roam * (0.85 * tendril.freeRoamScale)
+					+ behindDir * (0.65 * tendril.repelScale)
+
+				if spread:Dot(behindDir) < 0 then
+					spread = spread + behindDir * math.abs(spread:Dot(behindDir)) * 1.5
+				end
+			end
+
+			if retreatActive then
+				local tipPos = tendril.retreatTargetPart.Position
+				local pullDir = safeUnit(tipPos - (points[segmentIndex - 1] or rootPos))
+				if pullDir ~= Vector3.zero then
+					spread = spread:Lerp(pullDir, 0.75)
+				end
+			end
+
+			local desired = safeUnit(spread)
+			if desired == Vector3.zero then
+				desired = lastDir
+			end
+
+			local bend = 0.14 + alpha * 0.34
+			if pointAttackMode and attackInRange then
+				bend = math.clamp(bend + currentAttackIntensity * 0.5, 0.2, 0.95)
+			end
+			if retreatActive then
+				bend = math.clamp(bend + 0.15, 0.2, 0.9)
+			end
+
+			local dir = safeUnit(lastDir:Lerp(desired, bend))
+			if dir == Vector3.zero then
+				dir = desired
+			end
+
+			local chaos =
+				1
+				+ math.sin(now * 1.3 + tendril.phase + alpha * 8.0) * STRETCH_AMOUNT
+				+ math.sin(now * 5.8 + tendril.phase * 0.7 + alpha * 17.0) * 0.1
+				+ math.noise(tendril.seed + 55, now * 0.7, alpha * 3.0) * 0.12
+
+			if pointAttackMode and attackInRange then
+				chaos = 1 + (chaos - 1) * (1 - currentAttackIntensity)
+			end
+			if retreatActive then
+				chaos = 1 + (chaos - 1) * 0.5
+			end
+
+			local segmentScale = 1 + (math.sin(alpha * math.pi) * 0.12)
+			local step = tendril.segmentSpacing * chaos * segmentScale * 0.98 * lengthScale
+
+			points[segmentIndex] = points[segmentIndex - 1] + dir * step
+			lastDir = dir
+		end
+
+		for segmentIndex, part in ipairs(parts) do
+			local alpha = (segmentIndex - 1) / (tendril.segmentCount - 1)
+			local thickness = (BASE_THICKNESS + (TIP_THICKNESS - BASE_THICKNESS) * alpha) * (tendril.thicknessScale or 1)
+			thickness = math.max(thickness, TIP_THICKNESS)
+
+			part.Size = Vector3.new(thickness, thickness, thickness)
+			part.Color = tendril.color or Color3.fromRGB(0, 0, 0)
+			part.CollisionGroup = TENDRIL_GROUP
+			part.CanCollide = false
+			part.CanTouch = false
+			part.CanQuery = false
+
+			if tendril.lockTipPart and tendril.lockTipPart.Parent and segmentIndex == tendril.segmentCount then
+				local targetPos = tendril.lockTipPart.Position
+				local prev = points[segmentIndex - 1] or points[segmentIndex - 2] or rootPos
+				local dir = safeUnit(targetPos - prev)
+				if dir == Vector3.zero then
+					dir = safeUnit(tendril.lockTipPart.CFrame.LookVector)
+				end
+				if dir == Vector3.zero then
+					dir = baseForward
+				end
+				part.CFrame = frameFromForward(targetPos, dir, tendril.lockTipPart.CFrame.UpVector)
+			elseif segmentIndex == 1 then
+				local rootDir = safeUnit(points[2] - points[1])
+				if rootDir == Vector3.zero then
+					rootDir = baseForward
+				end
+				part.CFrame = frameFromForward(points[1], rootDir, upHint)
+			else
+				local pos = points[segmentIndex]
+				local prev = points[segmentIndex - 1]
+				local dir = safeUnit(pos - prev)
+				if dir == Vector3.zero then
+					dir = baseForward
+				end
+
+				if tendril.lockTipPart and tendril.lockTipPart.Parent and segmentIndex >= tendril.segmentCount - 3 then
+					local targetDir = safeUnit(tendril.lockTipPart.Position - prev)
+					if targetDir ~= Vector3.zero then
+						dir = safeUnit(dir:Lerp(targetDir, 0.85))
+					end
+				end
+
+				local center = prev + dir * (tendril.segmentSpacing * 0.5)
+				part.CFrame = frameFromForward(center, dir, upHint)
+			end
+		end
+	end
+
+	if attackMode and currentAttackTargetPart and currentAttackTargetPart.Parent then
+		local dir = safeUnit(currentAttackTargetPart.Position - rigRoot.Position)
+		if dir ~= Vector3.zero then
+			npcHumanoid.WalkSpeed = 0
+		end
+	end
+end)
