@@ -1,8 +1,12 @@
 -- VoidAbility_v2_domain_sendloop_handles.lua
 -- Place in StarterPlayer -> StarterPlayerScripts (client)
 -- CLICK DOES NOT TRIGGER DOMAIN. Clicks use sendModelToVoidWithHandle exactly like original.
--- Changes: entry float runs simultaneously for player + NPCs; player's velocities cleared every 0.5s for a short duration after floats.
--- Added: Kill Return toggle (ON = NPCs die on return, OFF = NPCs are restored alive on return).
+-- Features:
+--   - Kill Return toggle
+--   - Solo Return toggle
+--   - Solo Enter toggle
+--   - Workspace BoolValue: VoidDomainActive
+--   - NPC BoolValue: VoidDomained
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -18,6 +22,8 @@ local TOOL_NAME = "Void."
 local DOMAIN_BUTTON_NAME = "VoidDomainBtn"
 local SECOND_BUTTON_NAME = "SendAllToVoidBtn"
 local KILL_RETURN_BUTTON_NAME = "KillReturnBtn"
+local SOLO_RETURN_BUTTON_NAME = "SoloReturnBtn"
+local SOLO_ENTER_BUTTON_NAME = "SoloEnterBtn"
 
 local VOID_FALLEN_HEIGHT = -500
 local VOID_MIN_OFFSET = 10
@@ -30,13 +36,28 @@ local DOMAIN_FLOAT_TIME = 3
 local DOMAIN_ENTRY_LIFT_TIME = 1.2
 local SEND_ALL_VOID_DELAY = 0.01
 
--- Velocity cleanup settings (clears player's velocities every CLEAR_VEL_INTERVAL seconds for CLEAR_VEL_DURATION seconds)
+-- Velocity cleanup settings
 local CLEAR_VEL_INTERVAL = 0.5
-local CLEAR_VEL_DURATION = 4 -- seconds
+local CLEAR_VEL_DURATION = 4
 
--- Kill Return toggle
-local KILL_RETURN_DEFAULT = true -- ON = current behavior, OFF = NPCs return alive
+-- Toggle defaults
+local KILL_RETURN_DEFAULT = true
+local SOLO_RETURN_DEFAULT = false
+local SOLO_ENTER_DEFAULT = false
+
 local killReturnEnabled = KILL_RETURN_DEFAULT
+local soloReturnEnabled = SOLO_RETURN_DEFAULT
+local soloEnterEnabled = SOLO_ENTER_DEFAULT
+
+-- Workspace status flag
+local voidDomainActiveValue = Workspace:FindFirstChild("VoidDomainActive")
+if not (voidDomainActiveValue and voidDomainActiveValue:IsA("BoolValue")) then
+	if voidDomainActiveValue then pcall(function() voidDomainActiveValue:Destroy() end) end
+	voidDomainActiveValue = Instance.new("BoolValue")
+	voidDomainActiveValue.Name = "VoidDomainActive"
+	voidDomainActiveValue.Value = false
+	voidDomainActiveValue.Parent = Workspace
+end
 
 -- Internal state
 local toolInstance = nil
@@ -44,7 +65,7 @@ local domainActive = false
 local domainState = {
 	originalTime = nil,
 	createdFolder = nil,
-	npcRecords = {}, -- model -> {hum, origWalk, origJump, origPlatform, partOffsets = {part->Vector3}, origPartCFrames = {part->CFrame}, destHRP = Vector3, floatOffset = Vector3}
+	npcRecords = {}, -- model -> record
 	playerOriginalCFrame = nil,
 	playerOriginalPlatformStand = nil,
 	playerOriginalWalk = nil,
@@ -60,10 +81,36 @@ local function isPlayerCharacter(model)
 	return model and Players:GetPlayerFromCharacter(model) ~= nil
 end
 
+local function getOrCreateBoolValue(parent, name, defaultValue)
+	if not parent then return nil end
+	local v = parent:FindFirstChild(name)
+	if v and v:IsA("BoolValue") then return v end
+	if v then pcall(function() v:Destroy() end) end
+	v = Instance.new("BoolValue")
+	v.Name = name
+	v.Value = defaultValue or false
+	v.Parent = parent
+	return v
+end
+
+local function setModelVoidDomained(model, state)
+	if not model or not model.Parent then return end
+	local flag = getOrCreateBoolValue(model, "VoidDomained", false)
+	if flag then
+		flag.Value = state and true or false
+	end
+end
+
+local function isModelVoidDomained(model)
+	if not model or not model:IsA("Model") then return false end
+	local flag = model:FindFirstChild("VoidDomained")
+	return flag and flag:IsA("BoolValue") and flag.Value == true
+end
+
 local function isNPC(model)
 	if not model or not model:IsA("Model") then return false end
 	local hum = model:FindFirstChildOfClass("Humanoid")
-	return hum and not Players:GetPlayerFromCharacter(model)
+	return hum and not Players:GetPlayerFromCharacter(model) and not isModelVoidDomained(model)
 end
 
 local function getModelRoot(model)
@@ -77,7 +124,6 @@ local function getModelSizeExtent(model)
 		return model:GetExtentsSize()
 	end)
 	if ok and typeof(size) == "Vector3" then return size end
-
 	local minP, maxP
 	for _, p in ipairs(model:GetDescendants()) do
 		if p:IsA("BasePart") then
@@ -101,17 +147,16 @@ local function screenRayFindHumanoid(screenX, screenY, maxDistance, snapRadius)
 	maxDistance = maxDistance or 2000
 	snapRadius = snapRadius or 8
 	if not Camera then Camera = Workspace.CurrentCamera end
-
 	local ray = Camera:ScreenPointToRay(screenX, screenY)
 	local origin = ray.Origin
 	local dir = ray.Direction.Unit
-
 	local bestHum, bestModel, bestProj = nil, nil, math.huge
+
 	for _, desc in ipairs(Workspace:GetDescendants()) do
 		if desc and desc:IsA("Humanoid") then
 			local h = desc
 			local model = h.Parent
-			if model and model:IsA("Model") and not Players:GetPlayerFromCharacter(model) then
+			if model and model:IsA("Model") and not Players:GetPlayerFromCharacter(model) and not isModelVoidDomained(model) then
 				local hrp = getModelRoot(model)
 				if hrp and hrp:IsA("BasePart") then
 					local toHRP = hrp.Position - origin
@@ -137,7 +182,6 @@ local function ensureVoidTool()
 	if not bp then return end
 	local existing = bp:FindFirstChild(TOOL_NAME) or (localPlayer.Character and localPlayer.Character:FindFirstChild(TOOL_NAME))
 	if existing and existing:IsA("Tool") then return existing end
-
 	local tool = Instance.new("Tool")
 	tool.Name = TOOL_NAME
 	tool.RequiresHandle = false
@@ -151,7 +195,22 @@ local function updateKillReturnButton(btn)
 	btn.Text = killReturnEnabled and "Kill Return: ON" or "Kill Return: OFF"
 end
 
--- Teleport model to Void (above FallenPartsDestroyHeight) — same logic as original (instant send).
+local function updateSoloReturnButton(btn)
+	if not btn then return end
+	btn.Text = soloReturnEnabled and "Solo Return: ON" or "Solo Return: OFF"
+end
+
+local function updateSoloEnterButton(btn)
+	if not btn then return end
+	btn.Text = soloEnterEnabled and "Solo Enter: ON" or "Solo Enter: OFF"
+end
+
+local function refreshVoidDomainActive()
+	local active = domainActive or (domainState.createdFolder ~= nil) or (next(domainState.npcRecords) ~= nil)
+	voidDomainActiveValue.Value = active and true or false
+end
+
+-- Teleport model to Void (above FallenPartsDestroyHeight)
 local function sendModelToVoidWithHandle(tool, model, source)
 	if not model or not model.Parent then return end
 	local hrp = getModelRoot(model)
@@ -209,13 +268,12 @@ local function trackSelectionAndRestoreOnDeaths(selectionTable)
 	end
 end
 
--- Domain utilities (create/destroy)
+-- Domain utilities
 local function createDomainBox()
 	local root = Instance.new("Folder")
 	root.Name = "VoidDomainTemp"
 	root.Parent = Workspace
 
-	-- floor
 	local floor = Instance.new("Part")
 	floor.Name = "VoidFloor"
 	floor.Size = Vector3.new(DOMAIN_BOX_SIZE.X, 2, DOMAIN_BOX_SIZE.Z)
@@ -226,9 +284,8 @@ local function createDomainBox()
 	floor.Material = Enum.Material.SmoothPlastic
 	floor.Parent = root
 
-	-- walls & ceiling
-	local halfX = DOMAIN_BOX_SIZE.X / 2
-	local halfZ = DOMAIN_BOX_SIZE.Z / 2
+	local halfX = DOMAIN_BOX_SIZE.X/2
+	local halfZ = DOMAIN_BOX_SIZE.Z/2
 	local wallThickness = 4
 	local wallHeight = DOMAIN_BOX_SIZE.Y
 
@@ -246,14 +303,10 @@ local function createDomainBox()
 	end
 
 	local center = DOMAIN_BOX_WORLD_POS
-	makeWall(center + Vector3.new(0, wallHeight/2 + 1, halfZ + wallThickness/2),
-		Vector3.new(DOMAIN_BOX_SIZE.X, wallHeight, wallThickness), "Wall_N")
-	makeWall(center + Vector3.new(0, wallHeight/2 + 1, -halfZ - wallThickness/2),
-		Vector3.new(DOMAIN_BOX_SIZE.X, wallHeight, wallThickness), "Wall_S")
-	makeWall(center + Vector3.new(halfX + wallThickness/2, wallHeight/2 + 1, 0),
-		Vector3.new(wallThickness, wallHeight, DOMAIN_BOX_SIZE.Z), "Wall_E")
-	makeWall(center + Vector3.new(-halfX - wallThickness/2, wallHeight/2 + 1, 0),
-		Vector3.new(wallThickness, wallHeight, DOMAIN_BOX_SIZE.Z), "Wall_W")
+	makeWall(center + Vector3.new(0, wallHeight/2 + 1, halfZ + wallThickness/2), Vector3.new(DOMAIN_BOX_SIZE.X, wallHeight, wallThickness), "Wall_N")
+	makeWall(center + Vector3.new(0, wallHeight/2 + 1, -halfZ - wallThickness/2), Vector3.new(DOMAIN_BOX_SIZE.X, wallHeight, wallThickness), "Wall_S")
+	makeWall(center + Vector3.new(halfX + wallThickness/2, wallHeight/2 + 1, 0), Vector3.new(wallThickness, wallHeight, DOMAIN_BOX_SIZE.Z), "Wall_E")
+	makeWall(center + Vector3.new(-halfX - wallThickness/2, wallHeight/2 + 1, 0), Vector3.new(wallThickness, wallHeight, DOMAIN_BOX_SIZE.Z), "Wall_W")
 
 	local ceiling = Instance.new("Part")
 	ceiling.Name = "VoidCeiling"
@@ -270,12 +323,9 @@ end
 
 local function destroyDomainBox(folder)
 	if not folder then return end
-	pcall(function()
-		folder:Destroy()
-	end)
+	pcall(function() folder:Destroy() end)
 end
 
--- Small helper: check if a world position is inside the domain box
 local function isPositionInsideDomain(pos)
 	if not pos then return false end
 	local center = DOMAIN_BOX_WORLD_POS
@@ -284,7 +334,34 @@ local function isPositionInsideDomain(pos)
 	return math.abs(diff.X) <= half.X and math.abs(diff.Y) <= half.Y and math.abs(diff.Z) <= half.Z
 end
 
--- Lock / restore NPC data in domain
+local function setNPCVoidDomained(model, state)
+	if not model or not model.Parent then return end
+	local flag = getOrCreateBoolValue(model, "VoidDomained", false)
+	if flag then flag.Value = state and true or false end
+end
+
+local function clearVelocityPeriodic(hrp, interval, duration)
+	if not hrp then return end
+	task.spawn(function()
+		local iterations = math.max(1, math.ceil(duration / math.max(0.0001, interval)))
+		for _ = 1, iterations do
+			if not hrp or not hrp.Parent then break end
+			pcall(function()
+				if hrp.AssemblyLinearVelocity ~= nil then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+				if hrp.AssemblyAngularVelocity ~= nil then hrp.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+			end)
+			task.wait(interval)
+		end
+		if hrp and hrp.Parent then
+			pcall(function()
+				if hrp.AssemblyLinearVelocity ~= nil then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+				if hrp.AssemblyAngularVelocity ~= nil then hrp.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+			end)
+		end
+	end)
+end
+
+-- Lock / restore NPC data
 local function lockNPCInDomain(model)
 	if not model then return end
 	local hum = model:FindFirstChildOfClass("Humanoid")
@@ -296,14 +373,16 @@ local function lockNPCInDomain(model)
 	rec.origWalk = hum.WalkSpeed
 	rec.origJump = hum.JumpPower or 0
 	rec.origPlatform = hum.PlatformStand
-	rec.partOffsets = {}      -- part -> offset from HRP (Vector3)
-	rec.origPartCFrames = {}   -- part -> original CFrame
+	rec.partOffsets = {}
+	rec.origPartCFrames = {}
+	rec.origAnchored = {}
 	rec.destHRP = nil
 	rec.floatOffset = nil
 
 	for _, p in ipairs(model:GetDescendants()) do
 		if p:IsA("BasePart") then
 			rec.origPartCFrames[p] = p.CFrame
+			rec.origAnchored[p] = p.Anchored
 		end
 	end
 
@@ -314,6 +393,8 @@ local function lockNPCInDomain(model)
 	end)
 
 	domainState.npcRecords[model] = rec
+	setNPCVoidDomained(model, true)
+	refreshVoidDomainActive()
 end
 
 local function updateNPCPartOffsetsAndDest(model, destHRP)
@@ -336,8 +417,8 @@ local function restoreNPCFromDomain(model)
 	if not model then return end
 	local rec = domainState.npcRecords[model]
 	if not rec then return end
-	local hum = rec.hum
 
+	local hum = rec.hum
 	pcall(function()
 		if hum and hum.Parent then
 			hum.WalkSpeed = rec.origWalk or hum.WalkSpeed
@@ -346,7 +427,19 @@ local function restoreNPCFromDomain(model)
 		end
 	end)
 
+	if rec.origAnchored then
+		for part, anchored in pairs(rec.origAnchored) do
+			if part and part.Parent then
+				pcall(function()
+					part.Anchored = anchored
+				end)
+			end
+		end
+	end
+
+	setNPCVoidDomained(model, false)
 	domainState.npcRecords[model] = nil
+	refreshVoidDomainActive()
 end
 
 local function restoreNPCOriginalPosition(model)
@@ -368,29 +461,35 @@ local function restoreNPCOriginalPosition(model)
 	restoreNPCFromDomain(model)
 end
 
--- Clears HRP velocities periodically (interval seconds) for duration seconds
-local function clearVelocityPeriodic(hrp, interval, duration)
-	if not hrp then return end
-	task.spawn(function()
-		local iterations = math.max(1, math.ceil(duration / math.max(0.0001, interval)))
-		for i = 1, iterations do
-			if not hrp or not hrp.Parent then break end
+local function snapNPCToDomain(model)
+	local rec = domainState.npcRecords[model]
+	if not rec then return end
+	if not rec.destHRP or not rec.partOffsets then return end
+
+	for part, localOff in pairs(rec.partOffsets) do
+		if part and part.Parent then
 			pcall(function()
-				if hrp.AssemblyLinearVelocity ~= nil then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-				if hrp.AssemblyAngularVelocity ~= nil then hrp.AssemblyAngularVelocity = Vector3.new(0,0,0) end
-			end)
-			task.wait(interval)
-		end
-		-- final safety clear
-		if hrp and hrp.Parent then
-			pcall(function()
-				if hrp.AssemblyLinearVelocity ~= nil then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-				if hrp.AssemblyAngularVelocity ~= nil then hrp.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+				part.CFrame = CFrame.new(rec.destHRP + localOff)
+				if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+				if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
 			end)
 		end
-	end)
+	end
 end
 
+local function setNPCAnchoredForReturn(model, anchored)
+	local rec = domainState.npcRecords[model]
+	if not rec then return end
+	for part, _ in pairs(rec.origPartCFrames or {}) do
+		if part and part.Parent then
+			pcall(function()
+				part.Anchored = anchored and true or false
+			end)
+		end
+	end
+end
+
+-- Cleanup helpers
 local function resetDomainEnvironment()
 	if domainState.originalTime then
 		pcall(function()
@@ -409,52 +508,55 @@ local function resetDomainEnvironment()
 	end
 	domainState.entryAnchor = nil
 	domainState.isFloating = false
+	refreshVoidDomainActive()
+end
+
+local function cleanupNPCsWithoutReturn()
+	for model, rec in pairs(domainState.npcRecords) do
+		if rec and rec.hum and rec.hum.Parent and rec.hum.Health > 0 then
+			pcall(function() rec.hum.Health = 0 end)
+		end
+		setNPCVoidDomained(model, false)
+		restoreNPCFromDomain(model)
+	end
+	domainState.npcRecords = {}
+	refreshVoidDomainActive()
 end
 
 local function cleanupNPCsOnReturn()
+	-- Solo Return ON: player leaves alone, NPCs stay in void domain.
+	if soloReturnEnabled then
+		for model, rec in pairs(domainState.npcRecords) do
+			if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+				snapNPCToDomain(model)
+				setNPCVoidDomained(model, true)
+				setNPCAnchoredForReturn(model, true)
+			end
+		end
+		refreshVoidDomainActive()
+		return
+	end
+
+	-- Solo Return OFF: NPCs return with player to their original spots.
 	for model, rec in pairs(domainState.npcRecords) do
 		if model and model.Parent and rec and rec.hum and rec.hum.Parent then
 			if killReturnEnabled then
 				pcall(function()
-					Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT
+					rec.hum.Health = 0
 				end)
-
-				local toolToUse = toolInstance or ensureVoidTool()
-				if toolToUse then
-					pcall(function()
-						sendModelToVoidWithHandle(toolToUse, model, "domain_exit")
-					end)
-				else
-					pcall(function()
-						sendModelToVoidWithHandle(nil, model, "domain_exit")
-					end)
-				end
-
-				pcall(function()
-					if rec.hum and rec.hum.Parent then
-						rec.hum.Health = 0
-					end
-				end)
+				setNPCVoidDomained(model, false)
+				restoreNPCFromDomain(model)
 			else
 				restoreNPCOriginalPosition(model)
 			end
 		end
 	end
 	domainState.npcRecords = {}
+	refreshVoidDomainActive()
 end
 
-local function cleanupNPCsWithoutReturn()
-	for model, rec in pairs(domainState.npcRecords) do
-		if model and model.Parent and rec and rec.hum and rec.hum.Parent then
-			restoreNPCFromDomain(model)
-		end
-	end
-	domainState.npcRecords = {}
-end
-
--- Move NPCs into the domain: compute destinations; apply NPC parts with a float animation (entry float)
--- Modified so player and NPCs float together (single shared anchor).
-local function moveIntoDomain(npcList)
+-- Entry behavior
+local function moveIntoDomain(npcList, playerOnly)
 	local playerChar = localPlayer.Character
 	local playerHRP = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
 	local playerHum = playerChar and playerChar:FindFirstChildOfClass("Humanoid")
@@ -466,15 +568,11 @@ local function moveIntoDomain(npcList)
 	domainState.playerOriginalJump = playerHum.JumpPower or 0
 
 	local origCanCollide
-	pcall(function()
-		origCanCollide = playerHRP.CanCollide
-	end)
+	pcall(function() origCanCollide = playerHRP.CanCollide end)
 	domainState.playerHRPCanCollide = origCanCollide
 
 	if domainState.entryAnchor and domainState.entryAnchor.Parent then
-		pcall(function()
-			domainState.entryAnchor:Destroy()
-		end)
+		pcall(function() domainState.entryAnchor:Destroy() end)
 		domainState.entryAnchor = nil
 	end
 
@@ -490,21 +588,25 @@ local function moveIntoDomain(npcList)
 	local halfZ = DOMAIN_BOX_SIZE.Z / 2 - 2
 	local prPos = playerHRP.Position
 
-	for _, entry in ipairs(npcList) do
-		local m = entry.model
-		local hrp = entry.hrp
-		if m and hrp and hrp.Parent then
-			lockNPCInDomain(m)
-			local offset = hrp.Position - prPos
-			local nx = math.clamp(offset.X, -halfX, halfX)
-			local nz = math.clamp(offset.Z, -halfZ, halfZ)
-			local ny = 3
-			local destHRP = center + Vector3.new(nx, ny + 1, nz)
-			updateNPCPartOffsetsAndDest(m, destHRP)
+	-- Solo Enter OFF -> NPCs join the domain
+	if not playerOnly then
+		for _, entry in ipairs(npcList) do
+			local m = entry.model
+			local hrp = entry.hrp
+			if m and hrp and hrp.Parent then
+				lockNPCInDomain(m)
+
+				-- Place NPCs at their original world layout in the void, instead of centering them.
+				-- This keeps their spacing based on where they originally stood on the map.
+				local offset = hrp.Position - prPos
+				local nx = math.clamp(offset.X, -halfX, halfX)
+				local nz = math.clamp(offset.Z, -halfZ, halfZ)
+				local destHRP = center + Vector3.new(nx, 3, nz)
+				updateNPCPartOffsetsAndDest(m, destHRP)
+			end
 		end
 	end
 
-	-- Create a single shared anchor to lift both the player and the NPCs at the same time
 	local sharedAnchor = Instance.new("Part")
 	sharedAnchor.Name = "Void_SharedLiftAnchor_" .. tostring(tick())
 	sharedAnchor.Size = Vector3.new(1,1,1)
@@ -519,7 +621,6 @@ local function moveIntoDomain(npcList)
 		playerHum.PlatformStand = false
 	end)
 
-	-- compute per-NPC float offsets relative to the sharedAnchor start position
 	local anchorStartPos = sharedAnchor.Position
 	for model, rec in pairs(domainState.npcRecords) do
 		if model and model.Parent and rec and rec.hum and rec.hum.Parent then
@@ -528,11 +629,9 @@ local function moveIntoDomain(npcList)
 				rec.floatOffset = npcHRP.Position - anchorStartPos
 				if not rec.partOffsets or next(rec.partOffsets) == nil then
 					rec.partOffsets = {}
-					if npcHRP then
-						for _, p in ipairs(model:GetDescendants()) do
-							if p:IsA("BasePart") then
-								rec.partOffsets[p] = p.Position - npcHRP.Position
-							end
+					for _, p in ipairs(model:GetDescendants()) do
+						if p:IsA("BasePart") then
+							rec.partOffsets[p] = p.Position - npcHRP.Position
 						end
 					end
 				end
@@ -540,7 +639,6 @@ local function moveIntoDomain(npcList)
 		end
 	end
 
-	-- lift both player and NPCs together
 	local start = sharedAnchor.Position
 	local target = start + Vector3.new(0, DOMAIN_ENTRY_LIFT, 0)
 	local dur = DOMAIN_ENTRY_LIFT_TIME
@@ -554,27 +652,27 @@ local function moveIntoDomain(npcList)
 		local newPos = start:Lerp(target, alpha)
 		sharedAnchor.Position = newPos
 
-		-- move player to anchor
 		if playerHRP and playerHRP.Parent then
 			pcall(function()
 				playerHRP.CFrame = CFrame.new(sharedAnchor.Position)
 			end)
 		end
 
-		-- move NPC parts relative to anchor
-		for model, rec in pairs(domainState.npcRecords) do
-			if model and model.Parent and rec and rec.hum and rec.hum.Parent and rec.floatOffset then
-				local npcHRPPos = sharedAnchor.Position + rec.floatOffset
-				for part, localOff in pairs(rec.partOffsets or {}) do
-					if part and part.Parent then
-						local curPos = part.Position
-						local targetPos = npcHRPPos + localOff
-						local lerped = curPos:Lerp(targetPos, math.min(1, alpha))
-						pcall(function()
-							part.CFrame = CFrame.new(lerped)
-							if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-							if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
-						end)
+		if not playerOnly then
+			for model, rec in pairs(domainState.npcRecords) do
+				if model and model.Parent and rec and rec.hum and rec.hum.Parent and rec.floatOffset then
+					local npcHRPPos = sharedAnchor.Position + rec.floatOffset
+					for part, localOff in pairs(rec.partOffsets or {}) do
+						if part and part.Parent then
+							local curPos = part.Position
+							local targetPos = npcHRPPos + localOff
+							local lerped = curPos:Lerp(targetPos, math.min(1, alpha))
+							pcall(function()
+								part.CFrame = CFrame.new(lerped)
+								if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+								if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+							end)
+						end
 					end
 				end
 			end
@@ -584,37 +682,30 @@ local function moveIntoDomain(npcList)
 	domainState.isFloating = false
 	task.wait(0.05)
 
-	-- final placement inside domain (player + NPCs)
-	local insidePos = center + Vector3.new(0, 10, 0)
+	-- Final placement inside domain:
+	-- Solo Enter ON -> only player is in the void.
+	-- Solo Enter OFF -> NPCs are in the void at their original layout positions.
 	if playerHRP and playerHRP.Parent then
 		pcall(function()
-			playerHRP.CFrame = CFrame.new(insidePos)
+			playerHRP.CFrame = CFrame.new(center + Vector3.new(0, 10, 0))
 		end)
 	end
 
-	for _, rec in pairs(domainState.npcRecords) do
-		if rec and rec.destHRP and rec.partOffsets then
-			for part, localOff in pairs(rec.partOffsets) do
-				if part and part.Parent then
-					pcall(function()
-						part.CFrame = CFrame.new(rec.destHRP + localOff)
-						if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-						if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
-					end)
-				end
+	if not playerOnly then
+		for model, rec in pairs(domainState.npcRecords) do
+			if rec and rec.destHRP and rec.partOffsets then
+				snapNPCToDomain(model)
+				setNPCVoidDomained(model, true)
 			end
 		end
 	end
 
-	-- clear some residual player velocity repeatedly to avoid fling
 	if playerHRP and playerHRP.Parent then
 		clearVelocityPeriodic(playerHRP, CLEAR_VEL_INTERVAL, CLEAR_VEL_DURATION)
 	end
 
 	if sharedAnchor and sharedAnchor.Parent then
-		pcall(function()
-			sharedAnchor:Destroy()
-		end)
+		pcall(function() sharedAnchor:Destroy() end)
 	end
 	domainState.entryAnchor = nil
 
@@ -625,9 +716,11 @@ local function moveIntoDomain(npcList)
 			playerHRP.CanCollide = true
 		end
 	end)
+
+	refreshVoidDomainActive()
 end
 
--- Float & exit (smooth float then teleport to void at end)
+-- Exit behavior
 local function exitDomainByClick()
 	if not domainActive then return end
 
@@ -636,9 +729,10 @@ local function exitDomainByClick()
 	local hum = playerChar and playerChar:FindFirstChildOfClass("Humanoid")
 
 	if not hrp or not hum then
-		cleanupNPCsOnReturn()
+		cleanupNPCsWithoutReturn()
 		resetDomainEnvironment()
 		domainActive = false
+		refreshVoidDomainActive()
 		return
 	end
 
@@ -662,7 +756,6 @@ local function exitDomainByClick()
 		hum.PlatformStand = true
 	end)
 
-	-- compute per-NPC float offsets
 	local playerStartPos = hrp.Position
 	for model, rec in pairs(domainState.npcRecords) do
 		if model and model.Parent and rec and rec.hum and rec.hum.Parent then
@@ -671,11 +764,9 @@ local function exitDomainByClick()
 				rec.floatOffset = npcHRP.Position - playerStartPos
 				if not rec.partOffsets or next(rec.partOffsets) == nil then
 					rec.partOffsets = {}
-					if npcHRP then
-						for _, p in ipairs(model:GetDescendants()) do
-							if p:IsA("BasePart") then
-								rec.partOffsets[p] = p.Position - npcHRP.Position
-							end
+					for _, p in ipairs(model:GetDescendants()) do
+						if p:IsA("BasePart") then
+							rec.partOffsets[p] = p.Position - npcHRP.Position
 						end
 					end
 				end
@@ -683,7 +774,6 @@ local function exitDomainByClick()
 		end
 	end
 
-	-- float animation (lerp)
 	local start = floatAnchor.Position
 	local target = start + Vector3.new(0, DOMAIN_FLOAT_HEIGHT, 0)
 	local dur = DOMAIN_FLOAT_TIME
@@ -702,21 +792,24 @@ local function exitDomainByClick()
 			end)
 		end
 
-		for model, rec in pairs(domainState.npcRecords) do
-			if model and model.Parent and rec and rec.hum and rec.hum.Parent then
-				local npcHRP = getModelRoot(model)
-				if npcHRP and npcHRP.Parent and rec.floatOffset then
-					local newHRPPos = floatAnchor.Position + rec.floatOffset
-					for part, localOff in pairs(rec.partOffsets or {}) do
-						if part and part.Parent then
-							local curPos = part.Position
-							local targetPos = newHRPPos + localOff
-							local lerped = curPos:Lerp(targetPos, math.min(1, alpha))
-							pcall(function()
-								part.CFrame = CFrame.new(lerped)
-								if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-								if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
-							end)
+		-- Only move NPCs along with the exit if Solo Return is OFF.
+		if not soloReturnEnabled then
+			for model, rec in pairs(domainState.npcRecords) do
+				if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+					local npcHRP = getModelRoot(model)
+					if npcHRP and npcHRP.Parent and rec.floatOffset then
+						local newHRPPos = floatAnchor.Position + rec.floatOffset
+						for part, localOff in pairs(rec.partOffsets or {}) do
+							if part and part.Parent then
+								local curPos = part.Position
+								local targetPos = newHRPPos + localOff
+								local lerped = curPos:Lerp(targetPos, math.min(1, alpha))
+								pcall(function()
+									part.CFrame = CFrame.new(lerped)
+									if part.AssemblyLinearVelocity then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+									if part.AssemblyAngularVelocity then part.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+								end)
+							end
 						end
 					end
 				end
@@ -727,12 +820,84 @@ local function exitDomainByClick()
 	domainState.isFloating = false
 	task.wait(0.05)
 
-	-- NPC cleanup on return:
-	-- ON  -> send them to void and kill them like before
-	-- OFF -> restore them back to their original position alive
-	cleanupNPCsOnReturn()
+	-- Return logic:
+	-- Solo Return ON  -> player returns alone, NPCs remain trapped in the void domain.
+	-- Solo Return OFF -> NPCs return with player to their original positions (or die if Kill Return is ON).
+	if soloReturnEnabled then
+		for model, rec in pairs(domainState.npcRecords) do
+			if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+				snapNPCToDomain(model)
+				setNPCVoidDomained(model, true)
+				setNPCAnchoredForReturn(model, true)
+			end
+		end
 
-	-- clear player velocities repeatedly after float to avoid fling
+		-- Player only returns.
+		if domainState.playerOriginalCFrame and hrp and hrp.Parent then
+			pcall(function()
+				hrp.CFrame = domainState.playerOriginalCFrame
+			end)
+		end
+
+		if hrp and hrp.Parent then
+			clearVelocityPeriodic(hrp, CLEAR_VEL_INTERVAL, CLEAR_VEL_DURATION)
+		end
+
+		pcall(function()
+			if hum and hum.Parent then
+				hum.PlatformStand = domainState.playerOriginalPlatformStand or false
+				if domainState.playerOriginalWalk then hum.WalkSpeed = domainState.playerOriginalWalk end
+				if hum.JumpPower ~= nil and domainState.playerOriginalJump ~= nil then hum.JumpPower = domainState.playerOriginalJump end
+			end
+		end)
+
+		pcall(function()
+			if hrp and hrp.Parent then
+				if domainState.playerHRPCanCollide ~= nil then
+					hrp.CanCollide = domainState.playerHRPCanCollide
+				else
+					hrp.CanCollide = true
+				end
+			end
+		end)
+
+		if floatAnchor and floatAnchor.Parent then pcall(function() floatAnchor:Destroy() end) end
+		if domainState.entryAnchor and domainState.entryAnchor.Parent then pcall(function() domainState.entryAnchor:Destroy() end) end
+		domainState.entryAnchor = nil
+
+		-- Keep domain visuals and NPC records alive if something remains trapped.
+		if domainState.originalTime then
+			pcall(function() Lighting.ClockTime = domainState.originalTime end)
+		end
+		domainState.originalTime = nil
+
+		-- Preserve NPCs in the void; do not destroy records or the box.
+		domainActive = false
+		refreshVoidDomainActive()
+		return
+	end
+
+	-- Solo Return OFF:
+	-- Kill Return ON  -> NPCs die on return.
+	-- Kill Return OFF -> NPCs return to original positions alive.
+	if killReturnEnabled then
+		for model, rec in pairs(domainState.npcRecords) do
+			if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+				pcall(function()
+					rec.hum.Health = 0
+				end)
+				setNPCVoidDomained(model, false)
+				restoreNPCFromDomain(model)
+			end
+		end
+	else
+		for model, rec in pairs(domainState.npcRecords) do
+			if model and model.Parent and rec and rec.hum and rec.hum.Parent then
+				restoreNPCOriginalPosition(model)
+			end
+		end
+	end
+
 	if hrp and hrp.Parent then
 		clearVelocityPeriodic(hrp, CLEAR_VEL_INTERVAL, CLEAR_VEL_DURATION)
 	end
@@ -740,16 +905,6 @@ local function exitDomainByClick()
 	if domainState.playerOriginalCFrame and hrp and hrp.Parent then
 		pcall(function()
 			hrp.CFrame = domainState.playerOriginalCFrame
-		end)
-	end
-
-	if hrp and hrp.Parent then
-		pcall(function()
-			if domainState.playerHRPCanCollide ~= nil then
-				hrp.CanCollide = domainState.playerHRPCanCollide
-			else
-				hrp.CanCollide = true
-			end
 		end)
 	end
 
@@ -761,12 +916,38 @@ local function exitDomainByClick()
 		end
 	end)
 
-	resetDomainEnvironment()
+	pcall(function()
+		if hrp and hrp.Parent then
+			if domainState.playerHRPCanCollide ~= nil then hrp.CanCollide = domainState.playerHRPCanCollide else hrp.CanCollide = true end
+		end
+	end)
 
 	if floatAnchor and floatAnchor.Parent then
-		pcall(function()
-			floatAnchor:Destroy()
-		end)
+		pcall(function() floatAnchor:Destroy() end)
+	end
+	if domainState.entryAnchor and domainState.entryAnchor.Parent then
+		pcall(function() domainState.entryAnchor:Destroy() end)
+	end
+	domainState.entryAnchor = nil
+
+	-- Clean up domain after a full return.
+	if domainState.originalTime then
+		pcall(function() Lighting.ClockTime = domainState.originalTime end)
+	end
+	domainState.originalTime = nil
+
+	destroyDomainBox(domainState.createdFolder)
+	domainState.createdFolder = nil
+
+	for model, _ in pairs(domainState.npcRecords) do
+		-- keep any removed models from lingering
+		if not model or not model.Parent then
+			domainState.npcRecords[model] = nil
+		end
+	end
+
+	if not next(domainState.npcRecords) then
+		domainState.npcRecords = {}
 	end
 
 	domainState.playerOriginalCFrame = nil
@@ -774,7 +955,9 @@ local function exitDomainByClick()
 	domainState.playerOriginalWalk = nil
 	domainState.playerOriginalJump = nil
 	domainState.playerHRPCanCollide = nil
+
 	domainActive = false
+	refreshVoidDomainActive()
 end
 
 -- GUI builder
@@ -787,8 +970,12 @@ local function createVoidGUI(tool)
 		local btn = frame and frame:FindFirstChild(DOMAIN_BUTTON_NAME)
 		local btn2 = frame and frame:FindFirstChild(SECOND_BUTTON_NAME)
 		local btn3 = frame and frame:FindFirstChild(KILL_RETURN_BUTTON_NAME)
+		local btn4 = frame and frame:FindFirstChild(SOLO_RETURN_BUTTON_NAME)
+		local btn5 = frame and frame:FindFirstChild(SOLO_ENTER_BUTTON_NAME)
 		updateKillReturnButton(btn3)
-		return existingSG, btn, btn2, btn3
+		updateSoloReturnButton(btn4)
+		updateSoloEnterButton(btn5)
+		return existingSG, btn, btn2, btn3, btn4, btn5
 	end
 
 	local sg = Instance.new("ScreenGui")
@@ -799,7 +986,7 @@ local function createVoidGUI(tool)
 	local frame = Instance.new("Frame")
 	frame.Name = "Frame"
 	frame.Parent = sg
-	frame.Size = UDim2.new(0, 220, 0, 96)
+	frame.Size = UDim2.new(0, 220, 0, 156)
 	frame.Position = UDim2.new(0.5, -110, 0, 8)
 	frame.BackgroundTransparency = 0.2
 	frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
@@ -833,7 +1020,27 @@ local function createVoidGUI(tool)
 	btn3.Parent = frame
 	updateKillReturnButton(btn3)
 
-	return sg, btn, btn2, btn3
+	local btn4 = Instance.new("TextButton", frame)
+	btn4.Size = UDim2.new(0,200,0,24)
+	btn4.Position = UDim2.new(0,10,0,96)
+	btn4.Font = Enum.Font.SourceSansBold
+	btn4.TextSize = 16
+	btn4.TextColor3 = Color3.new(1,1,1)
+	btn4.Name = SOLO_RETURN_BUTTON_NAME
+	btn4.Parent = frame
+	updateSoloReturnButton(btn4)
+
+	local btn5 = Instance.new("TextButton", frame)
+	btn5.Size = UDim2.new(0,200,0,24)
+	btn5.Position = UDim2.new(0,10,0,126)
+	btn5.Font = Enum.Font.SourceSansBold
+	btn5.TextSize = 16
+	btn5.TextColor3 = Color3.new(1,1,1)
+	btn5.Name = SOLO_ENTER_BUTTON_NAME
+	btn5.Parent = frame
+	updateSoloEnterButton(btn5)
+
+	return sg, btn, btn2, btn3, btn4, btn5
 end
 
 -- Wire the tool
@@ -845,22 +1052,24 @@ local function wireVoidTool(tool)
 	marker.Name = "__VoidWired"
 	marker.Parent = tool
 
-	local guiSG, domainBtn, sendAllBtn, killReturnBtn
+	local guiSG, domainBtn, sendAllBtn, killReturnBtn, soloReturnBtn, soloEnterBtn
 	local mouse
 	local clickConn
-	local domainBtnConn, sendAllConn, killReturnBtnConn
+	local domainBtnConn, sendAllConn, killReturnBtnConn, soloReturnBtnConn, soloEnterBtnConn
 
 	local function onUnequip()
 		if clickConn then clickConn:Disconnect(); clickConn = nil end
 		if domainBtnConn then domainBtnConn:Disconnect(); domainBtnConn = nil end
 		if sendAllConn then sendAllConn:Disconnect(); sendAllConn = nil end
 		if killReturnBtnConn then killReturnBtnConn:Disconnect(); killReturnBtnConn = nil end
+		if soloReturnBtnConn then soloReturnBtnConn:Disconnect(); soloReturnBtnConn = nil end
+		if soloEnterBtnConn then soloEnterBtnConn:Disconnect(); soloEnterBtnConn = nil end
 		if guiSG and guiSG.Parent then guiSG.Enabled = false end
 	end
 
 	tool.Equipped:Connect(function(m)
 		mouse = m or localPlayer:GetMouse()
-		guiSG, domainBtn, sendAllBtn, killReturnBtn = createVoidGUI(tool)
+		guiSG, domainBtn, sendAllBtn, killReturnBtn, soloReturnBtn, soloEnterBtn = createVoidGUI(tool)
 		if guiSG then guiSG.Enabled = true end
 
 		if domainBtn then
@@ -875,10 +1084,10 @@ local function wireVoidTool(tool)
 				if not pr then return end
 
 				domainActive = true
+				refreshVoidDomainActive()
+
 				domainState.originalTime = Lighting and Lighting.ClockTime or nil
-				pcall(function()
-					Lighting.ClockTime = 2
-				end)
+				pcall(function() Lighting.ClockTime = 2 end)
 
 				local npcList = {}
 				for _, desc in ipairs(Workspace:GetDescendants()) do
@@ -887,7 +1096,7 @@ local function wireVoidTool(tool)
 						if model and isNPC(model) then
 							local hrp = getModelRoot(model)
 							if hrp and (hrp.Position - pr.Position).Magnitude <= DOMAIN_RADIUS then
-								table.insert(npcList, { hum = desc, model = model, hrp = hrp })
+								table.insert(npcList, {hum = desc, model = model, hrp = hrp})
 							end
 						end
 					end
@@ -895,9 +1104,14 @@ local function wireVoidTool(tool)
 
 				local boxFolder = createDomainBox()
 				domainState.createdFolder = boxFolder
-				moveIntoDomain(npcList)
 
-				-- Monitor: if local player leaves domain, either restore NPCs or kill them based on toggle
+				-- Solo Enter ON -> only the player enters the domain.
+				-- Solo Enter OFF -> both the player and NPCs enter the domain.
+				moveIntoDomain(npcList, soloEnterEnabled)
+
+				refreshVoidDomainActive()
+
+				-- Monitor: if local player leaves domain, close the session.
 				task.spawn(function()
 					while domainActive do
 						RunService.Heartbeat:Wait()
@@ -912,13 +1126,25 @@ local function wireVoidTool(tool)
 					end
 
 					if domainActive then
+						-- If the player leaves and Solo Return is ON, NPCs remain trapped in void.
+						-- Otherwise, they return with the player.
 						cleanupNPCsOnReturn()
-						resetDomainEnvironment()
-						domainActive = false
+
+						if not soloReturnEnabled then
+							resetDomainEnvironment()
+						else
+							-- Keep the void domain alive for trapped NPCs.
+							if domainState.originalTime then
+								pcall(function() Lighting.ClockTime = domainState.originalTime end)
+							end
+							domainState.originalTime = nil
+							domainActive = false
+							refreshVoidDomainActive()
+						end
 					end
 				end)
 
-				-- Also watch for NPC deaths while domain is active; if all NPCs die, close domain without "return restoration"
+				-- If all NPCs die, close the domain cleanly.
 				task.spawn(function()
 					local still = {}
 					for _, e in ipairs(npcList) do
@@ -942,6 +1168,7 @@ local function wireVoidTool(tool)
 								cleanupNPCsWithoutReturn()
 								resetDomainEnvironment()
 								domainActive = false
+								refreshVoidDomainActive()
 							end
 						end)
 					end
@@ -954,7 +1181,6 @@ local function wireVoidTool(tool)
 				pcall(function()
 					Workspace.FallenPartsDestroyHeight = VOID_FALLEN_HEIGHT
 				end)
-
 				for _, desc in ipairs(Workspace:GetDescendants()) do
 					if desc:IsA("Humanoid") then
 						local model = desc.Parent
@@ -962,9 +1188,7 @@ local function wireVoidTool(tool)
 							task.spawn(function()
 								local toolToUse = toolInstance or ensureVoidTool()
 								if toolToUse then
-									pcall(function()
-										sendModelToVoidWithHandle(toolToUse, model, "sendAll")
-									end)
+									pcall(function() sendModelToVoidWithHandle(toolToUse, model, "sendAll") end)
 								else
 									sendModelToVoidWithHandle(nil, model, "sendAll")
 								end
@@ -983,7 +1207,21 @@ local function wireVoidTool(tool)
 			end)
 		end
 
-		-- CLICK HANDLER: Send to void immediately (exact same logic as original script), do NOT trigger domain.
+		if soloReturnBtn then
+			soloReturnBtnConn = soloReturnBtn.MouseButton1Click:Connect(function()
+				soloReturnEnabled = not soloReturnEnabled
+				updateSoloReturnButton(soloReturnBtn)
+			end)
+		end
+
+		if soloEnterBtn then
+			soloEnterBtnConn = soloEnterBtn.MouseButton1Click:Connect(function()
+				soloEnterEnabled = not soloEnterEnabled
+				updateSoloEnterButton(soloEnterBtn)
+			end)
+		end
+
+		-- CLICK HANDLER: Send to void immediately, do NOT trigger domain.
 		clickConn = mouse.Button1Down:Connect(function()
 			local x, y = mouse.X, mouse.Y
 			local hum, model = screenRayFindHumanoid(x, y, 2000, 10)
@@ -1006,7 +1244,6 @@ local function wireVoidTool(tool)
 
 			if not hum or not model then return end
 
-			-- Use the same send logic as the original: sendModelToVoidWithHandle and track selection for restore-on-death
 			local toolToUse = toolInstance or ensureVoidTool()
 			if toolToUse then
 				pcall(function()
@@ -1040,4 +1277,4 @@ toolInstance = ensureVoidTool()
 if toolInstance then wireVoidTool(toolInstance) end
 localPlayer.CharacterAdded:Connect(onCharacterAdded)
 
-print("Void. tool v2 (click = send to void; domain simultaneous float + velocity clears + kill-return toggle) loaded for", localPlayer.Name)
+print("Void. tool v2 (click = send to void; domain + kill-return + solo-return + solo-enter toggles) loaded for", localPlayer.Name)
