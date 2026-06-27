@@ -69,6 +69,19 @@ tpSpeedBox.Font = Enum.Font.SourceSansBold
 tpSpeedBox.TextSize = 14
 tpSpeedBox.Parent = screenGui
 
+local btnHideToggle = Instance.new("TextButton")
+btnHideToggle.Name = "HideToggle"
+btnHideToggle.Size = UDim2.new(0, 60, 0, 26)
+btnHideToggle.Position = UDim2.new(1, -210, 0, 20)
+btnHideToggle.AnchorPoint = Vector2.new(0, 0)
+btnHideToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+btnHideToggle.TextColor3 = Color3.new(1, 1, 1)
+btnHideToggle.Text = "Hide"
+btnHideToggle.Font = Enum.Font.SourceSansBold
+btnHideToggle.TextSize = 16
+btnHideToggle.Parent = screenGui
+btnHideToggle.ZIndex = 10
+
 -- Variables
 local floating = false
 local upHeld = false
@@ -89,6 +102,18 @@ local currentVel = Vector3.new(0, 0, 0)
 local lastLookVector = Vector3.new(0, 0, -1)
 
 local originalGravity = workspace.Gravity
+
+local uiVisible = true
+local function setUIVisible(state)
+    uiVisible = state
+    btnUp.Visible = state
+    btnDown.Visible = state
+    btnDisable.Visible = state
+    btnSpawnToggle.Visible = state
+    speedBox.Visible = state
+    tpSpeedBox.Visible = state
+    btnHideToggle.Text = state and "Hide" or "Show"
+end
 
 -- Helpers
 local function createOrUpdateLocalSpawn(pos)
@@ -360,4 +385,9 @@ btnSpawnToggle.MouseButton1Click:Connect(function()
         btnSpawnToggle.Text = "Spawn: OFF"
         removeLocalSpawnAndRestore()
     end
+end)
+
+btnHideToggle.MouseButton1Click:Connect(function()
+    setUIVisible(not uiVisible)
+    btnHideToggle.Visible = true
 end)
