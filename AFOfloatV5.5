@@ -26,24 +26,28 @@ screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 
 local function makeButton(name, posY, text)
-    local btn = Instance.new("TextButton")
-    btn.Name = name
-    btn.Size = UDim2.new(0, 60, 0, 26)
-    btn.Position = UDim2.new(1, -70, 0, posY)
-    btn.AnchorPoint = Vector2.new(0, 0)
-    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    btn.TextColor3 = Color3.new(1, 1, 1)
-    btn.Text = text
-    btn.Font = Enum.Font.SourceSansBold
-    btn.TextSize = 16
-    btn.Parent = screenGui
-    return btn
+	local btn = Instance.new("TextButton")
+	btn.Name = name
+	btn.Size = UDim2.new(0, 60, 0, 26)
+	btn.Position = UDim2.new(1, -70, 0, posY)
+	btn.AnchorPoint = Vector2.new(0, 0)
+	btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.Text = text
+	btn.Font = Enum.Font.SourceSansBold
+	btn.TextSize = 16
+	btn.Parent = screenGui
+	return btn
 end
 
 local btnUp = makeButton("Up", 20, "Up")
 local btnDown = makeButton("Down", 60, "Down")
 local btnDisable = makeButton("Disable", 100, "Disable")
 local btnSpawnToggle = makeButton("SpawnToggle", 140, "Spawn: OFF")
+
+local btnUnbudgable = makeButton("Unbudgable", 180, "Unbudgable: OFF")
+btnUnbudgable.TextScaled = true
+btnUnbudgable.TextWrapped = true
 
 local speedBox = Instance.new("TextBox")
 speedBox.Size = UDim2.new(0, 60, 0, 26)
@@ -88,6 +92,9 @@ local upHeld = false
 local downHeld = false
 local targetY = 0
 local spawnToggle = false
+local unbudgable = false
+local targetX = nil
+local targetZ = nil
 
 local floatSpeed = tonumber(speedBox.Text) or 5
 local tpwalkSpeed = tonumber(tpSpeedBox.Text) or 0.23
@@ -105,234 +112,252 @@ local originalGravity = workspace.Gravity
 
 local uiVisible = true
 local function setUIVisible(state)
-    uiVisible = state
-    btnUp.Visible = state
-    btnDown.Visible = state
-    btnDisable.Visible = state
-    btnSpawnToggle.Visible = state
-    speedBox.Visible = state
-    tpSpeedBox.Visible = state
-    btnHideToggle.Text = state and "Hide" or "Show"
+	uiVisible = state
+	btnUp.Visible = state
+	btnDown.Visible = state
+	btnDisable.Visible = state
+	btnSpawnToggle.Visible = state
+	btnUnbudgable.Visible = state
+	speedBox.Visible = state
+	tpSpeedBox.Visible = state
+	btnHideToggle.Text = state and "Hide" or "Show"
 end
 
 -- Helpers
 local function createOrUpdateLocalSpawn(pos)
-    if not pos then return end
-    if previousRespawnLocation == nil then
-        previousRespawnLocation = player.RespawnLocation
-    end
-    if not spawnPart or not spawnPart.Parent then
-        spawnPart = Instance.new("SpawnLocation")
-        spawnPart.Name = ("_LocalSpawn_%d"):format(player.UserId)
-        spawnPart.Size = Vector3.new(2, 1, 2)
-        spawnPart.Anchored = true
-        spawnPart.CanCollide = false
-        spawnPart.Transparency = 1
-        spawnPart.Locked = true
-        spawnPart.Neutral = true
-        spawnPart.Parent = workspace
-    end
-    spawnPart.CFrame = CFrame.new(pos) + Vector3.new(0, 1.5, 0)
-    pcall(function()
-        player.RespawnLocation = spawnPart
-    end)
+	if not pos then return end
+	if previousRespawnLocation == nil then
+		previousRespawnLocation = player.RespawnLocation
+	end
+	if not spawnPart or not spawnPart.Parent then
+		spawnPart = Instance.new("SpawnLocation")
+		spawnPart.Name = ("_LocalSpawn_%d"):format(player.UserId)
+		spawnPart.Size = Vector3.new(2, 1, 2)
+		spawnPart.Anchored = true
+		spawnPart.CanCollide = false
+		spawnPart.Transparency = 1
+		spawnPart.Locked = true
+		spawnPart.Neutral = true
+		spawnPart.Parent = workspace
+	end
+	spawnPart.CFrame = CFrame.new(pos) + Vector3.new(0, 1.5, 0)
+	pcall(function()
+		player.RespawnLocation = spawnPart
+	end)
 end
 
 local function removeLocalSpawnAndRestore()
-    pcall(function()
-        player.RespawnLocation = previousRespawnLocation
-    end)
-    previousRespawnLocation = nil
-    if spawnPart and spawnPart.Parent then
-        spawnPart:Destroy()
-        spawnPart = nil
-    end
+	pcall(function()
+		player.RespawnLocation = previousRespawnLocation
+	end)
+	previousRespawnLocation = nil
+	if spawnPart and spawnPart.Parent then
+		spawnPart:Destroy()
+		spawnPart = nil
+	end
 end
 
 -- Animations
 local function playFrozenIdle()
-    if idleAnimTrack then
-        idleAnimTrack:Stop()
-        idleAnimTrack = nil
-    end
-    if humanoid and humanoid.Parent then
-        local anim = Instance.new("Animation")
-        anim.AnimationId = idleAnimId
-        idleAnimTrack = humanoid:LoadAnimation(anim)
-        idleAnimTrack.Looped = true
-        idleAnimTrack:Play()
-        idleAnimTrack:AdjustSpeed(0)
-    end
+	if idleAnimTrack then
+		idleAnimTrack:Stop()
+		idleAnimTrack = nil
+	end
+	if humanoid and humanoid.Parent then
+		local anim = Instance.new("Animation")
+		anim.AnimationId = idleAnimId
+		idleAnimTrack = humanoid:LoadAnimation(anim)
+		idleAnimTrack.Looped = true
+		idleAnimTrack:Play()
+		idleAnimTrack:AdjustSpeed(0)
+	end
 end
 
 local function stopFrozenIdle()
-    if idleAnimTrack then
-        idleAnimTrack:Stop()
-        idleAnimTrack = nil
-    end
+	if idleAnimTrack then
+		idleAnimTrack:Stop()
+		idleAnimTrack = nil
+	end
 end
 
 -- Movement state
 local moving = false
 UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.W
-    or input.KeyCode == Enum.KeyCode.A
-    or input.KeyCode == Enum.KeyCode.S
-    or input.KeyCode == Enum.KeyCode.D then
-        moving = true
-    end
+	if gp then return end
+	if input.KeyCode == Enum.KeyCode.W
+		or input.KeyCode == Enum.KeyCode.A
+		or input.KeyCode == Enum.KeyCode.S
+		or input.KeyCode == Enum.KeyCode.D then
+		moving = true
+	end
 end)
 
 UserInputService.InputEnded:Connect(function(input, gp)
-    if input.KeyCode == Enum.KeyCode.W
-    or input.KeyCode == Enum.KeyCode.A
-    or input.KeyCode == Enum.KeyCode.S
-    or input.KeyCode == Enum.KeyCode.D then
-        local keysDown = UserInputService:IsKeyDown(Enum.KeyCode.W)
-            or UserInputService:IsKeyDown(Enum.KeyCode.A)
-            or UserInputService:IsKeyDown(Enum.KeyCode.S)
-            or UserInputService:IsKeyDown(Enum.KeyCode.D)
-        moving = keysDown
-    end
+	if input.KeyCode == Enum.KeyCode.W
+		or input.KeyCode == Enum.KeyCode.A
+		or input.KeyCode == Enum.KeyCode.S
+		or input.KeyCode == Enum.KeyCode.D then
+		local keysDown = UserInputService:IsKeyDown(Enum.KeyCode.W)
+			or UserInputService:IsKeyDown(Enum.KeyCode.A)
+			or UserInputService:IsKeyDown(Enum.KeyCode.S)
+			or UserInputService:IsKeyDown(Enum.KeyCode.D)
+		moving = keysDown
+	end
 end)
 
 RunService.RenderStepped:Connect(function()
-    local moveVec = humanoid and humanoid.MoveDirection or Vector3.new()
-    if moveVec.Magnitude > 0 then
-        moving = true
-    elseif not (
-        UserInputService:IsKeyDown(Enum.KeyCode.W)
-        or UserInputService:IsKeyDown(Enum.KeyCode.A)
-        or UserInputService:IsKeyDown(Enum.KeyCode.S)
-        or UserInputService:IsKeyDown(Enum.KeyCode.D)
-    ) then
-        moving = false
-    end
+	local moveVec = humanoid and humanoid.MoveDirection or Vector3.new()
+	if moveVec.Magnitude > 0 then
+		moving = true
+	elseif not (
+		UserInputService:IsKeyDown(Enum.KeyCode.W)
+		or UserInputService:IsKeyDown(Enum.KeyCode.A)
+		or UserInputService:IsKeyDown(Enum.KeyCode.S)
+		or UserInputService:IsKeyDown(Enum.KeyCode.D)
+	) then
+		moving = false
+	end
 end)
 
 -- Velocity reset loop
 task.spawn(function()
-    while true do
-        if floating and hrp then
-            hrp.Velocity = Vector3.new(0, 0, 0)
-        end
-        task.wait()
-    end
+	while true do
+		if floating and hrp then
+			hrp.Velocity = Vector3.new(0, 0, 0)
+		end
+		task.wait()
+	end
 end)
 
 -- Float logic
 RunService.RenderStepped:Connect(function(dt)
-    floatSpeed = tonumber(speedBox.Text) or floatSpeed
-    tpwalkSpeed = tonumber(tpSpeedBox.Text) or tpwalkSpeed
+	floatSpeed = tonumber(speedBox.Text) or floatSpeed
+	tpwalkSpeed = tonumber(tpSpeedBox.Text) or tpwalkSpeed
 
-    if floating and hrp and humanoid then
-        workspace.Gravity = 0
+	if floating and hrp and humanoid then
+		workspace.Gravity = 0
 
-        if targetY == 0 then
-            targetY = hrp.Position.Y
-        end
+		if targetY == 0 then
+			targetY = hrp.Position.Y
+		end
 
-        if upHeld then
-            targetY = targetY + floatSpeed * dt
-        elseif downHeld then
-            targetY = targetY - floatSpeed * dt
-        end
+		if upHeld then
+			targetY = targetY + floatSpeed * dt
+		elseif downHeld then
+			targetY = targetY - floatSpeed * dt
+		end
 
-        local moveDir = humanoid.MoveDirection
-        if moveDir.Magnitude > 0 then
-            moveDir = moveDir.Unit
-        else
-            moveDir = Vector3.new()
-        end
+		local moveDir = humanoid.MoveDirection
+		if moveDir.Magnitude > 0 then
+			moveDir = moveDir.Unit
+		else
+			moveDir = Vector3.new()
+		end
 
-        local desiredVel = moveDir * moveSpeed
-        local currentVelXZ = Vector3.new(currentVel.X, 0, currentVel.Z)
-        local desiredVelXZ = Vector3.new(desiredVel.X, 0, desiredVel.Z)
-        local t = math.clamp(airAccel * dt, 0, 1)
-        currentVelXZ = currentVelXZ:Lerp(desiredVelXZ, t)
-        currentVel = Vector3.new(currentVelXZ.X, 0, currentVelXZ.Z)
+		local desiredVel = moveDir * moveSpeed
+		local currentVelXZ = Vector3.new(currentVel.X, 0, currentVel.Z)
+		local desiredVelXZ = Vector3.new(desiredVel.X, 0, desiredVel.Z)
+		local t = math.clamp(airAccel * dt, 0, 1)
+		currentVelXZ = currentVelXZ:Lerp(desiredVelXZ, t)
+		currentVel = Vector3.new(currentVelXZ.X, 0, currentVelXZ.Z)
 
-        hrp.Velocity = Vector3.new(currentVel.X, 0, currentVel.Z)
+		hrp.Velocity = Vector3.new(currentVel.X, 0, currentVel.Z)
 
-        local cam = workspace.CurrentCamera
-        local camCF = cam.CFrame
-        local camLookVector = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
-        if camLookVector.Magnitude > 0 then
-            camLookVector = camLookVector.Unit
-        else
-            camLookVector = lastLookVector
-        end
-        lastLookVector = camLookVector
+		local cam = workspace.CurrentCamera
+		local camCF = cam.CFrame
+		local camLookVector = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+		if camLookVector.Magnitude > 0 then
+			camLookVector = camLookVector.Unit
+		else
+			camLookVector = lastLookVector
+		end
+		lastLookVector = camLookVector
 
-        local newLookVector = lastLookVector
-        if moving and moveDir.Magnitude > 0 then
-            local currentPos = hrp.Position
-            hrp.CFrame = CFrame.new(currentPos + moveDir * tpwalkSpeed, currentPos + newLookVector)
-        else
-            local pos = hrp.Position
-            hrp.CFrame = CFrame.new(pos, pos + newLookVector)
-        end
+		local newLookVector = lastLookVector
 
-        local pos = hrp.Position
-        local newPos = Vector3.new(pos.X, targetY, pos.Z)
-        hrp.CFrame = CFrame.new(newPos, newPos + newLookVector)
+		local step = Vector3.new()
+		if moveDir.Magnitude > 0 then
+			step = moveDir * tpwalkSpeed
+		end
 
-        -- Save original CanCollide states once
-        for _, part in pairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                if originalCollisions[part] == nil then
-                    originalCollisions[part] = part.CanCollide
-                end
-                part.CanCollide = false
-            end
-        end
-    else
-        workspace.Gravity = originalGravity
-        targetY = 0
+		local pos = hrp.Position
+		local newPos
 
-        -- Restore original CanCollide states
-        for part, state in pairs(originalCollisions) do
-            if part and part.Parent then
-                part.CanCollide = state
-            end
-        end
-        originalCollisions = {}
+		if unbudgable then
+			if targetX == nil or targetZ == nil then
+				targetX = pos.X
+				targetZ = pos.Z
+			end
 
-        if humanoid and humanoid:GetState() == Enum.HumanoidStateType.Physics then
-            humanoid:ChangeState(Enum.HumanoidStateType.Running)
-        end
-    end
+			targetX = targetX + step.X
+			targetZ = targetZ + step.Z
+			newPos = Vector3.new(targetX, targetY, targetZ)
+		else
+			newPos = Vector3.new(pos.X + step.X, targetY, pos.Z + step.Z)
+		end
+
+		hrp.CFrame = CFrame.new(newPos, newPos + newLookVector)
+
+		-- Save original CanCollide states once
+		for _, part in pairs(character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				if originalCollisions[part] == nil then
+					originalCollisions[part] = part.CanCollide
+				end
+				part.CanCollide = false
+			end
+		end
+	else
+		workspace.Gravity = originalGravity
+		targetY = 0
+
+		-- Restore original CanCollide states
+		for part, state in pairs(originalCollisions) do
+			if part and part.Parent then
+				part.CanCollide = state
+			end
+		end
+		originalCollisions = {}
+
+		if humanoid and humanoid:GetState() == Enum.HumanoidStateType.Physics then
+			humanoid:ChangeState(Enum.HumanoidStateType.Running)
+		end
+	end
 end)
 
 -- Character setup
 local function setupCharacter(char)
-    if humanoidDiedConn then
-        humanoidDiedConn:Disconnect()
-        humanoidDiedConn = nil
-    end
+	if humanoidDiedConn then
+		humanoidDiedConn:Disconnect()
+		humanoidDiedConn = nil
+	end
 
-    character = char
-    humanoid = char:WaitForChild("Humanoid")
-    hrp = char:WaitForChild("HumanoidRootPart")
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
+	hrp = char:WaitForChild("HumanoidRootPart")
 
-    if spawnToggle and lastPosition then
-        task.spawn(function()
-            task.wait(0.05)
-            if char and char.Parent and char:FindFirstChild("HumanoidRootPart") then
-                char.HumanoidRootPart.CFrame = CFrame.new(lastPosition) + Vector3.new(0, 1.5, 0)
-            end
-        end)
-    end
+	if floating and hrp then
+		targetX = hrp.Position.X
+		targetZ = hrp.Position.Z
+	end
 
-    humanoidDiedConn = humanoid.Died:Connect(function()
-        if hrp then
-            lastPosition = hrp.Position
-        end
-        if spawnToggle and lastPosition then
-            createOrUpdateLocalSpawn(lastPosition)
-        end
-    end)
+	if spawnToggle and lastPosition then
+		task.spawn(function()
+			task.wait(0.05)
+			if char and char.Parent and char:FindFirstChild("HumanoidRootPart") then
+				char.HumanoidRootPart.CFrame = CFrame.new(lastPosition) + Vector3.new(0, 1.5, 0)
+			end
+		end)
+	end
+
+	humanoidDiedConn = humanoid.Died:Connect(function()
+		if hrp then
+			lastPosition = hrp.Position
+		end
+		if spawnToggle and lastPosition then
+			createOrUpdateLocalSpawn(lastPosition)
+		end
+	end)
 end
 
 player.CharacterAdded:Connect(setupCharacter)
@@ -340,54 +365,76 @@ if character then setupCharacter(character) end
 
 -- Button events
 btnUp.MouseButton1Down:Connect(function()
-    floating = true
-    upHeld = true
-    if hrp then targetY = hrp.Position.Y end
-    if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Physics) end
-    playFrozenIdle()
+	floating = true
+	upHeld = true
+	if hrp then
+		targetY = hrp.Position.Y
+		targetX = hrp.Position.X
+		targetZ = hrp.Position.Z
+	end
+	if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Physics) end
+	playFrozenIdle()
 end)
+
 btnUp.MouseButton1Up:Connect(function()
-    upHeld = false
+	upHeld = false
 end)
 
 btnDown.MouseButton1Down:Connect(function()
-    floating = true
-    downHeld = true
-    if hrp then targetY = hrp.Position.Y end
-    if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Physics) end
-    playFrozenIdle()
+	floating = true
+	downHeld = true
+	if hrp then
+		targetY = hrp.Position.Y
+		targetX = hrp.Position.X
+		targetZ = hrp.Position.Z
+	end
+	if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Physics) end
+	playFrozenIdle()
 end)
+
 btnDown.MouseButton1Up:Connect(function()
-    downHeld = false
+	downHeld = false
 end)
 
 btnDisable.MouseButton1Click:Connect(function()
-    floating = false
-    stopFrozenIdle()
+	floating = false
+	stopFrozenIdle()
+	currentVel = Vector3.new(0, 0, 0)
+	targetX, targetZ = nil, nil
 end)
 
 btnSpawnToggle.MouseButton1Click:Connect(function()
-    spawnToggle = not spawnToggle
-    if spawnToggle then
-        btnSpawnToggle.Text = "Spawn: ON"
-        local desiredPos = lastPosition or (hrp and hrp.Position) or nil
-        if desiredPos then
-            createOrUpdateLocalSpawn(desiredPos)
-        else
-            task.spawn(function()
-                task.wait(0.05)
-                if hrp then
-                    createOrUpdateLocalSpawn(hrp.Position)
-                end
-            end)
-        end
-    else
-        btnSpawnToggle.Text = "Spawn: OFF"
-        removeLocalSpawnAndRestore()
-    end
+	spawnToggle = not spawnToggle
+	if spawnToggle then
+		btnSpawnToggle.Text = "Spawn: ON"
+		local desiredPos = lastPosition or (hrp and hrp.Position) or nil
+		if desiredPos then
+			createOrUpdateLocalSpawn(desiredPos)
+		else
+			task.spawn(function()
+				task.wait(0.05)
+				if hrp then
+					createOrUpdateLocalSpawn(hrp.Position)
+				end
+			end)
+		end
+	else
+		btnSpawnToggle.Text = "Spawn: OFF"
+		removeLocalSpawnAndRestore()
+	end
+end)
+
+btnUnbudgable.MouseButton1Click:Connect(function()
+	unbudgable = not unbudgable
+	btnUnbudgable.Text = unbudgable and "Unbudgable: ON" or "Unbudgable: OFF"
+
+	if hrp then
+		targetX = hrp.Position.X
+		targetZ = hrp.Position.Z
+	end
 end)
 
 btnHideToggle.MouseButton1Click:Connect(function()
-    setUIVisible(not uiVisible)
-    btnHideToggle.Visible = true
+	setUIVisible(not uiVisible)
+	btnHideToggle.Visible = true
 end)
