@@ -1,100 +1,323 @@
+-- Anti Fling Toggle (LocalScript)
+-- Put in StarterPlayerScripts
+--
+-- Toggle:
+-- ON  = enables anti fling + no player collision
+-- OFF = removes anti + restores collisions
+
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
-local LocalPlayer = Players.LocalPlayer
+local player = Players.LocalPlayer
 
-local MAX_VELOCITY = 1000
-local CHECK_DISTANCE = 150
+local enabled = false
 
-local noCollisionFolder = Instance.new("Folder")
-noCollisionFolder.Name = "ClientNoCollisions"
-noCollisionFolder.Parent = workspace
+local VELOCITY_LIMIT = 300
+local ANGULAR_LIMIT = 120
 
-local frozenParts = {}
+local processed = {}
+local createdConstraints = {}
 
-local function isCharacter(part)
-	return part:FindFirstAncestorOfClass("Model")
-		and Players:GetPlayerFromCharacter(part:FindFirstAncestorOfClass("Model"))
+
+-- GUI (small top-middle button)
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "AntiFlingGUI"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0,100,0,30)
+button.Position = UDim2.new(0.5,-50,0,10)
+button.BackgroundColor3 = Color3.fromRGB(45,45,45)
+button.TextColor3 = Color3.new(1,1,1)
+button.TextScaled = true
+button.Text = "Anti: OFF"
+button.Parent = gui
+
+
+
+-- Remove created collision blockers
+
+local function clearCollisions()
+
+	for _,c in ipairs(createdConstraints) do
+
+		if c and c.Parent then
+			c:Destroy()
+		end
+
+	end
+
+	table.clear(createdConstraints)
+
 end
 
-local function disableCollision(part1, part2)
-	local constraint = Instance.new("NoCollisionConstraint")
-	constraint.Part0 = part1
-	constraint.Part1 = part2
-	constraint.Parent = noCollisionFolder
+
+
+-- Remove physics controllers
+
+local function removeForces(part)
+
+	for _,obj in ipairs(part:GetChildren()) do
+
+		if obj:IsA("AlignPosition")
+		or obj:IsA("AlignOrientation")
+		or obj:IsA("Torque")
+		or obj:IsA("AngularVelocity")
+		or obj:IsA("LinearVelocity")
+		or obj:IsA("VectorForce") then
+
+			obj:Destroy()
+
+		end
+
+	end
+
 end
 
-local function protectCharacter(character)
-	for _, part in ipairs(character:GetDescendants()) do
-		if part:IsA("BasePart") then
-			for _, otherPlayer in ipairs(Players:GetPlayers()) do
-				if otherPlayer ~= LocalPlayer and otherPlayer.Character then
-					for _, otherPart in ipairs(otherPlayer.Character:GetDescendants()) do
-						if otherPart:IsA("BasePart") then
-							disableCollision(part, otherPart)
+
+
+-- Disable collision between two parts
+
+local function noCollision(a,b)
+
+	local c = Instance.new("NoCollisionConstraint")
+
+	c.Part0 = a
+	c.Part1 = b
+	c.Parent = a
+
+	table.insert(createdConstraints,c)
+
+end
+
+
+
+-- Player collision protection
+
+local function disablePlayerCollision()
+
+	local myChar = player.Character
+	if not myChar then return end
+
+
+	for _,plr in ipairs(Players:GetPlayers()) do
+
+		if plr ~= player and plr.Character then
+
+			for _,a in ipairs(myChar:GetDescendants()) do
+
+				if a:IsA("BasePart") then
+
+					for _,b in ipairs(plr.Character:GetDescendants()) do
+
+						if b:IsA("BasePart") then
+
+							noCollision(a,b)
+
 						end
+
 					end
+
 				end
+
 			end
+
 		end
+
 	end
+
 end
 
-local function antiFlingScan()
-	local char = LocalPlayer.Character
-	local root = char and char:FindFirstChild("HumanoidRootPart")
 
-	if not root then return end
 
-	for _, obj in ipairs(workspace:GetPartBoundsInRadius(root.Position, CHECK_DISTANCE)) do
-		if obj:IsA("BasePart") then
+-- Restore normal collisions
 
-			-- Ignore your own character
-			if not obj:IsDescendantOf(char) then
-				local velocity = obj.AssemblyLinearVelocity.Magnitude
+local function restoreCollision()
 
-				-- Ignore normal fast walks/running players
-				local model = obj:FindFirstAncestorOfClass("Model")
-				local hum = model and model:FindFirstChildOfClass("Humanoid")
+	clearCollisions()
 
-				if velocity > MAX_VELOCITY and not hum then
-					if not frozenParts[obj] then
-						frozenParts[obj] = true
-
-						local oldAnchored = obj.Anchored
-						obj.Anchored = true
-
-						task.delay(0.2, function()
-							if obj then
-								obj.Anchored = oldAnchored
-								frozenParts[obj] = nil
-							end
-						end)
-					end
-				end
-			end
-		end
-	end
 end
 
-local function setup()
-	local char = LocalPlayer.Character
-	if not char then return end
+
+
+-- Protect parts
+
+local function protectPart(part)
+
+	if not enabled then return end
+	if not part:IsA("BasePart") then return end
+	if part.Anchored then return end
+	if processed[part] then return end
+
+
+	processed[part] = true
+
+
+	removeForces(part)
+
+
+	part.ChildAdded:Connect(function(obj)
+
+		if not enabled then return end
+
+		if obj:IsA("AlignPosition")
+		or obj:IsA("AlignOrientation")
+		or obj:IsA("Torque")
+		or obj:IsA("AngularVelocity")
+		or obj:IsA("LinearVelocity")
+		or obj:IsA("VectorForce") then
+
+			obj:Destroy()
+
+		end
+
+	end)
+
+end
+
+
+
+local function enableAnti()
+
+	enabled = true
+
+	button.Text = "Anti: ON"
+
+	table.clear(processed)
+
+
+	for _,obj in ipairs(Workspace:GetDescendants()) do
+
+		protectPart(obj)
+
+	end
+
+
+	disablePlayerCollision()
+
+end
+
+
+
+local function disableAnti()
+
+	enabled = false
+
+	button.Text = "Anti: OFF"
+
+
+	table.clear(processed)
+
+
+	restoreCollision()
+
+end
+
+
+
+button.MouseButton1Click:Connect(function()
+
+	if enabled then
+
+		disableAnti()
+
+	else
+
+		enableAnti()
+
+	end
+
+end)
+
+
+
+-- Detect new parts
+
+Workspace.DescendantAdded:Connect(function(obj)
+
+	if enabled then
+
+		task.defer(function()
+
+			protectPart(obj)
+
+		end)
+
+	end
+
+end)
+
+
+
+-- Velocity protection
+
+task.spawn(function()
+
+	while true do
+
+		if enabled then
+
+			local char = player.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+
+
+			if root then
+
+				for _,part in ipairs(
+					Workspace:GetPartBoundsInRadius(root.Position,150)
+				) do
+
+					if part:IsA("BasePart")
+					and not part.Anchored
+					and not part:IsDescendantOf(char) then
+
+
+						protectPart(part)
+
+
+						if part.AssemblyLinearVelocity.Magnitude > VELOCITY_LIMIT then
+
+							part.AssemblyLinearVelocity = Vector3.zero
+
+						end
+
+
+						if part.AssemblyAngularVelocity.Magnitude > ANGULAR_LIMIT then
+
+							part.AssemblyAngularVelocity = Vector3.zero
+
+						end
+
+					end
+
+				end
+
+			end
+
+		end
+
+
+		task.wait(0.25)
+
+	end
+
+end)
+
+
+
+-- Respawn support
+
+player.CharacterAdded:Connect(function()
 
 	task.wait(1)
-	protectCharacter(char)
-end
 
-LocalPlayer.CharacterAdded:Connect(setup)
+	if enabled then
 
-if LocalPlayer.Character then
-	setup()
-end
+		disablePlayerCollision()
 
--- Low-frequency scan to save FPS
-task.spawn(function()
-	while true do
-		antiFlingScan()
-		task.wait(0.25)
 	end
+
 end)
