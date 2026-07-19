@@ -1,0 +1,100 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+local MAX_VELOCITY = 1000
+local CHECK_DISTANCE = 150
+
+local noCollisionFolder = Instance.new("Folder")
+noCollisionFolder.Name = "ClientNoCollisions"
+noCollisionFolder.Parent = workspace
+
+local frozenParts = {}
+
+local function isCharacter(part)
+	return part:FindFirstAncestorOfClass("Model")
+		and Players:GetPlayerFromCharacter(part:FindFirstAncestorOfClass("Model"))
+end
+
+local function disableCollision(part1, part2)
+	local constraint = Instance.new("NoCollisionConstraint")
+	constraint.Part0 = part1
+	constraint.Part1 = part2
+	constraint.Parent = noCollisionFolder
+end
+
+local function protectCharacter(character)
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") then
+			for _, otherPlayer in ipairs(Players:GetPlayers()) do
+				if otherPlayer ~= LocalPlayer and otherPlayer.Character then
+					for _, otherPart in ipairs(otherPlayer.Character:GetDescendants()) do
+						if otherPart:IsA("BasePart") then
+							disableCollision(part, otherPart)
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+local function antiFlingScan()
+	local char = LocalPlayer.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+
+	if not root then return end
+
+	for _, obj in ipairs(workspace:GetPartBoundsInRadius(root.Position, CHECK_DISTANCE)) do
+		if obj:IsA("BasePart") then
+
+			-- Ignore your own character
+			if not obj:IsDescendantOf(char) then
+				local velocity = obj.AssemblyLinearVelocity.Magnitude
+
+				-- Ignore normal fast walks/running players
+				local model = obj:FindFirstAncestorOfClass("Model")
+				local hum = model and model:FindFirstChildOfClass("Humanoid")
+
+				if velocity > MAX_VELOCITY and not hum then
+					if not frozenParts[obj] then
+						frozenParts[obj] = true
+
+						local oldAnchored = obj.Anchored
+						obj.Anchored = true
+
+						task.delay(0.2, function()
+							if obj then
+								obj.Anchored = oldAnchored
+								frozenParts[obj] = nil
+							end
+						end)
+					end
+				end
+			end
+		end
+	end
+end
+
+local function setup()
+	local char = LocalPlayer.Character
+	if not char then return end
+
+	task.wait(1)
+	protectCharacter(char)
+end
+
+LocalPlayer.CharacterAdded:Connect(setup)
+
+if LocalPlayer.Character then
+	setup()
+end
+
+-- Low-frequency scan to save FPS
+task.spawn(function()
+	while true do
+		antiFlingScan()
+		task.wait(0.25)
+	end
+end)
