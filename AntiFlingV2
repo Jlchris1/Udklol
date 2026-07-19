@@ -1,401 +1,644 @@
--- Anti Fling Toggle + Collision Protection
--- LocalScript - StarterPlayerScripts
+-- Anti Players + Anti Parts + Unbudgable Walk/Jump
+-- LocalScript -> StarterPlayerScripts
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
-local LocalPlayer = Players.LocalPlayer
+local LP = Players.LocalPlayer
 
+local antiPlayers = false
+local antiParts = false
+local unbudgable = false
 
-local Enabled = false
-
+local FORCE_SCAN_RADIUS = 150
 local VELOCITY_LIMIT = 300
 local ANGULAR_LIMIT = 120
 
-local ProcessedParts = {}
-local CollisionConstraints = {}
+local UNBUDGE_STABLE_DELAY = 0.12
+local UNBUDGE_DRIFT_LIMIT = 0.6
+local UNBUDGE_STOP_LIMIT = 2
+local UNBUDGE_MOVE_CLAMP = 8
 
-local CharacterConnections = {}
+local UNBUDGE_SETTLE_DELAY = 0.16
+local UNBUDGE_JUMP_GRACE = 0.35
+local UNBUDGE_MAX_UPWARD_VELOCITY = 120
 
+local UNBUDGE_EMERGENCY_FRAME_DRIFT = 2.25
+local UNBUDGE_EMERGENCY_TOTAL_DRIFT = 1.2
 
+local character
+local humanoid
+local hrp
+local humanoidStateConn
 
--- GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "AntiSplitGui"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = LP:WaitForChild("PlayerGui")
 
-local Gui = Instance.new("ScreenGui")
-Gui.Name = "AntiFlingToggle"
-Gui.ResetOnSpawn = false
-Gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+local function makeButton(text, xOffset, yOffset, width)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, width or 88, 0, 24)
+	btn.Position = UDim2.new(0.5, xOffset, 0, yOffset)
+	btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.Font = Enum.Font.SourceSansBold
+	btn.TextSize = 15
+	btn.Text = text
+	btn.Parent = gui
+	return btn
+end
 
+local btnPlayers = makeButton("Players: OFF", -138, 8, 90)
+local btnParts = makeButton("Parts: OFF", -44, 8, 82)
+local btnUnbudge = makeButton("Unbudge: OFF", 44, 8, 92)
 
-local Button = Instance.new("TextButton")
-Button.Size = UDim2.new(0,100,0,28)
-Button.Position = UDim2.new(0.5,-50,0,10)
-Button.BackgroundColor3 = Color3.fromRGB(45,45,45)
-Button.TextColor3 = Color3.new(1,1,1)
-Button.TextScaled = true
-Button.Text = "Anti OFF"
-Button.Parent = Gui
+local constraintFolder = Instance.new("Folder")
+constraintFolder.Name = "ClientAntiConstraints"
+constraintFolder.Parent = Workspace
 
+local playerConstraints = {}
+local partConstraints = {}
+local partTracked = {}
+local partCollided = {}
+local partChildConn = {}
+local playerHooks = {}
 
+local playerRefreshQueued = false
 
--- Remove collision constraints
+local lastSafeCFrame = nil
+local stopCFrame = nil
+local lastStableTime = 0
+local stationarySince = 0
+local lastInputTime = 0
+local jumpGraceUntil = 0
+local lastFramePos = nil
+local wasMoving = false
 
-local function clearCollision()
+local function isForceObject(obj)
+	return obj:IsA("AlignPosition")
+		or obj:IsA("AlignOrientation")
+		or obj:IsA("LinearVelocity")
+		or obj:IsA("AngularVelocity")
+		or obj:IsA("VectorForce")
+		or obj:IsA("Torque")
+		or obj:IsA("RopeConstraint")
+		or obj:IsA("RodConstraint")
+		or obj:IsA("SpringConstraint")
+		or obj:IsA("BallSocketConstraint")
+		or obj:IsA("HingeConstraint")
+		or obj:IsA("PrismaticConstraint")
+		or obj:IsA("CylindricalConstraint")
+		or obj:IsA("PlaneConstraint")
+end
 
-	for _,c in ipairs(CollisionConstraints) do
+local function getOwningPlayer(part)
+	local model = part and part:FindFirstAncestorOfClass("Model")
+	return model and Players:GetPlayerFromCharacter(model) or nil
+end
+
+local function getParts(model)
+	local parts = {}
+	if not model then
+		return parts
+	end
+
+	for _, obj in ipairs(model:GetDescendants()) do
+		if obj:IsA("BasePart") then
+			parts[#parts + 1] = obj
+		end
+	end
+
+	return parts
+end
+
+local function clearConstraints(list)
+	for _, c in ipairs(list) do
 		if c and c.Parent then
 			c:Destroy()
 		end
 	end
-
-	table.clear(CollisionConstraints)
-
+	table.clear(list)
 end
 
-
-
--- Create no collision
-
-local function createNoCollision(a,b)
-
-	if not a or not b then return end
+local function addNoCollision(a, b, list)
+	if not a or not b or not a.Parent or not b.Parent or a == b then
+		return
+	end
 
 	local c = Instance.new("NoCollisionConstraint")
-
 	c.Part0 = a
 	c.Part1 = b
-	c.Parent = a
-
-	table.insert(CollisionConstraints,c)
-
+	c.Parent = constraintFolder
+	list[#list + 1] = c
 end
 
+local function refreshPlayerCollisions()
+	clearConstraints(playerConstraints)
 
-
--- Apply collision disabling to a character
-
-local function disableCharacterCollision(character)
-
-	if not Enabled then return end
-
-	local myChar = LocalPlayer.Character
-	if not myChar then return end
-
-	local myParts = {}
-
-	for _,p in ipairs(myChar:GetDescendants()) do
-		if p:IsA("BasePart") then
-			table.insert(myParts,p)
-		end
+	if not antiPlayers then
+		return
 	end
 
+	local myChar = LP.Character
+	if not myChar then
+		return
+	end
 
-	for _,other in ipairs(character:GetDescendants()) do
+	local myParts = getParts(myChar)
+	if #myParts == 0 then
+		return
+	end
 
-		if other:IsA("BasePart") then
-
-			for _,mine in ipairs(myParts) do
-
-				createNoCollision(mine,other)
-
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LP and plr.Character then
+			local otherParts = getParts(plr.Character)
+			for _, a in ipairs(myParts) do
+				for _, b in ipairs(otherParts) do
+					addNoCollision(a, b, playerConstraints)
+				end
 			end
-
 		end
+	end
+end
 
+local function queuePlayerRefresh()
+	if playerRefreshQueued then
+		return
 	end
 
+	playerRefreshQueued = true
+	task.delay(0.12, function()
+		playerRefreshQueued = false
+		refreshPlayerCollisions()
+	end)
+end
 
-	-- Catch late loaded accessories/layered clothing
+local function monitorWorldPart(part)
+	if not part or not part.Parent or not part:IsA("BasePart") or part.Anchored then
+		return
+	end
 
-	character.DescendantAdded:Connect(function(obj)
+	if partTracked[part] then
+		return
+	end
 
-		if not Enabled then return end
+	partTracked[part] = true
 
+	partChildConn[part] = part.ChildAdded:Connect(function(obj)
+		if antiParts and isForceObject(obj) then
+			obj:Destroy()
+		end
+	end)
+
+	part.AncestryChanged:Connect(function(_, parent)
+		if not parent then
+			partTracked[part] = nil
+			partCollided[part] = nil
+
+			local conn = partChildConn[part]
+			if conn then
+				conn:Disconnect()
+				partChildConn[part] = nil
+			end
+		end
+	end)
+end
+
+local function protectWorldPart(part)
+	if not antiParts then
+		return
+	end
+
+	if not part or not part.Parent or not part:IsA("BasePart") or part.Anchored then
+		return
+	end
+
+	if getOwningPlayer(part) then
+		return
+	end
+
+	monitorWorldPart(part)
+
+	if partCollided[part] then
+		return
+	end
+
+	partCollided[part] = true
+
+	local myChar = LP.Character
+	if not myChar then
+		return
+	end
+
+	local myParts = getParts(myChar)
+	for _, mine in ipairs(myParts) do
+		addNoCollision(mine, part, partConstraints)
+	end
+
+	for _, obj in ipairs(part:GetChildren()) do
+		if isForceObject(obj) then
+			obj:Destroy()
+		end
+	end
+end
+
+local function refreshWorldPartCollisions()
+	clearConstraints(partConstraints)
+	table.clear(partCollided)
+
+	if not antiParts or not hrp or not hrp.Parent then
+		return
+	end
+
+	for _, obj in ipairs(Workspace:GetPartBoundsInRadius(hrp.Position, FORCE_SCAN_RADIUS)) do
+		protectWorldPart(obj)
+	end
+end
+
+local function zeroHorizontalVelocity()
+	if not hrp then
+		return
+	end
+
+	local v = hrp.AssemblyLinearVelocity
+	hrp.AssemblyLinearVelocity = Vector3.new(0, v.Y, 0)
+end
+
+local function snapToStopPoint()
+	if not hrp or not stopCFrame then
+		return
+	end
+
+	local currentRot = hrp.CFrame - hrp.CFrame.Position
+	local stopPos = stopCFrame.Position
+
+	hrp.CFrame = CFrame.new(stopPos.X, stopPos.Y, stopPos.Z) * currentRot
+	zeroHorizontalVelocity()
+	lastFramePos = hrp.Position
+end
+
+local function setLocalCharacter(char)
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
+	hrp = char:WaitForChild("HumanoidRootPart")
+
+	if humanoidStateConn then
+		humanoidStateConn:Disconnect()
+		humanoidStateConn = nil
+	end
+
+	lastSafeCFrame = hrp.CFrame
+	stopCFrame = hrp.CFrame
+	lastStableTime = os.clock()
+	stationarySince = 0
+	lastInputTime = 0
+	jumpGraceUntil = 0
+	lastFramePos = hrp.Position
+	wasMoving = false
+
+	clearConstraints(playerConstraints)
+	clearConstraints(partConstraints)
+	table.clear(partCollided)
+
+	humanoidStateConn = humanoid.StateChanged:Connect(function(_, newState)
+		local now = os.clock()
+
+		if newState == Enum.HumanoidStateType.Jumping then
+			jumpGraceUntil = math.max(jumpGraceUntil, now + UNBUDGE_JUMP_GRACE)
+			stationarySince = 0
+		elseif newState == Enum.HumanoidStateType.Freefall then
+			jumpGraceUntil = math.max(jumpGraceUntil, now + 0.12)
+			stationarySince = 0
+		elseif newState == Enum.HumanoidStateType.Landed
+			or newState == Enum.HumanoidStateType.Running
+			or newState == Enum.HumanoidStateType.RunningNoPhysics then
+			if humanoid and humanoid.FloorMaterial ~= Enum.Material.Air then
+				stationarySince = now
+			end
+		end
+	end)
+
+	if antiPlayers then
+		queuePlayerRefresh()
+	end
+
+	if antiParts then
+		task.defer(refreshWorldPartCollisions)
+	end
+
+	char.DescendantAdded:Connect(function(obj)
 		if obj:IsA("BasePart") then
+			if antiPlayers then
+				queuePlayerRefresh()
+			end
+			if antiParts and not getOwningPlayer(obj) then
+				protectWorldPart(obj)
+			end
+		end
+	end)
+end
 
-			for _,mine in ipairs(myParts) do
-				createNoCollision(mine,obj)
+local function setAntiPlayers(state)
+	antiPlayers = state
+	btnPlayers.Text = state and "Players: ON" or "Players: OFF"
+
+	if antiPlayers then
+		queuePlayerRefresh()
+	else
+		clearConstraints(playerConstraints)
+	end
+end
+
+local function setAntiParts(state)
+	antiParts = state
+	btnParts.Text = state and "Parts: ON" or "Parts: OFF"
+
+	if antiParts then
+		refreshWorldPartCollisions()
+	else
+		clearConstraints(partConstraints)
+		table.clear(partCollided)
+	end
+end
+
+local function setUnbudgable(state)
+	unbudgable = state
+	btnUnbudge.Text = state and "Unbudge: ON" or "Unbudge: OFF"
+
+	if unbudgable and hrp then
+		lastSafeCFrame = hrp.CFrame
+		stopCFrame = hrp.CFrame
+		lastStableTime = os.clock()
+		stationarySince = 0
+		lastInputTime = 0
+		jumpGraceUntil = 0
+		lastFramePos = hrp.Position
+		wasMoving = false
+	end
+end
+
+btnPlayers.MouseButton1Click:Connect(function()
+	setAntiPlayers(not antiPlayers)
+end)
+
+btnParts.MouseButton1Click:Connect(function()
+	setAntiParts(not antiParts)
+end)
+
+btnUnbudge.MouseButton1Click:Connect(function()
+	setUnbudgable(not unbudgable)
+end)
+
+local function hookPlayer(plr)
+	if plr == LP or playerHooks[plr] then
+		return
+	end
+
+	playerHooks[plr] = true
+
+	plr.CharacterAdded:Connect(function(char)
+		task.wait(0.15)
+
+		if antiPlayers then
+			queuePlayerRefresh()
+		end
+
+		char.DescendantAdded:Connect(function(obj)
+			if antiPlayers and obj:IsA("BasePart") then
+				queuePlayerRefresh()
+			end
+		end)
+	end)
+
+	if plr.Character then
+		task.defer(function()
+			if antiPlayers then
+				queuePlayerRefresh()
 			end
 
-		end
-
-	end)
-
-end
-
-
-
--- Setup every player
-
-local function setupPlayer(plr)
-
-	if plr == LocalPlayer then return end
-
-
-	if CharacterConnections[plr] then
-		CharacterConnections[plr]:Disconnect()
-	end
-
-
-	CharacterConnections[plr] = plr.CharacterAdded:Connect(function(char)
-
-		-- Wait for R15 body/accessories to load
-
-		char:WaitForChild("HumanoidRootPart",5)
-
-		task.wait(1)
-
-
-		if Enabled then
-			disableCharacterCollision(char)
-		end
-
-
-	end)
-
-
-	-- Already spawned
-
-	if plr.Character and Enabled then
-
-		task.spawn(function()
-
-			plr.Character:WaitForChild("HumanoidRootPart",5)
-			task.wait(1)
-
-			disableCharacterCollision(plr.Character)
-
+			plr.Character.DescendantAdded:Connect(function(obj)
+				if antiPlayers and obj:IsA("BasePart") then
+					queuePlayerRefresh()
+				end
+			end)
 		end)
-
 	end
-
 end
 
-
-
-for _,p in ipairs(Players:GetPlayers()) do
-	setupPlayer(p)
+for _, plr in ipairs(Players:GetPlayers()) do
+	hookPlayer(plr)
 end
 
-
-Players.PlayerAdded:Connect(function(player)
-
-	setupPlayer(player)
-
+Players.PlayerAdded:Connect(function(plr)
+	hookPlayer(plr)
+	if antiPlayers then
+		queuePlayerRefresh()
+	end
 end)
 
-
-
-Players.PlayerRemoving:Connect(function(player)
-
-	if CharacterConnections[player] then
-		CharacterConnections[player]:Disconnect()
+Players.PlayerRemoving:Connect(function()
+	if antiPlayers then
+		queuePlayerRefresh()
 	end
-
-	CharacterConnections[player] = nil
-
 end)
 
+LP.CharacterAdded:Connect(function(char)
+	setLocalCharacter(char)
+end)
 
-
--- Remove fling objects
-
-local function removeForces(part)
-
-	for _,obj in ipairs(part:GetChildren()) do
-
-		if obj:IsA("AlignPosition")
-		or obj:IsA("AlignOrientation")
-		or obj:IsA("Torque")
-		or obj:IsA("AngularVelocity")
-		or obj:IsA("LinearVelocity")
-		or obj:IsA("VectorForce") then
-
-			obj:Destroy()
-
-		end
-
-	end
-
+if LP.Character then
+	setLocalCharacter(LP.Character)
 end
-
-
-
-local function protectPart(part)
-
-	if not Enabled then return end
-	if not part:IsA("BasePart") then return end
-	if part.Anchored then return end
-	if ProcessedParts[part] then return end
-
-
-	ProcessedParts[part] = true
-
-
-	removeForces(part)
-
-
-	part.ChildAdded:Connect(function(obj)
-
-		if not Enabled then return end
-
-
-		if obj:IsA("AlignPosition")
-		or obj:IsA("AlignOrientation")
-		or obj:IsA("Torque")
-		or obj:IsA("AngularVelocity")
-		or obj:IsA("LinearVelocity")
-		or obj:IsA("VectorForce") then
-
-			obj:Destroy()
-
-		end
-
-	end)
-
-end
-
-
 
 Workspace.DescendantAdded:Connect(function(obj)
-
-	if Enabled then
-
-		task.defer(function()
-			protectPart(obj)
-		end)
-
+	if not antiParts then
+		return
 	end
 
-end)
-
-
-
--- Toggle
-
-local function Enable()
-
-	Enabled = true
-
-	Button.Text = "Anti ON"
-
-	table.clear(ProcessedParts)
-
-
-	for _,obj in ipairs(Workspace:GetDescendants()) do
-		protectPart(obj)
+	if not obj:IsA("BasePart") then
+		return
 	end
 
-
-	for _,p in ipairs(Players:GetPlayers()) do
-
-		if p ~= LocalPlayer and p.Character then
-
-			disableCharacterCollision(p.Character)
-
+	if getOwningPlayer(obj) then
+		if antiPlayers then
+			queuePlayerRefresh()
 		end
-
+		return
 	end
 
-end
-
-
-
-local function Disable()
-
-	Enabled = false
-
-	Button.Text = "Anti OFF"
-
-	table.clear(ProcessedParts)
-
-	clearCollision()
-
-end
-
-
-
-Button.MouseButton1Click:Connect(function()
-
-	if Enabled then
-		Disable()
-	else
-		Enable()
-	end
-
+	task.defer(function()
+		protectWorldPart(obj)
+	end)
 end)
-
-
-
--- Velocity protection
 
 task.spawn(function()
-
 	while true do
+		if antiParts and hrp and hrp.Parent then
+			for _, part in ipairs(Workspace:GetPartBoundsInRadius(hrp.Position, FORCE_SCAN_RADIUS)) do
+				if part:IsA("BasePart") and not part.Anchored and not getOwningPlayer(part) then
+					protectWorldPart(part)
 
-		if Enabled then
-
-			local char = LocalPlayer.Character
-			local root = char and char:FindFirstChild("HumanoidRootPart")
-
-
-			if root then
-
-				for _,part in ipairs(
-					Workspace:GetPartBoundsInRadius(root.Position,150)
-				) do
-
-
-					if part:IsA("BasePart")
-					and not part.Anchored
-					and not part:IsDescendantOf(char) then
-
-
-						protectPart(part)
-
-
-						if part.AssemblyLinearVelocity.Magnitude > VELOCITY_LIMIT then
-							part.AssemblyLinearVelocity = Vector3.zero
-						end
-
-
-						if part.AssemblyAngularVelocity.Magnitude > ANGULAR_LIMIT then
-							part.AssemblyAngularVelocity = Vector3.zero
-						end
-
+					if part.AssemblyLinearVelocity.Magnitude > VELOCITY_LIMIT then
+						part.AssemblyLinearVelocity = Vector3.zero
 					end
 
+					if part.AssemblyAngularVelocity.Magnitude > ANGULAR_LIMIT then
+						part.AssemblyAngularVelocity = Vector3.zero
+					end
 				end
-
 			end
-
 		end
 
-
-		task.wait(0.25)
-
+		task.wait(0.12)
 	end
-
 end)
 
-
-
-LocalPlayer.CharacterAdded:Connect(function()
-
-	task.wait(1)
-
-	if Enabled then
-
-		for _,p in ipairs(Players:GetPlayers()) do
-
-			if p ~= LocalPlayer and p.Character then
-
-				disableCharacterCollision(p.Character)
-
-			end
-
-		end
-
+RunService.Heartbeat:Connect(function()
+	if not unbudgable or not character or not humanoid or not hrp or not hrp.Parent then
+		return
 	end
 
+	local now = os.clock()
+	local moveDir = humanoid.MoveDirection
+	local inputMag = moveDir.Magnitude
+	local vel = hrp.AssemblyLinearVelocity
+	local hv = Vector3.new(vel.X, 0, vel.Z)
+	local yVel = vel.Y
+	local grounded = humanoid.FloorMaterial ~= Enum.Material.Air
+	local currentPos = hrp.Position
+
+	if not lastFramePos then
+		lastFramePos = currentPos
+	end
+
+	local frameTravel = (currentPos - lastFramePos).Magnitude
+
+	local function clampUpwardVelocity()
+		local currentVel = hrp.AssemblyLinearVelocity
+		if now > jumpGraceUntil and currentVel.Y > UNBUDGE_MAX_UPWARD_VELOCITY then
+			hrp.AssemblyLinearVelocity = Vector3.new(currentVel.X, UNBUDGE_MAX_UPWARD_VELOCITY, currentVel.Z)
+		end
+	end
+
+	if inputMag > 0.05 then
+		if not wasMoving then
+			stopCFrame = hrp.CFrame
+			wasMoving = true
+		end
+
+		lastInputTime = now
+		stationarySince = 0
+
+		local intended = moveDir.Unit * humanoid.WalkSpeed
+		local deviation = (hv - intended).Magnitude
+
+		if deviation > 10 or hv.Magnitude > humanoid.WalkSpeed + UNBUDGE_MOVE_CLAMP then
+			hrp.AssemblyLinearVelocity = Vector3.new(intended.X, yVel, intended.Z)
+			vel = hrp.AssemblyLinearVelocity
+			hv = Vector3.new(vel.X, 0, vel.Z)
+			yVel = vel.Y
+		end
+
+		clampUpwardVelocity()
+
+		if grounded and deviation <= 8 and hv.Magnitude <= humanoid.WalkSpeed + UNBUDGE_MOVE_CLAMP then
+			if now - lastStableTime > 0.08 then
+				lastSafeCFrame = hrp.CFrame
+				stopCFrame = hrp.CFrame
+				lastStableTime = now
+			end
+		end
+
+		lastFramePos = hrp.Position
+		return
+	end
+
+	if wasMoving then
+		stopCFrame = hrp.CFrame
+		lastSafeCFrame = hrp.CFrame
+		lastStableTime = now
+		stationarySince = now
+		lastInputTime = now
+		wasMoving = false
+	end
+
+	if stopCFrame then
+		local stopPos = stopCFrame.Position
+		local stopDrift = Vector3.new(currentPos.X - stopPos.X, 0, currentPos.Z - stopPos.Z).Magnitude
+
+		if frameTravel > UNBUDGE_EMERGENCY_FRAME_DRIFT or stopDrift > UNBUDGE_EMERGENCY_TOTAL_DRIFT then
+			snapToStopPoint()
+			stationarySince = now
+			lastInputTime = now
+			clampUpwardVelocity()
+			return
+		end
+	end
+
+	local timeSinceInput = now - lastInputTime
+
+	if timeSinceInput < UNBUDGE_SETTLE_DELAY then
+		stationarySince = 0
+
+		if hv.Magnitude > UNBUDGE_STOP_LIMIT then
+			zeroHorizontalVelocity()
+		end
+
+		lastFramePos = hrp.Position
+		clampUpwardVelocity()
+		return
+	end
+
+	if not grounded then
+		stationarySince = 0
+
+		if now > jumpGraceUntil and (hv.Magnitude > UNBUDGE_STOP_LIMIT or frameTravel > UNBUDGE_EMERGENCY_FRAME_DRIFT) then
+			zeroHorizontalVelocity()
+		end
+
+		lastFramePos = hrp.Position
+		clampUpwardVelocity()
+		return
+	end
+
+	if stationarySince == 0 then
+		stationarySince = now
+	end
+
+	if frameTravel > UNBUDGE_EMERGENCY_FRAME_DRIFT then
+		snapToStopPoint()
+		stationarySince = now
+		lastInputTime = now
+		clampUpwardVelocity()
+		return
+	end
+
+	if now - stationarySince < UNBUDGE_STABLE_DELAY then
+		clampUpwardVelocity()
+		lastFramePos = hrp.Position
+		return
+	end
+
+	local safePos = stopCFrame and stopCFrame.Position or currentPos
+	local drift = Vector3.new(currentPos.X - safePos.X, 0, currentPos.Z - safePos.Z).Magnitude
+
+	if hv.Magnitude > UNBUDGE_STOP_LIMIT or drift > UNBUDGE_DRIFT_LIMIT then
+		zeroHorizontalVelocity()
+
+		if drift > UNBUDGE_DRIFT_LIMIT and stopCFrame then
+			snapToStopPoint()
+		end
+	else
+		if now - lastStableTime > 0.08 then
+			lastSafeCFrame = hrp.CFrame
+			stopCFrame = hrp.CFrame
+			lastStableTime = now
+		end
+	end
+
+	lastFramePos = hrp.Position
+	clampUpwardVelocity()
 end)
