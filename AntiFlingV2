@@ -1,62 +1,204 @@
--- Anti Fling Toggle (LocalScript)
--- Put in StarterPlayerScripts
---
--- Toggle:
--- ON  = enables anti fling + no player collision
--- OFF = removes anti + restores collisions
+-- Anti Fling Toggle + Collision Protection
+-- LocalScript - StarterPlayerScripts
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
-local player = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer
 
-local enabled = false
+
+local Enabled = false
 
 local VELOCITY_LIMIT = 300
 local ANGULAR_LIMIT = 120
 
-local processed = {}
-local createdConstraints = {}
+local ProcessedParts = {}
+local CollisionConstraints = {}
 
-
--- GUI (small top-middle button)
-
-local gui = Instance.new("ScreenGui")
-gui.Name = "AntiFlingGUI"
-gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
-
-
-local button = Instance.new("TextButton")
-button.Size = UDim2.new(0,100,0,30)
-button.Position = UDim2.new(0.5,-50,0,10)
-button.BackgroundColor3 = Color3.fromRGB(45,45,45)
-button.TextColor3 = Color3.new(1,1,1)
-button.TextScaled = true
-button.Text = "Anti: OFF"
-button.Parent = gui
+local CharacterConnections = {}
 
 
 
--- Remove created collision blockers
+-- GUI
 
-local function clearCollisions()
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "AntiFlingToggle"
+Gui.ResetOnSpawn = false
+Gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
-	for _,c in ipairs(createdConstraints) do
 
+local Button = Instance.new("TextButton")
+Button.Size = UDim2.new(0,100,0,28)
+Button.Position = UDim2.new(0.5,-50,0,10)
+Button.BackgroundColor3 = Color3.fromRGB(45,45,45)
+Button.TextColor3 = Color3.new(1,1,1)
+Button.TextScaled = true
+Button.Text = "Anti OFF"
+Button.Parent = Gui
+
+
+
+-- Remove collision constraints
+
+local function clearCollision()
+
+	for _,c in ipairs(CollisionConstraints) do
 		if c and c.Parent then
 			c:Destroy()
 		end
-
 	end
 
-	table.clear(createdConstraints)
+	table.clear(CollisionConstraints)
 
 end
 
 
 
--- Remove physics controllers
+-- Create no collision
+
+local function createNoCollision(a,b)
+
+	if not a or not b then return end
+
+	local c = Instance.new("NoCollisionConstraint")
+
+	c.Part0 = a
+	c.Part1 = b
+	c.Parent = a
+
+	table.insert(CollisionConstraints,c)
+
+end
+
+
+
+-- Apply collision disabling to a character
+
+local function disableCharacterCollision(character)
+
+	if not Enabled then return end
+
+	local myChar = LocalPlayer.Character
+	if not myChar then return end
+
+	local myParts = {}
+
+	for _,p in ipairs(myChar:GetDescendants()) do
+		if p:IsA("BasePart") then
+			table.insert(myParts,p)
+		end
+	end
+
+
+	for _,other in ipairs(character:GetDescendants()) do
+
+		if other:IsA("BasePart") then
+
+			for _,mine in ipairs(myParts) do
+
+				createNoCollision(mine,other)
+
+			end
+
+		end
+
+	end
+
+
+	-- Catch late loaded accessories/layered clothing
+
+	character.DescendantAdded:Connect(function(obj)
+
+		if not Enabled then return end
+
+		if obj:IsA("BasePart") then
+
+			for _,mine in ipairs(myParts) do
+				createNoCollision(mine,obj)
+			end
+
+		end
+
+	end)
+
+end
+
+
+
+-- Setup every player
+
+local function setupPlayer(plr)
+
+	if plr == LocalPlayer then return end
+
+
+	if CharacterConnections[plr] then
+		CharacterConnections[plr]:Disconnect()
+	end
+
+
+	CharacterConnections[plr] = plr.CharacterAdded:Connect(function(char)
+
+		-- Wait for R15 body/accessories to load
+
+		char:WaitForChild("HumanoidRootPart",5)
+
+		task.wait(1)
+
+
+		if Enabled then
+			disableCharacterCollision(char)
+		end
+
+
+	end)
+
+
+	-- Already spawned
+
+	if plr.Character and Enabled then
+
+		task.spawn(function()
+
+			plr.Character:WaitForChild("HumanoidRootPart",5)
+			task.wait(1)
+
+			disableCharacterCollision(plr.Character)
+
+		end)
+
+	end
+
+end
+
+
+
+for _,p in ipairs(Players:GetPlayers()) do
+	setupPlayer(p)
+end
+
+
+Players.PlayerAdded:Connect(function(player)
+
+	setupPlayer(player)
+
+end)
+
+
+
+Players.PlayerRemoving:Connect(function(player)
+
+	if CharacterConnections[player] then
+		CharacterConnections[player]:Disconnect()
+	end
+
+	CharacterConnections[player] = nil
+
+end)
+
+
+
+-- Remove fling objects
 
 local function removeForces(part)
 
@@ -79,81 +221,15 @@ end
 
 
 
--- Disable collision between two parts
-
-local function noCollision(a,b)
-
-	local c = Instance.new("NoCollisionConstraint")
-
-	c.Part0 = a
-	c.Part1 = b
-	c.Parent = a
-
-	table.insert(createdConstraints,c)
-
-end
-
-
-
--- Player collision protection
-
-local function disablePlayerCollision()
-
-	local myChar = player.Character
-	if not myChar then return end
-
-
-	for _,plr in ipairs(Players:GetPlayers()) do
-
-		if plr ~= player and plr.Character then
-
-			for _,a in ipairs(myChar:GetDescendants()) do
-
-				if a:IsA("BasePart") then
-
-					for _,b in ipairs(plr.Character:GetDescendants()) do
-
-						if b:IsA("BasePart") then
-
-							noCollision(a,b)
-
-						end
-
-					end
-
-				end
-
-			end
-
-		end
-
-	end
-
-end
-
-
-
--- Restore normal collisions
-
-local function restoreCollision()
-
-	clearCollisions()
-
-end
-
-
-
--- Protect parts
-
 local function protectPart(part)
 
-	if not enabled then return end
+	if not Enabled then return end
 	if not part:IsA("BasePart") then return end
 	if part.Anchored then return end
-	if processed[part] then return end
+	if ProcessedParts[part] then return end
 
 
-	processed[part] = true
+	ProcessedParts[part] = true
 
 
 	removeForces(part)
@@ -161,7 +237,8 @@ local function protectPart(part)
 
 	part.ChildAdded:Connect(function(obj)
 
-		if not enabled then return end
+		if not Enabled then return end
+
 
 		if obj:IsA("AlignPosition")
 		or obj:IsA("AlignOrientation")
@@ -180,53 +257,13 @@ end
 
 
 
-local function enableAnti()
+Workspace.DescendantAdded:Connect(function(obj)
 
-	enabled = true
+	if Enabled then
 
-	button.Text = "Anti: ON"
-
-	table.clear(processed)
-
-
-	for _,obj in ipairs(Workspace:GetDescendants()) do
-
-		protectPart(obj)
-
-	end
-
-
-	disablePlayerCollision()
-
-end
-
-
-
-local function disableAnti()
-
-	enabled = false
-
-	button.Text = "Anti: OFF"
-
-
-	table.clear(processed)
-
-
-	restoreCollision()
-
-end
-
-
-
-button.MouseButton1Click:Connect(function()
-
-	if enabled then
-
-		disableAnti()
-
-	else
-
-		enableAnti()
+		task.defer(function()
+			protectPart(obj)
+		end)
 
 	end
 
@@ -234,18 +271,56 @@ end)
 
 
 
--- Detect new parts
+-- Toggle
 
-Workspace.DescendantAdded:Connect(function(obj)
+local function Enable()
 
-	if enabled then
+	Enabled = true
 
-		task.defer(function()
+	Button.Text = "Anti ON"
 
-			protectPart(obj)
+	table.clear(ProcessedParts)
 
-		end)
 
+	for _,obj in ipairs(Workspace:GetDescendants()) do
+		protectPart(obj)
+	end
+
+
+	for _,p in ipairs(Players:GetPlayers()) do
+
+		if p ~= LocalPlayer and p.Character then
+
+			disableCharacterCollision(p.Character)
+
+		end
+
+	end
+
+end
+
+
+
+local function Disable()
+
+	Enabled = false
+
+	Button.Text = "Anti OFF"
+
+	table.clear(ProcessedParts)
+
+	clearCollision()
+
+end
+
+
+
+Button.MouseButton1Click:Connect(function()
+
+	if Enabled then
+		Disable()
+	else
+		Enable()
 	end
 
 end)
@@ -258,9 +333,9 @@ task.spawn(function()
 
 	while true do
 
-		if enabled then
+		if Enabled then
 
-			local char = player.Character
+			local char = LocalPlayer.Character
 			local root = char and char:FindFirstChild("HumanoidRootPart")
 
 
@@ -269,6 +344,7 @@ task.spawn(function()
 				for _,part in ipairs(
 					Workspace:GetPartBoundsInRadius(root.Position,150)
 				) do
+
 
 					if part:IsA("BasePart")
 					and not part.Anchored
@@ -279,16 +355,12 @@ task.spawn(function()
 
 
 						if part.AssemblyLinearVelocity.Magnitude > VELOCITY_LIMIT then
-
 							part.AssemblyLinearVelocity = Vector3.zero
-
 						end
 
 
 						if part.AssemblyAngularVelocity.Magnitude > ANGULAR_LIMIT then
-
 							part.AssemblyAngularVelocity = Vector3.zero
-
 						end
 
 					end
@@ -308,15 +380,21 @@ end)
 
 
 
--- Respawn support
-
-player.CharacterAdded:Connect(function()
+LocalPlayer.CharacterAdded:Connect(function()
 
 	task.wait(1)
 
-	if enabled then
+	if Enabled then
 
-		disablePlayerCollision()
+		for _,p in ipairs(Players:GetPlayers()) do
+
+			if p ~= LocalPlayer and p.Character then
+
+				disableCharacterCollision(p.Character)
+
+			end
+
+		end
 
 	end
 
