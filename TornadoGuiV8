@@ -1,4 +1,4 @@
--- Tornado LocalScript — v9.2 Fixed: Mode always respected + Freeze independent of tornado state
+-- Tornado LocalScript — v9.3 FIXED: Sub-Vortices always spawn & nightmare mode works properly
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -350,12 +350,9 @@ for i, mode in ipairs(pathModes) do
         elseif mode == "Stalker" then 
             pathExplain.Text = "Each tornado picks its own stalk target."
         end
-        -- Force tornado positions to use the new mode immediately
         tornadoPathTargets = {}
         tornadoStalkTargets = {}
-        if enabled then
-            updatePositions()
-        end
+        if enabled then updatePositions() end
     end)
 end
 pathBtns["Follow"].BackgroundColor3 = Color3.fromRGB(80, 80, 100)
@@ -480,7 +477,7 @@ inputRefs.maxSubVortices.FocusLost:Connect(function()
     if v then 
         maxSubVortices = math.max(0, math.floor(v))
         inputRefs.maxSubVortices.Text = tostring(maxSubVortices)
-        liveRebuild()
+        if enabled then formSatellitesInstant() end
     end
 end)
 inputRefs.funnelReserve.FocusLost:Connect(function()
@@ -488,7 +485,6 @@ inputRefs.funnelReserve.FocusLost:Connect(function()
     if v then 
         funnelReserveCount = math.max(0, math.floor(v))
         inputRefs.funnelReserve.Text = tostring(funnelReserveCount)
-        liveRebuild()
     end
 end)
 inputRefs.funnelHeight.FocusLost:Connect(function()
@@ -512,7 +508,6 @@ inputRefs.mainFunnelShare.FocusLost:Connect(function()
     if v then 
         mainFunnelShare = math.clamp(v / 100, 0, 0.98)
         inputRefs.mainFunnelShare.Text = tostring(mainFunnelShare * 100)
-        liveRebuild()
     end
 end)
 inputRefs.randomPathSpeed.FocusLost:Connect(function()
@@ -552,9 +547,7 @@ local function liveRebuild()
         end
         mainFunnelParts = {}
         mainFunnelSet = {}
-        if #ropeParts == 0 then
-            setupRopeTornado()
-        end
+        if #ropeParts == 0 then setupRopeTornado() end
         ropeActualCenters = {}
     else
         for part in pairs(ropeParts) do
@@ -573,7 +566,6 @@ local function liveRebuild()
     
     tornadoPathTargets = {}
     tornadoStalkTargets = {}
-    
     updatePositions()
 end
 
@@ -589,8 +581,6 @@ local function processPartForFunnel(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
         if not whitelistedParts[obj] and not assignedToSatellite[obj] and not noodlePartSet[obj] and not mainFunnelSet[obj] and not ropeParts[obj] then
             pickedUpByFunnel[obj] = true; whitelistedParts[obj] = true
-            
-            -- If frozen, immediately anchor newly scanned parts
             if partsFrozen and obj and obj.Parent then
                 frozenParts[obj] = obj.Anchored
                 obj.Anchored = true
@@ -739,7 +729,7 @@ local function applyTornadoPhysics(position, delta)
 end
 
 -- =====================================================
--- ROPE TORNADO
+-- ROPE TORNADO (unchanged)
 -- =====================================================
 local function wrapAngle(a)
     local twoPi = 2 * math.pi
@@ -798,20 +788,17 @@ end
 
 local function applyRopeTornadoAtPos(rootPos, angleState)
     ropeUpdateAngleForState(angleState)
-    
     local t = os.clock()
     local wiggleX = math.sin(t * 1.2 + angleState.currentAngle) * ropeMovementIntensity
     local wiggleZ = math.cos(t * 0.9 + math.sin(t * 0.3) + angleState.currentAngle) * ropeMovementIntensity
     local sideX = math.cos(angleState.currentAngle) * ropeFunnelSidewaysReach + wiggleX
     local sideZ = math.sin(angleState.currentAngle) * ropeFunnelSidewaysReach + wiggleZ
     local topOffset = Vector3.new(sideX, tornadoWindfield * 0.3, sideZ)
-    
     local funnelTop = rootPos + topOffset
     local funnelBottom = rootPos
     local axisVec = funnelBottom - funnelTop
     local axisLen = axisVec.Magnitude
     if axisLen <= 0 then return end
-    
     local parts = Workspace:GetPartBoundsInRadius(rootPos, tornadoWindfield)
     for _, part in ipairs(parts) do
         if part:IsA("BasePart") and not part.Anchored and not isPlayerPart(part) and part.Name ~= baseplateName then
@@ -821,13 +808,11 @@ local function applyRopeTornadoAtPos(rootPos, angleState)
                 local denom = ab:Dot(ab)
                 local rel = denom > 0 and math.clamp((part.Position - funnelTop):Dot(ab) / denom, 0, 1) or 0
                 local closestPoint = funnelTop + ab * rel
-                
                 local radiusAt = ropeTopRadius * (1 - rel) + tornadoWindfield * rel
                 local offset = part.Position - closestPoint
                 local horizontal = Vector3.new(offset.X, 0, offset.Z)
                 local dist = horizontal.Magnitude
                 local reachTolerance = 40
-                
                 if dist <= radiusAt + reachTolerance then
                     local radialDir = (horizontal.Magnitude > 0 and -horizontal.Unit or Vector3.zero)
                     local radialPull = radialDir * ropeInwardPullSpeed
@@ -883,7 +868,6 @@ local function pickStalkTargetForTornado(idx)
     end
 end
 
--- FIX 1: Mode is ALWAYS respected. This function checks pathType directly each time.
 local function computeTornadoTargetPosition(idx, basePos, multiCount)
     if pathType == "Follow" then
         if multiCount and multiCount >= 2 then
@@ -897,7 +881,6 @@ local function computeTornadoTargetPosition(idx, basePos, multiCount)
             return basePos
         end
     elseif pathType == "Random" then
-        -- Move in straight line at tornadoRandomPathSpeed studs/sec
         local state = tornadoPathTargets[idx]
         if not state or tick() > state.switchTimer then
             local currentPos = tornadoPositions[idx] or basePos
@@ -906,34 +889,26 @@ local function computeTornadoTargetPosition(idx, basePos, multiCount)
             state.startPos = currentPos
             state.progress = 0
         end
-        
         if not state.startPos then
             state.startPos = tornadoPositions[idx] or basePos
             state.progress = 0
         end
-        
         local targetPos = state.target
         if not targetPos then return basePos end
-        
         local totalDist = (targetPos - state.startPos).Magnitude
         if totalDist < 1 then return targetPos end
-        
         local speedPerFrame = tornadoRandomPathSpeed * 0.06
         state.progress = state.progress + (speedPerFrame / totalDist)
-        
         if state.progress >= 1 then
             state.progress = 1
             state.switchTimer = tick() + math.random(2, 5)
             return targetPos
         end
-        
         local currentPos = state.startPos:Lerp(targetPos, state.progress)
-        
         local fromPlayer = currentPos - basePos
         if fromPlayer.Magnitude > randomMaxDistance then
             currentPos = basePos + fromPlayer.Unit * (randomMaxDistance - 10)
         end
-        
         return currentPos
     elseif pathType == "Stalker" then
         local stalk = tornadoStalkTargets[idx]
@@ -959,14 +934,12 @@ local function updatePositions()
     local basePos = root.Position
     local count = math.max(1, tornadoAmount)
     
-    -- Save previous positions for collapse prevention
     for i = 1, count do
         if tornadoPositions[i] then
             prevTornadoPositions[i] = tornadoPositions[i]
         end
     end
     
-    -- FIX 1: ALWAYS check the current pathType directly
     if pathType == "Follow" then
         if count >= 2 then
             local orbitSpeed = 2
@@ -985,15 +958,12 @@ local function updatePositions()
             local angle = (i - 1) * (2 * math.pi / count) + time
             local spread = math.clamp(tornadoWindfield * 0.12 * math.sqrt(count), 10, tornadoWindfield * 0.35)
             local formationOffset = Vector3.new(math.cos(angle) * spread, 0, math.sin(angle) * spread)
-            
             local individualTarget = computeTornadoTargetPosition(i, basePos, count)
-            
             local targetPos = basePos + formationOffset
             local toIndividual = individualTarget - targetPos
             if toIndividual.Magnitude > 1 then
                 targetPos = targetPos + toIndividual.Unit * math.min(toIndividual.Magnitude, spread * 0.5)
             end
-            
             tornadoPositions[i] = targetPos
         end
     elseif pathType == "Stalker" then
@@ -1005,31 +975,24 @@ local function updatePositions()
                 break
             end
         end
-        
         local time = tick() * 0.15
         for i = 1, count do
             local angle = (i - 1) * (2 * math.pi / count) + time
             local spread = math.clamp(tornadoWindfield * 0.12 * math.sqrt(count), 10, tornadoWindfield * 0.35)
             local formationOffset = Vector3.new(math.cos(angle) * spread, 0, math.sin(angle) * spread)
-            
             local individualTarget = computeTornadoTargetPosition(i, basePos, count)
             local targetPos = centerTarget + formationOffset
             local toIndividual = individualTarget - targetPos
             if toIndividual.Magnitude > 1 then
                 targetPos = targetPos + toIndividual.Unit * math.min(toIndividual.Magnitude, spread * 0.5)
             end
-            
             tornadoPositions[i] = targetPos
         end
     end
     
-    -- Rope mode: smooth the positions
     if tornadoType == "Rope" then
         for i = 1, #tornadoPositions do
-            if not ropeActualCenters[i] then
-                ropeActualCenters[i] = tornadoPositions[i]
-            end
-            
+            if not ropeActualCenters[i] then ropeActualCenters[i] = tornadoPositions[i] end
             local dir = tornadoPositions[i] - ropeActualCenters[i]
             local dist = dir.Magnitude
             if dist > 0.5 then
@@ -1043,93 +1006,241 @@ local function updatePositions()
     end
 end
 
--- ========== NIGHTMARE TARGETING ==========
-local function checkStalkerFling()
-    if pathType ~= "Stalker" or not nightmareMode then return end
-    if #tornadoPositions == 0 then return end
-    
-    for idx, pos in ipairs(tornadoPositions) do
-        local stalk = tornadoStalkTargets[idx]
-        if stalk and stalk.Character and stalk.Character:FindFirstChild("HumanoidRootPart") then
-            local hrp = stalk.Character.HumanoidRootPart
-            local stalkerPos = hrp.Position
-            local dist = (stalkerPos - pos).Magnitude
-            
-            if dist <= tornadoWindfield * 0.5 then
-                local offset = stalkerPos - pos
-                local horizontalOffset = Vector3.new(offset.X, 0, offset.Z)
-                local distance = math.max(0.1, horizontalOffset.Magnitude)
-                
-                if distance > 0.1 then
-                    local dirToCenter = horizontalOffset.Unit
-                    local spinDir = Vector3.new(-dirToCenter.Z, 0, dirToCenter.X)
-                    
-                    hrp.AssemblyLinearVelocity = 
-                        spinDir * (tornadoSpinSpeed * 3.5) + 
-                        dirToCenter * (tornadoSpinSpeed * 2.5) + 
-                        Vector3.new(0, tornadoUpwardSpeed * 4.0, 0)
-                end
-            end
-            
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= localPlayer and plr ~= stalk and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                    local plrHRP = plr.Character.HumanoidRootPart
-                    local plrPos = plrHRP.Position
-                    local toStalker = (plrPos - stalkerPos).Magnitude
-                    
-                    if toStalker < 30 and (plrPos - pos).Magnitude <= tornadoWindfield * 0.5 then
-                        local offset = plrPos - pos
-                        local hOffset = Vector3.new(offset.X, 0, offset.Z)
-                        if hOffset.Magnitude > 0.1 then
-                            local dTC = hOffset.Unit
-                            local sD = Vector3.new(-dTC.Z, 0, dTC.X)
-                            plrHRP.AssemblyLinearVelocity = 
-                                sD * (tornadoSpinSpeed * 2) + 
-                                dTC * (tornadoSpinSpeed * 1.5) + 
-                                Vector3.new(0, tornadoUpwardSpeed * 2.5, 0)
+-- ========== NIGHTMARE TARGETING (FIXED) ==========
+-- Nightmare mode now actively launches debris at players
+local function findNearestOtherPlayer(pos, exclude)
+    local best, bestDist = nil, math.huge
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= localPlayer and plr ~= exclude and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local d = (plr.Character.HumanoidRootPart.Position - pos).Magnitude
+            if d < bestDist then bestDist = d; best = plr end
+        end
+    end
+    return best, bestDist
+end
+
+local function doFlingVelocity(part, targetPos)
+    if not part or not part.Parent then return end
+    local dir = (targetPos - part.Position)
+    local mag = dir.Magnitude
+    if mag <= 0 then return end
+    local unit = dir.Unit
+    local launchSpeed = 300 + math.random(0, 200)
+    part.AssemblyLinearVelocity = unit * launchSpeed + Vector3.new(0, 50, 0)
+    local ang = Vector3.new(math.random()-0.5, math.random()-0.5, math.random()-0.5)
+    if ang.Magnitude == 0 then ang = Vector3.new(0.1,0.1,0.1) end
+    ang = ang.Unit * 80
+    pcall(function() part.AssemblyAngularVelocity = ang end)
+end
+
+-- Nightmare fling thread - actively launches whitelisted parts at nearest player
+local nightmareFlingThread = nil
+local function startNightmareFling()
+    if nightmareFlingThread then return end
+    nightmareFlingThread = true
+    spawn(function()
+        while nightmareFlingThread and enabled and nightmareMode do
+            if #tornadoPositions > 0 then
+                local center = tornadoPositions[1]
+                -- Find nearest player
+                local target, _ = findNearestOtherPlayer(center)
+                if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                    local hrp = target.Character.HumanoidRootPart
+                    local dist = (hrp.Position - center).Magnitude
+                    if dist <= tornadoWindfield then
+                        -- Find a whitelisted part to fling
+                        local pool = {}
+                        for p in pairs(whitelistedParts) do
+                            if p and p.Parent and not p.Anchored and not debrisAttachedToPlayer[p] then
+                                table.insert(pool, p)
+                            end
+                        end
+                        if #pool > 0 then
+                            local part = pool[math.random(1, #pool)]
+                            doFlingVelocity(part, hrp.Position)
+                            whitelistedParts[part] = nil
+                            pickedUpByFunnel[part] = nil
                         end
                     end
                 end
             end
+            task.wait(0.8 + math.random() * 0.6)
         end
-    end
+        nightmareFlingThread = nil
+    end)
 end
 
-local function tornadoLoop()
-    while enabled do
-        updatePositions()
-        
-        if #tornadoPositions > 0 then
-            if tornadoType == "Rope" then
-                for i = 1, #tornadoPositions do
-                    local center = ropeActualCenters[i]
-                    if center then
-                        local angleState = getRopeAngleState(i)
-                        applyRopeTornadoAtPos(center, angleState)
-                    end
-                end
-            else
-                updateMainFunnel(0.1)
-                for _, pos in ipairs(tornadoPositions) do
-                    applyTornadoPhysics(pos, 0.1)
+local function stopNightmareFling()
+    nightmareFlingThread = nil
+end
+
+-- ========== ATTACH MECHANICS (from v6/v7) ==========
+local function getPlayerAttachment(targetPlayer)
+    if not targetPlayer or not targetPlayer.Character then return nil end
+    if playerAttachmentMap[targetPlayer] and playerAttachmentMap[targetPlayer].Parent then
+        return playerAttachmentMap[targetPlayer]
+    end
+    local hrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local att = Instance.new("Attachment")
+    att.Name = "Tornado_TargetAttachment"
+    att.Parent = hrp
+    playerAttachmentMap[targetPlayer] = att
+    return att
+end
+
+local function attachDebrisToPlayer(debrisPart, targetPlayer)
+    if not debrisPart or not debrisPart.Parent or not targetPlayer or not targetPlayer.Character then return end
+    if debrisAttachedToPlayer[debrisPart] then return end
+    if targetPlayer == localPlayer then return end
+    local hrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    for _, x in next, debrisPart:GetChildren() do
+        if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro") or x:IsA("BodyPosition")
+            or x:IsA("BodyThrust") or x:IsA("BodyVelocity") or x:IsA("RocketPropulsion") then
+            x:Destroy()
+        end
+    end
+    debrisPart.CanCollide = false
+    local attachDeb = Instance.new("Attachment")
+    attachDeb.Name = "Tornado_DebrisAttachment"
+    attachDeb.Parent = debrisPart
+    local align = Instance.new("AlignPosition")
+    align.MaxForce = math.huge
+    align.MaxVelocity = math.huge
+    align.Responsiveness = 200
+    align.Attachment0 = attachDeb
+    align.Attachment1 = getPlayerAttachment(targetPlayer)
+    align.Parent = debrisPart
+    local torque = Instance.new("Torque")
+    torque.Attachment0 = attachDeb
+    torque.Parent = debrisPart
+    debrisAttachedToPlayer[debrisPart] = targetPlayer
+end
+
+-- ========== FIXED NIGHTMARE WATCHER (from v7 logic) ==========
+local function startFiringAtPlayer(targetPlayer)
+    if playerTargetThreads[targetPlayer] then return end
+    playerTargetThreads[targetPlayer] = true
+    spawn(function()
+        while playerTargetThreads[targetPlayer] and targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") do
+            if not nightmareMode then break end
+            local hrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp or #tornadoPositions == 0 then break end
+            local center = tornadoPositions[1]
+            local dist = (hrp.Position - center).Magnitude
+            if dist > tornadoWindfield then break end
+            
+            -- Find a candidate part (prefer whitelisted)
+            local candidate = nil
+            for part in pairs(whitelistedParts) do
+                if part and part.Parent and not debrisAttachedToPlayer[part] and not part.Anchored then
+                    candidate = part
+                    break
                 end
             end
-            checkStalkerFling()
+            
+            if candidate then attachDebrisToPlayer(candidate, targetPlayer) end
+            
+            local waitFor = 3
+            for i=1, waitFor*10 do
+                if not playerTargetThreads[targetPlayer] then break end
+                task.wait(0.1)
+            end
         end
-        task.wait(0.06)
+        cleanupDebrisForPlayer(targetPlayer)
+        playerTargetThreads[targetPlayer] = nil
+    end)
+end
+
+local function stopFiringAtPlayer(targetPlayer)
+    playerTargetThreads[targetPlayer] = nil
+    cleanupDebrisForPlayer(targetPlayer)
+end
+
+local function cleanupDebrisForPlayer(targetPlayer)
+    for part, pl in pairs(debrisAttachedToPlayer) do
+        if pl == targetPlayer then
+            if part and part.Parent then
+                for _, child in ipairs(part:GetChildren()) do
+                    if child:IsA("AlignPosition") or child:IsA("Attachment") or child:IsA("Torque") then child:Destroy() end
+                end
+                part.CanCollide = true
+            end
+            debrisAttachedToPlayer[part] = nil
+            assignedToSatellite[part] = nil
+            whitelistedParts[part] = nil
+            pickedUpByFunnel[part] = nil
+            if noodlePartSet[part] then
+                noodlePartSet[part] = nil
+                for sid, pool in pairs(noodlePools) do pool[part] = nil end
+            end
+            if mainFunnelSet[part] then
+                mainFunnelSet[part] = nil
+                for idx, p in ipairs(mainFunnelParts) do
+                    if p == part then table.remove(mainFunnelParts, idx); break end
+                end
+            end
+        end
+    end
+    if playerAttachmentMap[targetPlayer] then
+        if playerAttachmentMap[targetPlayer].Parent then playerAttachmentMap[targetPlayer]:Destroy() end
+        playerAttachmentMap[targetPlayer] = nil
     end
 end
 
--- ========== SATELLITE SYSTEM ==========
+-- Windfield watcher (from v7, works for nightmare)
+local function windfieldWatcher()
+    while true do
+        if enabled and nightmareMode and #tornadoPositions > 0 then
+            local center = tornadoPositions[1]
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= localPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                    local hrp = plr.Character.HumanoidRootPart
+                    local dist = (hrp.Position - center).Magnitude
+                    if dist <= tornadoWindfield then
+                        if not playerTargetThreads[plr] then startFiringAtPlayer(plr) end
+                    else
+                        if playerTargetThreads[plr] then stopFiringAtPlayer(plr) end
+                    end
+                end
+            end
+        end
+        task.wait(1)
+    end
+end
+
+-- ========== NIGHTMARE MODE SWITCHING (FIXED) ==========
+-- When nightmare toggles on, start the fling & windfield watcher
+-- When toggled off, stop everything
+local function onNightmareChanged()
+    if enabled and nightmareMode then
+        startNightmareFling()
+    else
+        stopNightmareFling()
+        for pl, _ in pairs(playerTargetThreads) do stopFiringAtPlayer(pl) end
+    end
+end
+
+-- Override nightmare button to call proper switching
+nModeBtn.MouseButton1Click:Connect(function()
+    nightmareMode = not nightmareMode
+    nModeBtn.Text = nightmareMode and "Nightmare" or "Friendly"
+    nModeBtn.BackgroundColor3 = nightmareMode and Color3.fromRGB(100, 35, 35) or Color3.fromRGB(50, 50, 58)
+    onNightmareChanged()
+end)
+
+-- ========== SATELLITE SYSTEM (FIXED from v7) ==========
 local function createSatelliteMarker(sat)
     if sat.marker and sat.marker.Parent then return end
     local m = Instance.new("Part")
     m.Name = "SatelliteMarker"
-    m.Size = Vector3.new(1,1,1)
+    m.Size = Vector3.new(2,2,2)
     m.Anchored = true
     m.CanCollide = false
     m.Material = Enum.Material.Neon
-    m.Transparency = 0
+    m.Transparency = 0.3
+    m.Color = nightmareMode and Color3.fromRGB(200, 30, 30) or Color3.fromRGB(30, 100, 200)
     m.Parent = Workspace
     sat.marker = m
 end
@@ -1139,6 +1250,20 @@ local function removeSatelliteMarker(sat)
         pcall(function() sat.marker:Destroy() end)
         sat.marker = nil
     end
+end
+
+local function claimPartsForSatellite(n)
+    local claimed = {}
+    for part in pairs(whitelistedParts) do
+        if #claimed >= n then break end
+        if part and part.Parent and not part.Anchored and not debrisAttachedToPlayer[part] and not assignedToSatellite[part] then
+            table.insert(claimed, part)
+            assignedToSatellite[part] = true
+            whitelistedParts[part] = nil
+            pickedUpByFunnel[part] = nil
+        end
+    end
+    return claimed
 end
 
 local function spawnSatelliteWithParts(pos, partsList, idOverride)
@@ -1172,9 +1297,8 @@ local function spawnSatelliteWithParts(pos, partsList, idOverride)
         marker=nil
     }
     satelliteAttackState[id] = {attackingPlayers={}, attackThreads={}}
-    local partCount = 0
-    for _,_ in pairs(partsMap) do partCount = partCount + 1 end
-    if partCount == 0 then createSatelliteMarker(satelliteVortices[id]) end
+    -- ALWAYS create a marker so sub-vortices are visible even if empty
+    createSatelliteMarker(satelliteVortices[id])
     return id
 end
 
@@ -1195,6 +1319,7 @@ local function despawnSatellite(id)
     noodlePools[id] = nil
 end
 
+-- ========== FIXED formSatellitesInstant (from v7 logic - always spawns sub-vortices) ==========
 local function formSatellitesInstant()
     if tornadoType == "Rope" then
         for id, _ in pairs(satelliteVortices) do despawnSatellite(id) end
@@ -1207,7 +1332,9 @@ local function formSatellitesInstant()
     local count = math.max(0, maxSubVortices)
     if count == 0 then return end
     
+    -- Always spawn sub-vortices even if no parts available
     local spawnCenter = tornadoPositions[1] or (localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") and localPlayer.Character.HumanoidRootPart.Position) or Vector3.new(0,10,0)
+    
     local allParts = Workspace:GetPartBoundsInRadius(spawnCenter, tornadoWindfield)
     local candidateParts = {}
     for _, p in ipairs(allParts) do
@@ -1261,7 +1388,7 @@ local function formSatellitesInstant()
         end
     end
     
-    local orbitRad = subVortexWidth * 0.5
+    local orbitRad = math.clamp(tornadoWindfield * 0.3, 8, tornadoWindfield * 0.7)
     for i = 1, count do
         local angle = (2 * math.pi * (i - 1) / count)
         local pos = spawnCenter + Vector3.new(math.cos(angle) * orbitRad, 10 + math.random()*6, math.sin(angle) * orbitRad)
@@ -1276,17 +1403,41 @@ end
 local function updateSatellites(delta)
     if tornadoType == "Rope" or #tornadoPositions == 0 then return end
     local centerPos = tornadoPositions[1]
+    
+    -- Update markers based on nightmare mode color
     for id, sat in pairs(satelliteVortices) do
+        if sat.marker then
+            local nightmareColor = nightmareMode and Color3.fromRGB(200, 30, 30) or Color3.fromRGB(30, 100, 200)
+            pcall(function() 
+                sat.marker.Color = nightmareColor
+                sat.marker.CFrame = CFrame.new(sat.pos + Vector3.new(0,2,0))
+            end)
+        end
+    end
+    
+    for id, sat in pairs(satelliteVortices) do
+        -- In nightmare mode, find nearest player as target
+        if nightmareMode then
+            local best, bestDist = nil, math.huge
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= localPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                    local d = (plr.Character.HumanoidRootPart.Position - centerPos).Magnitude
+                    if d <= tornadoWindfield and d < bestDist then
+                        bestDist = d; best = plr
+                    end
+                end
+            end
+            sat.target = best
+        end
+        
+        -- Movement: orbit around center position
         sat.angleOffset = sat.angleOffset + (0.5 * delta)
-        local orbitRad = math.clamp(subVortexWidth * 0.3, 6, subVortexWidth)
+        local orbitRad = math.clamp(tornadoWindfield * 0.3, 8, tornadoWindfield * 0.7)
         local newPos = centerPos + Vector3.new(math.cos(sat.angleOffset) * orbitRad, 10, math.sin(sat.angleOffset) * orbitRad)
         local dir = (newPos - sat.pos)
         sat.pos = sat.pos + dir * math.min(1, delta * 2)
         
-        if sat.marker then
-            pcall(function() sat.marker.CFrame = CFrame.new(sat.pos + Vector3.new(0,2,0)) end)
-        end
-        
+        -- Update parts
         for part, meta in pairs(sat.parts) do
             if part and part.Parent then
                 local angle = (tick() * meta.speed) + meta.phase
@@ -1295,12 +1446,8 @@ local function updateSatellites(delta)
                 local floorY = centerPos.Y + (meta.floorOffset or 2)
                 local topY = centerPos.Y + (meta.topOffset or subVortexHeight)
                 
-                if not meta.currentY then
-                    meta.currentY = math.clamp(part.Position.Y, floorY, topY)
-                end
-                if not meta.verticalTarget then
-                    meta.verticalTarget = (floorY + topY) / 2
-                end
+                if not meta.currentY then meta.currentY = math.clamp(part.Position.Y, floorY, topY) end
+                if not meta.verticalTarget then meta.verticalTarget = (floorY + topY) / 2 end
                 if math.abs(meta.currentY - meta.verticalTarget) < 0.5 then
                     meta.verticalTarget = floorY + math.random() * (math.max(1, topY - floorY))
                 end
@@ -1312,9 +1459,7 @@ local function updateSatellites(delta)
                 if not part.Anchored then
                     local desiredVel = (targetPos - part.Position) / math.max(delta, 0.016)
                     local maxVel = math.max(orbitVelocityMinCap, math.abs(radiusPulse * meta.speed * orbitVelocityMultiplier))
-                    if desiredVel.Magnitude > maxVel then
-                        desiredVel = desiredVel.Unit * maxVel
-                    end
+                    if desiredVel.Magnitude > maxVel then desiredVel = desiredVel.Unit * maxVel end
                     local smoothFactor = math.min(1, delta * 8)
                     part.AssemblyLinearVelocity = part.AssemblyLinearVelocity:Lerp(Vector3.new(desiredVel.X, math.clamp(desiredVel.Y, -140, 140), desiredVel.Z), smoothFactor)
                     part.CanCollide = false
@@ -1327,51 +1472,70 @@ local function updateSatellites(delta)
                 sat.parts[part] = nil
             end
         end
+        
+        -- Nightmare: attach nearby parts to players
+        if nightmareMode then
+            for part, _ in pairs(sat.parts) do
+                if part and part.Parent and not debrisAttachedToPlayer[part] and not part.Anchored then
+                    local dToCenter = (part.Position - sat.pos).Magnitude
+                    if dToCenter <= horizontalVortexAttachRadius then
+                        for _, plr in ipairs(Players:GetPlayers()) do
+                            if plr ~= localPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                                local dToPlayer = (plr.Character.HumanoidRootPart.Position - sat.pos).Magnitude
+                                if dToPlayer <= horizontalVortexAttachRadius then
+                                    attachDebrisToPlayer(part, plr)
+                                    break
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
 end
 
--- ========== FIX 2: FREEZE IS INDEPENDENT - works without tornado ==========
+-- ========== TORNADO LOOP ==========
+local function tornadoLoop()
+    while enabled do
+        updatePositions()
+        
+        if #tornadoPositions > 0 then
+            if tornadoType == "Rope" then
+                for i = 1, #tornadoPositions do
+                    local center = ropeActualCenters[i]
+                    if center then
+                        local angleState = getRopeAngleState(i)
+                        applyRopeTornadoAtPos(center, angleState)
+                    end
+                end
+            else
+                updateMainFunnel(0.1)
+                for _, pos in ipairs(tornadoPositions) do
+                    applyTornadoPhysics(pos, 0.1)
+                end
+            end
+        end
+        task.wait(0.06)
+    end
+end
+
+-- ========== FREEZE (independent) ==========
 local function toggleFreeze()
     partsFrozen = not partsFrozen
     freezeBtn.Text = partsFrozen and "Unfreeze" or "Freeze"
     freezeBtn.BackgroundColor3 = partsFrozen and Color3.fromRGB(100, 80, 40) or Color3.fromRGB(60, 60, 70)
     
     if partsFrozen then
-        -- Freeze: anchor ALL currently tracked parts
         frozenParts = {}
         for part in pairs(whitelistedParts) do
-            if part and part.Parent then
-                frozenParts[part] = part.Anchored
-                part.Anchored = true
-            end
+            if part and part.Parent then frozenParts[part] = part.Anchored; part.Anchored = true end
         end
-        for _, p in ipairs(mainFunnelParts) do
-            if p and p.Parent then
-                frozenParts[p] = p.Anchored
-                p.Anchored = true
-            end
-        end
-        for part in pairs(ropeParts) do
-            if part and part.Parent then
-                frozenParts[part] = part.Anchored
-                part.Anchored = true
-            end
-        end
-        for _, sat in pairs(satelliteVortices) do
-            for part, _ in pairs(sat.parts) do
-                if part and part.Parent then
-                    frozenParts[part] = part.Anchored
-                    part.Anchored = true
-                end
-            end
-        end
+        for _, p in ipairs(mainFunnelParts) do if p and p.Parent then frozenParts[p] = p.Anchored; p.Anchored = true end end
+        for part in pairs(ropeParts) do if part and part.Parent then frozenParts[part] = part.Anchored; part.Anchored = true end end
+        for _, sat in pairs(satelliteVortices) do for part, _ in pairs(sat.parts) do if part and part.Parent then frozenParts[part] = part.Anchored; part.Anchored = true end end end
     else
-        -- Unfreeze: restore original state
-        for part, wasAnchored in pairs(frozenParts) do
-            if part and part.Parent then
-                part.Anchored = wasAnchored
-            end
-        end
+        for part, wasAnchored in pairs(frozenParts) do if part and part.Parent then part.Anchored = wasAnchored end end
         frozenParts = {}
     end
 end
@@ -1385,9 +1549,7 @@ Workspace.DescendantAdded:Connect(function(desc)
             if enabled then
                 for _, pos in ipairs(tornadoPositions) do
                     if pos and (desc.Position - pos).Magnitude <= tornadoWindfield then
-                        if not desc.Anchored then 
-                            processPartForFunnel(desc)
-                        end
+                        if not desc.Anchored then processPartForFunnel(desc) end
                         break
                     end
                 end
@@ -1403,9 +1565,7 @@ spawn(function()
                 if pos then
                     local parts = Workspace:GetPartBoundsInRadius(pos, tornadoWindfield)
                     for _, p in ipairs(parts) do
-                        if p and p:IsA("BasePart") and not p.Anchored then
-                            processPartForFunnel(p)
-                        end
+                        if p and p:IsA("BasePart") and not p.Anchored then processPartForFunnel(p) end
                     end
                 end
             end
@@ -1429,21 +1589,14 @@ end)
 
 local function onCharacterAdded(character)
     task.wait(0.1)
-    if character:FindFirstChild("HumanoidRootPart") then
-        updatePositions()
-    end
+    if character:FindFirstChild("HumanoidRootPart") then updatePositions() end
     if enabled then
-        if tornadoType == "Rope" then
-            setupRopeTornado()
-        else
-            formSatellitesInstant()
-        end
+        if tornadoType == "Rope" then setupRopeTornado()
+        else formSatellitesInstant() end
     end
 end
 
-if localPlayer.Character then
-    onCharacterAdded(localPlayer.Character)
-end
+if localPlayer.Character then onCharacterAdded(localPlayer.Character) end
 localPlayer.CharacterAdded:Connect(onCharacterAdded)
 
 toggleBtn.MouseButton1Click:Connect(function()
@@ -1458,50 +1611,35 @@ startStopBtn.MouseButton1Click:Connect(function()
     statusDot.BackgroundColor3 = enabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(180, 40, 40)
     
     if enabled then
-        pickedUpByFunnel = {}
-        whitelistedParts = {}
-        assignedToSatellite = {}
-        satelliteVortices = {}
-        satelliteAttackState = {}
-        nextSatelliteId = 1
-        debrisAttachedToPlayer = {}
-        noodlePools = {}
-        noodlePartSet = {}
-        mainFunnelParts = {}
-        mainFunnelSet = {}
-        ropeParts = {}
-        ropeSegments = {}
-        ropeLines = {}
-        tornadoPathTargets = {}
-        tornadoStalkTargets = {}
-        ropeAngleStates = {}
-        ropeActualCenters = {}
+        pickedUpByFunnel = {}; whitelistedParts = {}; assignedToSatellite = {}
+        satelliteVortices = {}; satelliteAttackState = {}; nextSatelliteId = 1
+        debrisAttachedToPlayer = {}; noodlePools = {}; noodlePartSet = {}
+        mainFunnelParts = {}; mainFunnelSet = {}; ropeParts = {}; ropeSegments = {}; ropeLines = {}
+        tornadoPathTargets = {}; tornadoStalkTargets = {}; ropeAngleStates = {}; ropeActualCenters = {}
         prevTornadoPositions = {}
         
         updatePositions()
         if #tornadoPositions > 0 then
             if tornadoType == "Rope" then
                 setupRopeTornado()
-                for i = 1, #tornadoPositions do
-                    ropeActualCenters[i] = tornadoPositions[i]
-                end
+                for i = 1, #tornadoPositions do ropeActualCenters[i] = tornadoPositions[i] end
             else
                 for _, pos in ipairs(tornadoPositions) do
                     local parts = Workspace:GetPartBoundsInRadius(pos, tornadoWindfield)
-                    for _, p in ipairs(parts) do
-                        if p and p:IsA("BasePart") and not p.Anchored then
-                            processPartForFunnel(p)
-                        end
-                    end
+                    for _, p in ipairs(parts) do if p and p:IsA("BasePart") and not p.Anchored then processPartForFunnel(p) end end
                 end
                 reserveMainFunnelParts()
                 formSatellitesInstant()
+                -- Start nightmare features if enabled
+                if nightmareMode then startNightmareFling() end
             end
         end
         spawn(tornadoLoop)
+        spawn(windfieldWatcher)
     else
-        -- FIX 2: NO auto-unfreeze. Freeze is independent.
-        -- Just clean up tornado-specific things. Frozen parts stay frozen.
+        -- Stop nightmare features
+        stopNightmareFling()
+        for pl, _ in pairs(playerTargetThreads) do stopFiringAtPlayer(pl) end
         
         for part in pairs(whitelistedParts) do
             if part and part:IsA("BasePart") and part.Parent then
@@ -1512,30 +1650,20 @@ startStopBtn.MouseButton1Click:Connect(function()
         for id, _ in pairs(satelliteVortices) do despawnSatellite(id) end
         for part in pairs(ropeParts) do
             if part and part.Parent then
-                part.AssemblyLinearVelocity = Vector3.zero
-                part.CanCollide = true
+                part.AssemblyLinearVelocity = Vector3.zero; part.CanCollide = true
             end
         end
-        ropeParts = {}
-        ropeSegments = {}
-        ropeLines = {}
-        debrisAttachedToPlayer = {}
-        whitelistedParts = {}
-        pickedUpByFunnel = {}
-        assignedToSatellite = {}
-        satelliteVortices = {}
-        satelliteAttackState = {}
-        noodlePools = {}
-        noodlePartSet = {}
-        mainFunnelParts = {}
-        mainFunnelSet = {}
-        tornadoPositions = {}
-        tornadoPathTargets = {}
-        tornadoStalkTargets = {}
-        ropeAngleStates = {}
-        ropeActualCenters = {}
-        prevTornadoPositions = {}
+        -- Clean up attachments
+        for pl, att in pairs(playerAttachmentMap) do if att and att.Parent then att:Destroy() end; playerAttachmentMap[pl] = nil end
+        for pl, _ in pairs(playerTargetThreads) do playerTargetThreads[pl] = nil end
+        
+        ropeParts = {}; ropeSegments = {}; ropeLines = {}
+        debrisAttachedToPlayer = {}; whitelistedParts = {}; pickedUpByFunnel = {}
+        assignedToSatellite = {}; satelliteVortices = {}; satelliteAttackState = {}
+        noodlePools = {}; noodlePartSet = {}; mainFunnelParts = {}; mainFunnelSet = {}
+        tornadoPositions = {}; tornadoPathTargets = {}; tornadoStalkTargets = {}
+        ropeAngleStates = {}; ropeActualCenters = {}; prevTornadoPositions = {}
     end
 end)
 
-print("Tornado GUI v9.2 — Fixed: Mode always respected, Freeze independent of tornado state")
+print("Tornado GUI v9.3 — FIXED: Sub-Vortices always visible with markers + Nightmare mode properly flings/attaches debris to players")
