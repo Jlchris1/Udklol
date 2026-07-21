@@ -1,4 +1,5 @@
--- Tornado LocalScript — v9.2 Fixed: Mode always respected + Freeze independent of tornado state
+-- Tornado LocalScript — v9.4 FIXED: Nightmare Mode with Advanced Fling Mechanics
+-- NIGHTMARE = Individual Parts orbital fling with velocity prediction & chaos
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -54,17 +55,39 @@ local funnelHeight = 500
 local tornadoAmount = 1
 local tornadoType = "Classic"
 
--- Path type system
 local pathType = "Follow"
 local tornadoRandomPathSpeed = 100
 local stalkTarget = nil
 
--- PER-TORNADO path state for independent paths
 local tornadoPathTargets = {}
 local tornadoStalkTargets = {}
-
--- Freeze state (INDEPENDENT of tornado enabled state)
 local partsFrozen = false
+
+-- ========== NIGHTMARE FLING CONSTANTS ==========
+local NIGHTMARE_ENABLED = false
+local INDIVIDUAL_ORBIT_SPEED = 2.5
+local INDIVIDUAL_ORBIT_RADIUS_BASE = 4
+local INDIVIDUAL_ORBIT_RADIUS_VARY = 3
+local INDIVIDUAL_VERTICAL_OSCILLATION = 3
+local INDIVIDUAL_SWITCH_INTERVAL_BASE = 0.4
+local INDIVIDUAL_SWITCH_INTERVAL_VARY = 0.3
+
+-- Fling physics (from the reference script)
+local BASE_FLING_AXIS = 1e6
+local BASE_PULL_FORCE = 1e8
+local BASE_PULL_RESP  = 1e6
+local FLING_MULTIPLIER = 1e6
+local PULL_MULTIPLIER = math.huge
+
+local FLING_TORQUE = Vector3.new(BASE_FLING_AXIS * FLING_MULTIPLIER,
+                                 BASE_FLING_AXIS * FLING_MULTIPLIER,
+                                 BASE_FLING_AXIS * FLING_MULTIPLIER)
+local PULL_MAX_FORCE = BASE_PULL_FORCE * PULL_MULTIPLIER
+local PULL_RESPONSIVENESS = BASE_PULL_RESP * PULL_MULTIPLIER
+
+local MASSLESS_TORQUE_SCALE = 1.0
+local MASSLESS_PULL_SCALE = 1.0
+local MASSLESS_RESP_SCALE = 1.2
 
 -- ========== ROPE TORNADO SPECIFIC SETTINGS ==========
 local ropeFunnelSidewaysReach = 300
@@ -102,9 +125,11 @@ local nextMainNoodleId = 1
 local guiVisible = true
 
 local frozenParts = {}
-
--- Track previous positions to prevent funnel collapse from movement
 local prevTornadoPositions = {}
+
+-- ========== NIGHTMARE MODE INDIVIDUAL PARTS STATE ==========
+local nightmareIndividualPartsData = {}  -- [part] = { targetPlayer, attachment, alignPos, torque, phase, etc }
+local playerVelBuffer = {}
 
 -- ========== UI - ULTRA COMPACT 280px ==========
 local screenGui = Instance.new("ScreenGui")
@@ -156,7 +181,6 @@ mainFrame.Active = true
 mainFrame.Visible = guiVisible
 mainFrame.Parent = screenGui
 
--- Title bar
 local titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1, 0, 0, 22)
 titleBar.Position = UDim2.new(0, 0, 0, 0)
@@ -190,6 +214,13 @@ nModeBtn.MouseButton1Click:Connect(function()
     nightmareMode = not nightmareMode
     nModeBtn.Text = nightmareMode and "Nightmare" or "Friendly"
     nModeBtn.BackgroundColor3 = nightmareMode and Color3.fromRGB(100, 35, 35) or Color3.fromRGB(50, 50, 58)
+    if enabled then
+        if nightmareMode then
+            startNightmareFling()
+        else
+            stopNightmareFling()
+        end
+    end
 end)
 
 -- ========== SCROLLING FRAME ==========
@@ -301,150 +332,11 @@ inputRefs.mainFunnelShare = addTextbox("Main Funnel %", mainFunnelShare * 100, "
 inputRefs.randomPathSpeed = addTextbox("Rand Path Speed", tornadoRandomPathSpeed, "Speed for random path (studs/sec).")
 inputRefs.randomMaxDist = addTextbox("Max Random Dist", randomMaxDistance, "Max funnel distance from you.")
 
--- Rope-specific settings
 inputRefs.ropeSidewaysReach = addTextbox("Rope Side Reach", ropeFunnelSidewaysReach, "Rope funnel tilt distance.")
 inputRefs.ropeIntensity = addTextbox("Rope Intensity", ropeMovementIntensity, "Rope wobble intensity.")
 inputRefs.ropeHoldDuration = addTextbox("Rope Hold (s)", ropeHoldDuration, "Seconds before tilt changes.")
 
--- ========== PATH TYPE SELECTOR ==========
-local pathContainer = Instance.new("Frame")
-pathContainer.Size = UDim2.new(1, -6, 0, 46)
-pathContainer.Position = UDim2.new(0, 3, 0, yOffset)
-pathContainer.BackgroundTransparency = 1
-pathContainer.Parent = scrollingFrame
-yOffset = yOffset + 48
-
-local pathLabel = Instance.new("TextLabel")
-pathLabel.Size = UDim2.new(0.5, -3, 0, 14)
-pathLabel.Position = UDim2.new(0, 1, 0, 0)
-pathLabel.BackgroundTransparency = 1
-pathLabel.Text = "Path Type"
-pathLabel.TextColor3 = Color3.fromRGB(190, 190, 200)
-pathLabel.Font = Enum.Font.SourceSansBold
-pathLabel.TextSize = 10
-pathLabel.TextXAlignment = Enum.TextXAlignment.Left
-pathLabel.Parent = pathContainer
-
-local pathBtns = {}
-local pathModes = {"Follow", "Random", "Stalker"}
-for i, mode in ipairs(pathModes) do
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.33, -2, 0, 16)
-    btn.Position = UDim2.new((i-1) * 0.33, 1, 0, 15)
-    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 58)
-    btn.TextColor3 = Color3.fromRGB(220, 220, 230)
-    btn.Font = Enum.Font.SourceSans
-    btn.TextSize = 9
-    btn.Text = mode
-    btn.BorderSizePixel = 0
-    btn.Parent = pathContainer
-    pathBtns[mode] = btn
-    btn.MouseButton1Click:Connect(function()
-        pathType = mode
-        for _, b in pairs(pathBtns) do b.BackgroundColor3 = Color3.fromRGB(50, 50, 58) end
-        btn.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
-        if mode == "Follow" then 
-            pathExplain.Text = "Each tornado orbits you at 2 studs/sec."
-        elseif mode == "Random" then 
-            pathExplain.Text = "Each tornado moves in straight line at Rand Path Speed."
-        elseif mode == "Stalker" then 
-            pathExplain.Text = "Each tornado picks its own stalk target."
-        end
-        -- Force tornado positions to use the new mode immediately
-        tornadoPathTargets = {}
-        tornadoStalkTargets = {}
-        if enabled then
-            updatePositions()
-        end
-    end)
-end
-pathBtns["Follow"].BackgroundColor3 = Color3.fromRGB(80, 80, 100)
-
-local pathExplain = Instance.new("TextLabel")
-pathExplain.Size = UDim2.new(1, -2, 0, 14)
-pathExplain.Position = UDim2.new(0, 1, 0, 32)
-pathExplain.BackgroundTransparency = 1
-pathExplain.Text = "Each tornado orbits you at 2 studs/sec."
-pathExplain.TextColor3 = Color3.fromRGB(110, 110, 125)
-pathExplain.Font = Enum.Font.SourceSans
-pathExplain.TextSize = 8
-pathExplain.TextXAlignment = Enum.TextXAlignment.Left
-pathExplain.TextWrapped = true
-pathExplain.Parent = pathContainer
-
--- ========== TORNADO TYPE SELECTOR ==========
-local typeContainer = Instance.new("Frame")
-typeContainer.Size = UDim2.new(1, -6, 0, 36)
-typeContainer.Position = UDim2.new(0, 3, 0, yOffset)
-typeContainer.BackgroundTransparency = 1
-typeContainer.Parent = scrollingFrame
-yOffset = yOffset + 38
-
-local typeLabel = Instance.new("TextLabel")
-typeLabel.Size = UDim2.new(0.5, -3, 0, 14)
-typeLabel.Position = UDim2.new(0, 1, 0, 0)
-typeLabel.BackgroundTransparency = 1
-typeLabel.Text = "Type"
-typeLabel.TextColor3 = Color3.fromRGB(190, 190, 200)
-typeLabel.Font = Enum.Font.SourceSansBold
-typeLabel.TextSize = 10
-typeLabel.TextXAlignment = Enum.TextXAlignment.Left
-typeLabel.Parent = typeContainer
-
-local classicBtn = Instance.new("TextButton")
-classicBtn.Size = UDim2.new(0.25, -1, 0, 16)
-classicBtn.Position = UDim2.new(0.5, 1, 0, 0)
-classicBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
-classicBtn.TextColor3 = Color3.fromRGB(220, 220, 230)
-classicBtn.Font = Enum.Font.SourceSans
-classicBtn.TextSize = 9
-classicBtn.Text = "Classic"
-classicBtn.BorderSizePixel = 0
-classicBtn.Parent = typeContainer
-
-local ropeBtn = Instance.new("TextButton")
-ropeBtn.Size = UDim2.new(0.25, -1, 0, 16)
-ropeBtn.Position = UDim2.new(0.75, 1, 0, 0)
-ropeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 58)
-ropeBtn.TextColor3 = Color3.fromRGB(220, 220, 230)
-ropeBtn.Font = Enum.Font.SourceSans
-ropeBtn.TextSize = 9
-ropeBtn.Text = "Rope"
-ropeBtn.BorderSizePixel = 0
-ropeBtn.Parent = typeContainer
-
-local typeExplain = Instance.new("TextLabel")
-typeExplain.Size = UDim2.new(1, -2, 0, 14)
-typeExplain.Position = UDim2.new(0, 1, 0, 18)
-typeExplain.BackgroundTransparency = 1
-typeExplain.Text = "Classic=funnel+vortices. Rope=tilted funnel w/ wiggle."
-typeExplain.TextColor3 = Color3.fromRGB(110, 110, 125)
-typeExplain.Font = Enum.Font.SourceSans
-typeExplain.TextSize = 8
-typeExplain.TextXAlignment = Enum.TextXAlignment.Left
-typeExplain.TextWrapped = true
-typeExplain.Parent = typeContainer
-
-classicBtn.MouseButton1Click:Connect(function()
-    if tornadoType ~= "Classic" then
-        tornadoType = "Classic"
-        classicBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
-        ropeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 58)
-        typeExplain.Text = "Classic=funnel+vortices. Rope=tilted funnel w/ wiggle."
-        liveRebuild()
-    end
-end)
-ropeBtn.MouseButton1Click:Connect(function()
-    if tornadoType ~= "Rope" then
-        tornadoType = "Rope"
-        ropeBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
-        classicBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 58)
-        typeExplain.Text = "Rope=tilted funnel w/ wiggle. Classic=funnel+vortices."
-        liveRebuild()
-    end
-end)
-
--- ========== BIND EVENTS ==========
+-- Bind UI value updates
 inputRefs.tornadoAmount.FocusLost:Connect(function()
     local v = tonumber(inputRefs.tornadoAmount.Text)
     if v then 
@@ -585,12 +477,17 @@ local function isPlayerPart(part)
     return false
 end
 
+local function clamp(val, a, b)
+    if val < a then return a end
+    if val > b then return b end
+    return val
+end
+
 local function processPartForFunnel(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
         if not whitelistedParts[obj] and not assignedToSatellite[obj] and not noodlePartSet[obj] and not mainFunnelSet[obj] and not ropeParts[obj] then
             pickedUpByFunnel[obj] = true; whitelistedParts[obj] = true
             
-            -- If frozen, immediately anchor newly scanned parts
             if partsFrozen and obj and obj.Parent then
                 frozenParts[obj] = obj.Anchored
                 obj.Anchored = true
@@ -631,7 +528,7 @@ local function reserveMainFunnelParts()
     end
 end
 
--- ========== TORNADIC STRUCTURE FUNNEL FORCE ==========
+-- ========== APPL FUNNEL FORCE ==========
 local function applyFunnelForceToPart(part, centerPos, delta, isMain)
     if not part or not part.Parent then return end
     local offset = part.Position - centerPos
@@ -643,7 +540,6 @@ local function applyFunnelForceToPart(part, centerPos, delta, isMain)
     local maxRadius = tornadoWindfield
     local clampedDist = math.min(distance, maxRadius)
     
-    -- Tornadic structure: funnel bulges outward at halfway height
     local relativeHeight = math.clamp((part.Position.Y - centerPos.Y) / math.max(1, funnelHeight), 0, 1)
     
     local bulgeFactor = 1.0
@@ -662,7 +558,6 @@ local function applyFunnelForceToPart(part, centerPos, delta, isMain)
         outwardBias = outwardStrength * outwardCurve
     end
     
-    -- Movement drag to prevent funnel collapse
     local movementOffset = Vector3.new(0, 0, 0)
     local tornadoIdx = nil
     for idx, pos in ipairs(tornadoPositions) do
@@ -739,8 +634,295 @@ local function applyTornadoPhysics(position, delta)
 end
 
 -- =====================================================
--- ROPE TORNADO
+-- NIGHTMARE MODE: INDIVIDUAL PARTS FLING WITH AlignPosition/Torque
 -- =====================================================
+
+local function pushVelocitySample(pl, vel, now)
+    if not pl then return end
+    playerVelBuffer[pl] = playerVelBuffer[pl] or {}
+    local buf = playerVelBuffer[pl]
+    table.insert(buf, 1, {t = now, v = vel})
+    while #buf > 6 do table.remove(buf) end
+end
+
+local function estimateAccelFromBuffer(pl)
+    local buf = playerVelBuffer[pl]
+    if not buf or #buf < 2 then return Vector3.new(0,0,0) end
+    local total = Vector3.new(0,0,0)
+    local count = 0
+    for i = 1, #buf-1 do
+        local cur = buf[i].v
+        local nxt = buf[i+1].v
+        local dt = buf[i].t - buf[i+1].t
+        if dt > 0 then
+            total = total + (cur - nxt) / dt
+            count = count + 1
+        end
+    end
+    if count == 0 then return Vector3.new(0,0,0) end
+    return total / count
+end
+
+local function getClientPing()
+    local ok, ping = pcall(function()
+        if localPlayer and localPlayer.GetNetworkPing then
+            return localPlayer:GetNetworkPing()
+        end
+        return nil
+    end)
+    if ok and type(ping) == "number" and ping > 0 then
+        return ping
+    end
+    return 0.075
+end
+
+local function predictTargetPosition(pl, pos, vel, now)
+    pushVelocitySample(pl, vel, now)
+    local accel_est = estimateAccelFromBuffer(pl)
+    local ping = getClientPing()
+    local baseLead = 0.05
+    local effectiveLat = clamp(ping + baseLead, 0.03, 0.45)
+    local speed = vel.Magnitude
+    local speedFactor = clamp(0.12 + (speed * 0.03), 0.12, 1.4)
+    local leadTime = effectiveLat * speedFactor
+    leadTime = clamp(leadTime, 0.03, 0.6)
+    local predicted = pos + vel * leadTime + 0.5 * accel_est * (leadTime * leadTime)
+    return predicted, leadTime, accel_est, ping
+end
+
+local function getAllNonLocalPlayers()
+    local res = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p and p ~= localPlayer and p.Parent then
+            table.insert(res, p)
+        end
+    end
+    return res
+end
+
+local function getRandomTargetPlayer()
+    local players = getAllNonLocalPlayers()
+    if #players == 0 then return nil end
+    return players[math.random(1, #players)]
+end
+
+local function stripBodyForces(part)
+    for _, x in next, part:GetChildren() do
+        if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro")
+        or x:IsA("BodyPosition") or x:IsA("BodyThrust") or x:IsA("BodyVelocity")
+        or x:IsA("RocketPropulsion") then
+            x:Destroy()
+        end
+    end
+    if part:FindFirstChild("Attachment") then part:FindFirstChild("Attachment"):Destroy() end
+    if part:FindFirstChild("AlignPosition") then part:FindFirstChild("AlignPosition"):Destroy() end
+    if part:FindFirstChild("Torque") then part:FindFirstChild("Torque"):Destroy() end
+end
+
+local function createNightmareAttachmentForPart(part, targetPlayer)
+    stripBodyForces(part)
+    part.CanCollide = false
+    
+    local partAtt = Instance.new("Attachment", part)
+    
+    local alignPos = Instance.new("AlignPosition", part)
+    alignPos.Attachment0 = partAtt
+    
+    local targetAtt = Instance.new("Attachment", localPlayer.Character:FindFirstChild("HumanoidRootPart"))
+    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        targetAtt = Instance.new("Attachment", targetPlayer.Character.HumanoidRootPart)
+    end
+    
+    alignPos.Attachment1 = targetAtt
+    
+    local ok, isMass = pcall(function() return part.Massless end)
+    local maxF = PULL_MAX_FORCE
+    local resp = PULL_RESPONSIVENESS
+    if ok and isMass == true then
+        maxF = maxF * MASSLESS_PULL_SCALE
+        resp = resp * MASSLESS_RESP_SCALE
+    end
+    
+    alignPos.MaxForce = maxF
+    alignPos.MaxVelocity = math.huge
+    alignPos.Responsiveness = resp
+    
+    local torqueVal = FLING_TORQUE
+    if ok and isMass == true then
+        torqueVal = torqueVal * MASSLESS_TORQUE_SCALE
+    end
+    local torque = Instance.new("Torque", part)
+    torque.Torque = torqueVal
+    torque.Attachment0 = partAtt
+    
+    local data = {
+        part = part,
+        attachment = partAtt,
+        alignPos = alignPos,
+        targetAttachment = targetAtt,
+        torque = torque,
+        targetPlayer = targetPlayer,
+        phase = math.random() * math.pi * 2,
+        orbitRadius = INDIVIDUAL_ORBIT_RADIUS_BASE + (math.random() * INDIVIDUAL_ORBIT_RADIUS_VARY),
+        orbitSpeed = INDIVIDUAL_ORBIT_SPEED + (math.random() * 1.5),
+        verticalAmp = INDIVIDUAL_VERTICAL_OSCILLATION * (0.5 + math.random()),
+        nextSwitchTime = INDIVIDUAL_SWITCH_INTERVAL_BASE + (math.random() * INDIVIDUAL_SWITCH_INTERVAL_VARY),
+        switchingLock = false,
+    }
+    
+    nightmareIndividualPartsData[part] = data
+    return data
+end
+
+local function reassignNightmarePart(part)
+    local data = nightmareIndividualPartsData[part]
+    if not data then return end
+    
+    local newPlayer = getRandomTargetPlayer()
+    if not newPlayer then return end
+    
+    data.targetPlayer = newPlayer
+    if data.targetAttachment and data.targetAttachment.Parent then
+        pcall(function() data.targetAttachment.Parent:Destroy() end)
+    end
+    
+    local newAtt = Instance.new("Attachment", newPlayer.Character:FindFirstChild("HumanoidRootPart"))
+    data.targetAttachment = newAtt
+    if data.alignPos then
+        pcall(function() data.alignPos.Attachment1 = newAtt end)
+    end
+    
+    data.phase = math.random() * math.pi * 2
+    data.orbitRadius = INDIVIDUAL_ORBIT_RADIUS_BASE + (math.random() * INDIVIDUAL_ORBIT_RADIUS_VARY)
+    data.orbitSpeed = INDIVIDUAL_ORBIT_SPEED + (math.random() * 1.5)
+end
+
+local function startNightmarePartThread(part, data)
+    spawn(function()
+        local timeAccum = 0
+        while nightmareMode and enabled and part and part.Parent and data and data.part == part do
+            local dt = RunService.Heartbeat:Wait()
+            if not dt then dt = 0.016 end
+            timeAccum = timeAccum + dt
+            
+            local player = data.targetPlayer
+            if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = player.Character.HumanoidRootPart
+                local pos = hrp.Position
+                local vel = hrp.Velocity or Vector3.new(0,0,0)
+                local speed = vel.Magnitude
+                local dir = (speed > 1) and vel.Unit or hrp.CFrame.LookVector
+                
+                local predictedPos = predictTargetPosition(player, pos, vel, tick())
+                
+                -- Orbital motion
+                local phase = data.phase + timeAccum * data.orbitSpeed
+                local radius = data.orbitRadius * (1 + 0.3 * math.sin(timeAccum * 0.7 + data.phase))
+                local orbitX = math.cos(phase) * radius
+                local orbitZ = math.sin(phase * 0.8) * radius * 0.7
+                local verticalOffset = math.sin(timeAccum * 1.3 + data.phase * 1.7) * data.verticalAmp
+                
+                -- Chaos based on player speed
+                local chaosFactor = clamp(speed * 0.1, 0, 3)
+                local chaosX = math.sin(timeAccum * 2.1 + data.phase) * chaosFactor
+                local chaosZ = math.cos(timeAccum * 1.9 + data.phase * 1.3) * chaosFactor
+                local chaosY = math.sin(timeAccum * 2.7 + data.phase * 2.3) * chaosFactor * 0.5
+                
+                local offset = Vector3.new(orbitX + chaosX, verticalOffset + chaosY, orbitZ + chaosZ)
+                if speed > 5 then
+                    offset = offset + (-dir * clamp(speed * 0.08, 0, 3))
+                end
+                
+                local targetPos = predictedPos + offset
+                
+                if data.targetAttachment and data.targetAttachment.Parent then
+                    pcall(function() data.targetAttachment.Parent.Position = targetPos end)
+                end
+            else
+                if not data.switchingLock then
+                    data.switchingLock = true
+                    spawn(function()
+                        wait(0.1)
+                        if data and nightmareMode then reassignNightmarePart(part) end
+                        if data then data.switchingLock = false end
+                    end)
+                end
+            end
+            
+            -- Periodic target switching
+            if timeAccum >= data.nextSwitchTime then
+                if not data.switchingLock then
+                    data.switchingLock = true
+                    spawn(function()
+                        wait(0.05)
+                        if data and nightmareMode then reassignNightmarePart(part) end
+                        if data then
+                            data.switchingLock = false
+                            data.nextSwitchTime = timeAccum + INDIVIDUAL_SWITCH_INTERVAL_BASE + (math.random() * INDIVIDUAL_SWITCH_INTERVAL_VARY)
+                        end
+                    end)
+                end
+            end
+        end
+    end)
+end
+
+local function startNightmareFling()
+    if not enabled then return end
+    nightmareIndividualPartsData = {}
+    
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        pcall(function()
+            if v:IsA("BasePart") and not v.Anchored and v.Name ~= "Handle"
+                and not isPlayerPart(v)
+                and not (localPlayer.Character and v:IsDescendantOf(localPlayer.Character))
+                and (mainFunnelSet[v] or whitelistedParts[v]) then
+                
+                local data = createNightmareAttachmentForPart(v, getRandomTargetPlayer())
+                if data then
+                    startNightmarePartThread(v, data)
+                end
+            end
+        end)
+    end
+    
+    -- Continuously find new parts
+    spawn(function()
+        while nightmareMode and enabled do
+            for _, v in ipairs(Workspace:GetDescendants()) do
+                pcall(function()
+                    if nightmareMode and enabled and v:IsA("BasePart") and not v.Anchored
+                        and not nightmareIndividualPartsData[v]
+                        and (mainFunnelSet[v] or whitelistedParts[v]) then
+                        
+                        local data = createNightmareAttachmentForPart(v, getRandomTargetPlayer())
+                        if data then
+                            startNightmarePartThread(v, data)
+                        end
+                    end
+                end)
+            end
+            wait(0.5)
+        end
+    end)
+end
+
+local function stopNightmareFling()
+    for part, data in pairs(nightmareIndividualPartsData) do
+        pcall(function()
+            if part and part.Parent then
+                stripBodyForces(part)
+                part.CanCollide = false
+            end
+            if data.targetAttachment and data.targetAttachment.Parent then
+                pcall(function() data.targetAttachment.Parent:Destroy() end)
+            end
+        end)
+    end
+    nightmareIndividualPartsData = {}
+end
+
+-- ========== ROPE TORNADO ==========
 local function wrapAngle(a)
     local twoPi = 2 * math.pi
     return ((a % twoPi) + twoPi) % twoPi
@@ -883,7 +1065,6 @@ local function pickStalkTargetForTornado(idx)
     end
 end
 
--- FIX 1: Mode is ALWAYS respected. This function checks pathType directly each time.
 local function computeTornadoTargetPosition(idx, basePos, multiCount)
     if pathType == "Follow" then
         if multiCount and multiCount >= 2 then
@@ -897,7 +1078,6 @@ local function computeTornadoTargetPosition(idx, basePos, multiCount)
             return basePos
         end
     elseif pathType == "Random" then
-        -- Move in straight line at tornadoRandomPathSpeed studs/sec
         local state = tornadoPathTargets[idx]
         if not state or tick() > state.switchTimer then
             local currentPos = tornadoPositions[idx] or basePos
@@ -959,14 +1139,12 @@ local function updatePositions()
     local basePos = root.Position
     local count = math.max(1, tornadoAmount)
     
-    -- Save previous positions for collapse prevention
     for i = 1, count do
         if tornadoPositions[i] then
             prevTornadoPositions[i] = tornadoPositions[i]
         end
     end
     
-    -- FIX 1: ALWAYS check the current pathType directly
     if pathType == "Follow" then
         if count >= 2 then
             local orbitSpeed = 2
@@ -1023,7 +1201,6 @@ local function updatePositions()
         end
     end
     
-    -- Rope mode: smooth the positions
     if tornadoType == "Rope" then
         for i = 1, #tornadoPositions do
             if not ropeActualCenters[i] then
@@ -1038,58 +1215,6 @@ local function updatePositions()
                 ropeActualCenters[i] = ropeActualCenters[i] + dir.Unit * step
             else
                 ropeActualCenters[i] = tornadoPositions[i]
-            end
-        end
-    end
-end
-
--- ========== NIGHTMARE TARGETING ==========
-local function checkStalkerFling()
-    if pathType ~= "Stalker" or not nightmareMode then return end
-    if #tornadoPositions == 0 then return end
-    
-    for idx, pos in ipairs(tornadoPositions) do
-        local stalk = tornadoStalkTargets[idx]
-        if stalk and stalk.Character and stalk.Character:FindFirstChild("HumanoidRootPart") then
-            local hrp = stalk.Character.HumanoidRootPart
-            local stalkerPos = hrp.Position
-            local dist = (stalkerPos - pos).Magnitude
-            
-            if dist <= tornadoWindfield * 0.5 then
-                local offset = stalkerPos - pos
-                local horizontalOffset = Vector3.new(offset.X, 0, offset.Z)
-                local distance = math.max(0.1, horizontalOffset.Magnitude)
-                
-                if distance > 0.1 then
-                    local dirToCenter = horizontalOffset.Unit
-                    local spinDir = Vector3.new(-dirToCenter.Z, 0, dirToCenter.X)
-                    
-                    hrp.AssemblyLinearVelocity = 
-                        spinDir * (tornadoSpinSpeed * 3.5) + 
-                        dirToCenter * (tornadoSpinSpeed * 2.5) + 
-                        Vector3.new(0, tornadoUpwardSpeed * 4.0, 0)
-                end
-            end
-            
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= localPlayer and plr ~= stalk and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                    local plrHRP = plr.Character.HumanoidRootPart
-                    local plrPos = plrHRP.Position
-                    local toStalker = (plrPos - stalkerPos).Magnitude
-                    
-                    if toStalker < 30 and (plrPos - pos).Magnitude <= tornadoWindfield * 0.5 then
-                        local offset = plrPos - pos
-                        local hOffset = Vector3.new(offset.X, 0, offset.Z)
-                        if hOffset.Magnitude > 0.1 then
-                            local dTC = hOffset.Unit
-                            local sD = Vector3.new(-dTC.Z, 0, dTC.X)
-                            plrHRP.AssemblyLinearVelocity = 
-                                sD * (tornadoSpinSpeed * 2) + 
-                                dTC * (tornadoSpinSpeed * 1.5) + 
-                                Vector3.new(0, tornadoUpwardSpeed * 2.5, 0)
-                        end
-                    end
-                end
             end
         end
     end
@@ -1114,7 +1239,6 @@ local function tornadoLoop()
                     applyTornadoPhysics(pos, 0.1)
                 end
             end
-            checkStalkerFling()
         end
         task.wait(0.06)
     end
@@ -1130,6 +1254,7 @@ local function createSatelliteMarker(sat)
     m.CanCollide = false
     m.Material = Enum.Material.Neon
     m.Transparency = 0
+    m.Color = Color3.fromRGB(255, 100, 100)
     m.Parent = Workspace
     sat.marker = m
 end
@@ -1330,14 +1455,13 @@ local function updateSatellites(delta)
     end
 end
 
--- ========== FIX 2: FREEZE IS INDEPENDENT - works without tornado ==========
+-- ========== FREEZE IS INDEPENDENT ==========
 local function toggleFreeze()
     partsFrozen = not partsFrozen
     freezeBtn.Text = partsFrozen and "Unfreeze" or "Freeze"
     freezeBtn.BackgroundColor3 = partsFrozen and Color3.fromRGB(100, 80, 40) or Color3.fromRGB(60, 60, 70)
     
     if partsFrozen then
-        -- Freeze: anchor ALL currently tracked parts
         frozenParts = {}
         for part in pairs(whitelistedParts) do
             if part and part.Parent then
@@ -1366,7 +1490,6 @@ local function toggleFreeze()
             end
         end
     else
-        -- Unfreeze: restore original state
         for part, wasAnchored in pairs(frozenParts) do
             if part and part.Parent then
                 part.Anchored = wasAnchored
@@ -1498,10 +1621,14 @@ startStopBtn.MouseButton1Click:Connect(function()
                 formSatellitesInstant()
             end
         end
+        
+        if nightmareMode then
+            startNightmareFling()
+        end
+        
         spawn(tornadoLoop)
     else
-        -- FIX 2: NO auto-unfreeze. Freeze is independent.
-        -- Just clean up tornado-specific things. Frozen parts stay frozen.
+        stopNightmareFling()
         
         for part in pairs(whitelistedParts) do
             if part and part:IsA("BasePart") and part.Parent then
@@ -1538,4 +1665,4 @@ startStopBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-print("Tornado GUI v9.2 — Fixed: Mode always respected, Freeze independent of tornado state")
+print("Tornado GUI v9.4 — Nightmare Mode with Advanced Fling Mechanics ENABLED!")
