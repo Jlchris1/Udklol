@@ -1,4 +1,4 @@
--- Tornado LocalScript — v8.9 Fixed: Multi-Tornado Orbit + Independent Paths + Per-Tornado Windfields
+-- Tornado LocalScript — v9.2 Fixed: Mode always respected + Freeze independent of tornado state
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -63,7 +63,7 @@ local stalkTarget = nil
 local tornadoPathTargets = {}
 local tornadoStalkTargets = {}
 
--- Freeze state
+-- Freeze state (INDEPENDENT of tornado enabled state)
 local partsFrozen = false
 
 -- ========== ROPE TORNADO SPECIFIC SETTINGS ==========
@@ -102,6 +102,9 @@ local nextMainNoodleId = 1
 local guiVisible = true
 
 local frozenParts = {}
+
+-- Track previous positions to prevent funnel collapse from movement
+local prevTornadoPositions = {}
 
 -- ========== UI - ULTRA COMPACT 280px ==========
 local screenGui = Instance.new("ScreenGui")
@@ -295,7 +298,7 @@ inputRefs.subVortexSpin = addTextbox("Sub Spin", subVortexSpinSpeed, "Sub-vortex
 inputRefs.subVortexHeight = addTextbox("Sub Height", subVortexHeight, "Sub-vortex vertical range.")
 inputRefs.subVortexWidth = addTextbox("Sub Width", subVortexWidth, "Orbital radius. No limit.")
 inputRefs.mainFunnelShare = addTextbox("Main Funnel %", mainFunnelShare * 100, "% parts for main funnel.")
-inputRefs.randomPathSpeed = addTextbox("Rand Path Speed", tornadoRandomPathSpeed, "Speed for random path.")
+inputRefs.randomPathSpeed = addTextbox("Rand Path Speed", tornadoRandomPathSpeed, "Speed for random path (studs/sec).")
 inputRefs.randomMaxDist = addTextbox("Max Random Dist", randomMaxDistance, "Max funnel distance from you.")
 
 -- Rope-specific settings
@@ -340,11 +343,19 @@ for i, mode in ipairs(pathModes) do
         pathType = mode
         for _, b in pairs(pathBtns) do b.BackgroundColor3 = Color3.fromRGB(50, 50, 58) end
         btn.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
-        if mode == "Follow" then pathExplain.Text = "Each tornado orbits you at 2 studs/sec."
-        elseif mode == "Random" then pathExplain.Text = "Each tornado has its own random path."
-        elseif mode == "Stalker" then pathExplain.Text = "Each tornado picks its own stalk target." end
+        if mode == "Follow" then 
+            pathExplain.Text = "Each tornado orbits you at 2 studs/sec."
+        elseif mode == "Random" then 
+            pathExplain.Text = "Each tornado moves in straight line at Rand Path Speed."
+        elseif mode == "Stalker" then 
+            pathExplain.Text = "Each tornado picks its own stalk target."
+        end
+        -- Force tornado positions to use the new mode immediately
         tornadoPathTargets = {}
         tornadoStalkTargets = {}
+        if enabled then
+            updatePositions()
+        end
     end)
 end
 pathBtns["Follow"].BackgroundColor3 = Color3.fromRGB(80, 80, 100)
@@ -578,6 +589,12 @@ local function processPartForFunnel(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not isPlayerPart(obj) and obj.Name ~= baseplateName then
         if not whitelistedParts[obj] and not assignedToSatellite[obj] and not noodlePartSet[obj] and not mainFunnelSet[obj] and not ropeParts[obj] then
             pickedUpByFunnel[obj] = true; whitelistedParts[obj] = true
+            
+            -- If frozen, immediately anchor newly scanned parts
+            if partsFrozen and obj and obj.Parent then
+                frozenParts[obj] = obj.Anchored
+                obj.Anchored = true
+            end
         end
     end
 end
@@ -614,7 +631,7 @@ local function reserveMainFunnelParts()
     end
 end
 
--- ========== CLASSIC TORNADO FORCE ==========
+-- ========== TORNADIC STRUCTURE FUNNEL FORCE ==========
 local function applyFunnelForceToPart(part, centerPos, delta, isMain)
     if not part or not part.Parent then return end
     local offset = part.Position - centerPos
@@ -625,24 +642,66 @@ local function applyFunnelForceToPart(part, centerPos, delta, isMain)
 
     local maxRadius = tornadoWindfield
     local clampedDist = math.min(distance, maxRadius)
-
+    
+    -- Tornadic structure: funnel bulges outward at halfway height
+    local relativeHeight = math.clamp((part.Position.Y - centerPos.Y) / math.max(1, funnelHeight), 0, 1)
+    
+    local bulgeFactor = 1.0
+    if relativeHeight > 0.2 and relativeHeight < 0.8 then
+        local bulgePeak = 0.5
+        local bulgeStrength = 1.8
+        local bulgeCurve = math.max(0, 1 - math.abs(relativeHeight - bulgePeak) / 0.3)
+        bulgeFactor = 1.0 + (bulgeStrength - 1.0) * bulgeCurve
+    end
+    
+    local outwardBias = 0
+    if relativeHeight > 0.25 and relativeHeight < 0.75 then
+        local outwardPeak = 0.5
+        local outwardStrength = 30
+        local outwardCurve = math.max(0, 1 - math.abs(relativeHeight - outwardPeak) / 0.25)
+        outwardBias = outwardStrength * outwardCurve
+    end
+    
+    -- Movement drag to prevent funnel collapse
+    local movementOffset = Vector3.new(0, 0, 0)
+    local tornadoIdx = nil
+    for idx, pos in ipairs(tornadoPositions) do
+        if (pos - centerPos).Magnitude < 1 then
+            tornadoIdx = idx
+            break
+        end
+    end
+    if tornadoIdx and prevTornadoPositions[tornadoIdx] then
+        local moveDelta = centerPos - prevTornadoPositions[tornadoIdx]
+        if moveDelta.Magnitude > 0.5 then
+            movementOffset = moveDelta * 0.3
+        end
+    end
+    
     local spinVelocity = tornadoSpinSpeed * (1 + (clampedDist / math.max(1, maxRadius)) * 0.1)
-    local inwardPull = -dirToCenter * tornadoInwardPullSpeed
+    local inwardPull = -dirToCenter * tornadoInwardPullSpeed * (1 / math.max(1, bulgeFactor))
     local rotational = spinDir * spinVelocity
     local upward = Vector3.new(0, tornadoUpwardSpeed, 0)
-
+    
+    local outwardPush = dirToCenter * outwardBias
+    
     local time = tick()
     local bobFreq = 1.5 + (clampedDist / math.max(1, maxRadius)) * 0.5
     local bobAmp = 8 + math.sin(time * 0.3 + distance * 0.01) * 3
     local anglePhase = math.atan2(offset.Z, offset.X) or 0
     local bobOffset = math.sin(time * bobFreq + anglePhase) * bobAmp
     upward = upward + Vector3.new(0, bobOffset * delta * 3, 0)
-
-    local targetVel = rotational + inwardPull + upward
+    
+    local targetVel = rotational + inwardPull + outwardPush + upward + movementOffset
     local currentVel = part.AssemblyLinearVelocity
-    local smoothFactor = math.min(1, delta * 6)
+    
+    local smoothFactor = math.min(1, delta * 4)
     local finalVel = currentVel:Lerp(targetVel, smoothFactor)
-
+    
+    if finalVel.Magnitude > 800 then
+        finalVel = finalVel.Unit * 800
+    end
+    
     if not part.Anchored then
         part.AssemblyLinearVelocity = finalVel
         part.CanCollide = false
@@ -665,7 +724,7 @@ local function updateMainFunnel(delta)
     mainFunnelParts = newMain
 end
 
--- ========== PER-TORNADO PHYSICS (each tornado has its own windfield!) ==========
+-- ========== PER-TORNADO PHYSICS ==========
 local function applyTornadoPhysics(position, delta)
     local parts = Workspace:GetPartBoundsInRadius(position, tornadoWindfield)
     for _, obj in ipairs(parts) do
@@ -739,20 +798,20 @@ end
 
 local function applyRopeTornadoAtPos(rootPos, angleState)
     ropeUpdateAngleForState(angleState)
-
+    
     local t = os.clock()
     local wiggleX = math.sin(t * 1.2 + angleState.currentAngle) * ropeMovementIntensity
     local wiggleZ = math.cos(t * 0.9 + math.sin(t * 0.3) + angleState.currentAngle) * ropeMovementIntensity
     local sideX = math.cos(angleState.currentAngle) * ropeFunnelSidewaysReach + wiggleX
     local sideZ = math.sin(angleState.currentAngle) * ropeFunnelSidewaysReach + wiggleZ
     local topOffset = Vector3.new(sideX, tornadoWindfield * 0.3, sideZ)
-
+    
     local funnelTop = rootPos + topOffset
     local funnelBottom = rootPos
     local axisVec = funnelBottom - funnelTop
     local axisLen = axisVec.Magnitude
     if axisLen <= 0 then return end
-
+    
     local parts = Workspace:GetPartBoundsInRadius(rootPos, tornadoWindfield)
     for _, part in ipairs(parts) do
         if part:IsA("BasePart") and not part.Anchored and not isPlayerPart(part) and part.Name ~= baseplateName then
@@ -805,7 +864,9 @@ local function pickRandomTargetForTornado(idx, playerPos)
     local target = playerPos + Vector3.new(math.cos(angle) * dist, 0, math.sin(angle) * dist)
     tornadoPathTargets[idx] = {
         target = target,
-        switchTimer = tick() + math.random(5, 20)
+        switchTimer = tick() + math.random(5, 20),
+        startPos = nil,
+        progress = 0
     }
     return target
 end
@@ -822,55 +883,59 @@ local function pickStalkTargetForTornado(idx)
     end
 end
 
--- ========== FIXED: Multi-Tornado ORBIT at 2 studs/sec ==========
--- This is the key function that controls where each tornado is positioned.
--- For "Follow" mode with 2+ tornadoes: they orbit around the player at exactly 2 studs/sec.
--- Each tornado has its own independent windfield when scanning parts.
+-- FIX 1: Mode is ALWAYS respected. This function checks pathType directly each time.
 local function computeTornadoTargetPosition(idx, basePos, multiCount)
     if pathType == "Follow" then
         if multiCount and multiCount >= 2 then
-            -- ORBIT MODE: Each tornado orbits the player at 2 studs/sec
-            -- They are spread evenly around the circle and rotate
-            local orbitSpeed = 2  -- 2 studs per second
+            local orbitSpeed = 2
             local time = tick() * orbitSpeed
-            
-            -- Evenly space tornadoes around the circle
             local angleOffset = (idx - 1) * (2 * math.pi / multiCount)
-            
-            -- Calculate spread radius based on tornado count and windfield
             local spreadRadius = math.clamp(tornadoWindfield * 0.12 * math.sqrt(multiCount), 10, tornadoWindfield * 0.35)
-            
             local angle = time + angleOffset
-            local orbitPos = basePos + Vector3.new(math.cos(angle) * spreadRadius, 0, math.sin(angle) * spreadRadius)
-            return orbitPos
+            return basePos + Vector3.new(math.cos(angle) * spreadRadius, 0, math.sin(angle) * spreadRadius)
         else
-            -- Single tornado: centered on the player
             return basePos
         end
     elseif pathType == "Random" then
-        -- Each tornado has its own random path target (already independent)
+        -- Move in straight line at tornadoRandomPathSpeed studs/sec
         local state = tornadoPathTargets[idx]
         if not state or tick() > state.switchTimer then
+            local currentPos = tornadoPositions[idx] or basePos
             pickRandomTargetForTornado(idx, basePos)
             state = tornadoPathTargets[idx]
+            state.startPos = currentPos
+            state.progress = 0
         end
-        if state then
-            local current = tornadoPositions[idx] or basePos
-            local dir = state.target - current
-            if dir.Magnitude > tornadoRandomPathSpeed * 0.1 then
-                local newPos = current + dir.Unit * math.min(dir.Magnitude, tornadoRandomPathSpeed * 0.1)
-                local fromPlayer = newPos - basePos
-                if fromPlayer.Magnitude > randomMaxDistance then
-                    newPos = basePos + fromPlayer.Unit * (randomMaxDistance - 10)
-                end
-                return newPos
-            else
-                return state.target
-            end
+        
+        if not state.startPos then
+            state.startPos = tornadoPositions[idx] or basePos
+            state.progress = 0
         end
-        return basePos
+        
+        local targetPos = state.target
+        if not targetPos then return basePos end
+        
+        local totalDist = (targetPos - state.startPos).Magnitude
+        if totalDist < 1 then return targetPos end
+        
+        local speedPerFrame = tornadoRandomPathSpeed * 0.06
+        state.progress = state.progress + (speedPerFrame / totalDist)
+        
+        if state.progress >= 1 then
+            state.progress = 1
+            state.switchTimer = tick() + math.random(2, 5)
+            return targetPos
+        end
+        
+        local currentPos = state.startPos:Lerp(targetPos, state.progress)
+        
+        local fromPlayer = currentPos - basePos
+        if fromPlayer.Magnitude > randomMaxDistance then
+            currentPos = basePos + fromPlayer.Unit * (randomMaxDistance - 10)
+        end
+        
+        return currentPos
     elseif pathType == "Stalker" then
-        -- Each tornado has its own stalk target
         local stalk = tornadoStalkTargets[idx]
         if not stalk or not stalk.Character or not stalk.Character:FindFirstChild("HumanoidRootPart") then
             pickStalkTargetForTornado(idx)
@@ -888,49 +953,33 @@ local function computeTornadoTargetPosition(idx, basePos, multiCount)
     return basePos
 end
 
--- ========== FIXED: updatePositions now properly handles orbit ==========
 local function updatePositions()
     local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not root then return end
     local basePos = root.Position
     local count = math.max(1, tornadoAmount)
     
-    if pathType == "Follow" and count >= 2 then
-        -- ORBIT MODE: Each tornado orbits the player at 2 studs/sec
-        local orbitSpeed = 2  -- exactly 2 studs per second
-        local elapsed = tick() * orbitSpeed
-        
-        -- Calculate spread radius
-        local spreadRadius = math.clamp(tornadoWindfield * 0.12 * math.sqrt(count), 15, tornadoWindfield * 0.35)
-        
-        for i = 1, count do
-            -- Evenly distribute tornadoes around the circle
-            local angle = elapsed + (i - 1) * (2 * math.pi / count)
-            tornadoPositions[i] = basePos + Vector3.new(math.cos(angle) * spreadRadius, 0, math.sin(angle) * spreadRadius)
+    -- Save previous positions for collapse prevention
+    for i = 1, count do
+        if tornadoPositions[i] then
+            prevTornadoPositions[i] = tornadoPositions[i]
         end
-    elseif pathType == "Follow" then
-        -- Single tornado: just follows the player
-        tornadoPositions[1] = basePos
+    end
+    
+    -- FIX 1: ALWAYS check the current pathType directly
+    if pathType == "Follow" then
+        if count >= 2 then
+            local orbitSpeed = 2
+            local elapsed = tick() * orbitSpeed
+            local spreadRadius = math.clamp(tornadoWindfield * 0.12 * math.sqrt(count), 15, tornadoWindfield * 0.35)
+            for i = 1, count do
+                local angle = elapsed + (i - 1) * (2 * math.pi / count)
+                tornadoPositions[i] = basePos + Vector3.new(math.cos(angle) * spreadRadius, 0, math.sin(angle) * spreadRadius)
+            end
+        else
+            tornadoPositions[1] = basePos
+        end
     elseif pathType == "Random" then
-        -- Each tornado has its own independent random path
-        local centerTarget = basePos
-        local avgTarget = Vector3.new(0, 0, 0)
-        local validCount = 0
-        for i = 1, count do
-            local state = tornadoPathTargets[i]
-            if state and state.target then
-                avgTarget = avgTarget + state.target
-                validCount = validCount + 1
-            end
-        end
-        if validCount > 0 then
-            centerTarget = avgTarget / validCount
-            local fromPlayer = centerTarget - basePos
-            if fromPlayer.Magnitude > randomMaxDistance then
-                centerTarget = basePos + fromPlayer.Unit * randomMaxDistance
-            end
-        end
-        
         local time = tick() * 0.15
         for i = 1, count do
             local angle = (i - 1) * (2 * math.pi / count) + time
@@ -939,7 +988,7 @@ local function updatePositions()
             
             local individualTarget = computeTornadoTargetPosition(i, basePos, count)
             
-            local targetPos = centerTarget + formationOffset
+            local targetPos = basePos + formationOffset
             local toIndividual = individualTarget - targetPos
             if toIndividual.Magnitude > 1 then
                 targetPos = targetPos + toIndividual.Unit * math.min(toIndividual.Magnitude, spread * 0.5)
@@ -948,7 +997,6 @@ local function updatePositions()
             tornadoPositions[i] = targetPos
         end
     elseif pathType == "Stalker" then
-        -- Each tornado has its own stalk target
         local centerTarget = basePos
         for i = 1, count do
             local stalk = tornadoStalkTargets[i]
@@ -965,7 +1013,6 @@ local function updatePositions()
             local formationOffset = Vector3.new(math.cos(angle) * spread, 0, math.sin(angle) * spread)
             
             local individualTarget = computeTornadoTargetPosition(i, basePos, count)
-            
             local targetPos = centerTarget + formationOffset
             local toIndividual = individualTarget - targetPos
             if toIndividual.Magnitude > 1 then
@@ -978,7 +1025,6 @@ local function updatePositions()
     
     -- Rope mode: smooth the positions
     if tornadoType == "Rope" then
-        local moveSpeed = tornadoMoveSpeed * 5
         for i = 1, #tornadoPositions do
             if not ropeActualCenters[i] then
                 ropeActualCenters[i] = tornadoPositions[i]
@@ -987,7 +1033,7 @@ local function updatePositions()
             local dir = tornadoPositions[i] - ropeActualCenters[i]
             local dist = dir.Magnitude
             if dist > 0.5 then
-                local speed = math.max(moveSpeed * 0.1, dist * 2)
+                local speed = math.max(tornadoMoveSpeed * 0.5, dist * 1.5)
                 local step = math.min(dist, speed * 0.06)
                 ropeActualCenters[i] = ropeActualCenters[i] + dir.Unit * step
             else
@@ -995,20 +1041,6 @@ local function updatePositions()
             end
         end
     end
-end
-
--- ========== Check if parts are within ANY tornado's windfield ==========
--- Each tornado has its OWN windfield. We check per-tornado position.
-local function isPartInAnyWindfield(part)
-    for _, pos in ipairs(tornadoPositions) do
-        if pos and part.Position then
-            local dist = (part.Position - pos).Magnitude
-            if dist <= tornadoWindfield then
-                return true
-            end
-        end
-    end
-    return false
 end
 
 -- ========== NIGHTMARE TARGETING ==========
@@ -1077,9 +1109,7 @@ local function tornadoLoop()
                     end
                 end
             else
-                -- Classic mode: main funnel at first tornado's position
                 updateMainFunnel(0.1)
-                -- Apply physics for EACH tornado position (each has its own windfield)
                 for _, pos in ipairs(tornadoPositions) do
                     applyTornadoPhysics(pos, 0.1)
                 end
@@ -1300,13 +1330,14 @@ local function updateSatellites(delta)
     end
 end
 
--- ========== FREEZE ==========
+-- ========== FIX 2: FREEZE IS INDEPENDENT - works without tornado ==========
 local function toggleFreeze()
     partsFrozen = not partsFrozen
     freezeBtn.Text = partsFrozen and "Unfreeze" or "Freeze"
     freezeBtn.BackgroundColor3 = partsFrozen and Color3.fromRGB(100, 80, 40) or Color3.fromRGB(60, 60, 70)
-
+    
     if partsFrozen then
+        -- Freeze: anchor ALL currently tracked parts
         frozenParts = {}
         for part in pairs(whitelistedParts) do
             if part and part.Parent then
@@ -1335,6 +1366,7 @@ local function toggleFreeze()
             end
         end
     else
+        -- Unfreeze: restore original state
         for part, wasAnchored in pairs(frozenParts) do
             if part and part.Parent then
                 part.Anchored = wasAnchored
@@ -1351,10 +1383,11 @@ Workspace.DescendantAdded:Connect(function(desc)
     if desc and desc:IsA("BasePart") then
         task.defer(function()
             if enabled then
-                -- Check against ALL tornado positions (each has its own windfield)
                 for _, pos in ipairs(tornadoPositions) do
                     if pos and (desc.Position - pos).Magnitude <= tornadoWindfield then
-                        if not desc.Anchored then processPartForFunnel(desc) end
+                        if not desc.Anchored then 
+                            processPartForFunnel(desc)
+                        end
                         break
                     end
                 end
@@ -1363,11 +1396,9 @@ Workspace.DescendantAdded:Connect(function(desc)
     end
 end)
 
--- Background scanning thread - scans around EACH tornado position independently
 spawn(function()
     while true do
         if enabled and #tornadoPositions > 0 then
-            -- Scan around each tornado position independently
             for _, pos in ipairs(tornadoPositions) do
                 if pos then
                     local parts = Workspace:GetPartBoundsInRadius(pos, tornadoWindfield)
@@ -1445,6 +1476,7 @@ startStopBtn.MouseButton1Click:Connect(function()
         tornadoStalkTargets = {}
         ropeAngleStates = {}
         ropeActualCenters = {}
+        prevTornadoPositions = {}
         
         updatePositions()
         if #tornadoPositions > 0 then
@@ -1454,7 +1486,6 @@ startStopBtn.MouseButton1Click:Connect(function()
                     ropeActualCenters[i] = tornadoPositions[i]
                 end
             else
-                -- Scan for parts around ALL tornado positions
                 for _, pos in ipairs(tornadoPositions) do
                     local parts = Workspace:GetPartBoundsInRadius(pos, tornadoWindfield)
                     for _, p in ipairs(parts) do
@@ -1469,7 +1500,8 @@ startStopBtn.MouseButton1Click:Connect(function()
         end
         spawn(tornadoLoop)
     else
-        if partsFrozen then toggleFreeze() end
+        -- FIX 2: NO auto-unfreeze. Freeze is independent.
+        -- Just clean up tornado-specific things. Frozen parts stay frozen.
         
         for part in pairs(whitelistedParts) do
             if part and part:IsA("BasePart") and part.Parent then
@@ -1502,7 +1534,8 @@ startStopBtn.MouseButton1Click:Connect(function()
         tornadoStalkTargets = {}
         ropeAngleStates = {}
         ropeActualCenters = {}
+        prevTornadoPositions = {}
     end
 end)
 
-print("Tornado GUI v8.9 — Fixed: Multi-tornado orbit at 2 studs/sec, independent paths, per-tornado windfields")
+print("Tornado GUI v9.2 — Fixed: Mode always respected, Freeze independent of tornado state")
